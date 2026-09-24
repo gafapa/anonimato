@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anonimato</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Anonimato</h1>
+        <p>Datos personales, rostros y firmas fuera de tus documentos. Todo se procesa en este equipo.</p>
+      </div>
+    </div>
+    <div class="engine-status" id="engineStatus" aria-live="polite"></div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar" aria-label="Documentos y opciones">
+      <section class="sidebar-section">
+        <h2>Documentos</h2>
+        <div id="dropzone" class="dropzone" aria-label="Zona para soltar archivos">
+          <div class="dz-icon" aria-hidden="true"></div>
+          <div>
+            <p class="dz-title">Suelta aquí PDF o imágenes</p>
+            <p class="dz-sub">o usa los botones</p>
+          </div>
+        </div>
+        <div class="button-row">
+          <button class="btn ghost small" id="btnAddFiles">Añadir archivos</button>
+          <button class="btn ghost small" id="btnAddFolder">Añadir carpeta</button>
+        </div>
+        <div id="documentQueue" class="document-queue" aria-label="Lista de documentos"></div>
+      </section>
+
+      <section class="sidebar-section">
+        <h2>Qué anonimizar</h2>
+        <div class="grid-cats" id="catGrid"></div>
+      </section>
+
+      <section class="sidebar-section opts">
+        <h2>Detección</h2>
+        <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
+        <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
+        <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
+        <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
+        <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
+        <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
+        <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
+        <div class="advanced-box" id="advancedBox"></div>
+      </section>
+
+      <section class="sidebar-section opts">
+        <h2>Resultado</h2>
+        <label class="toggle strong"><input type="checkbox" id="optMaxSecurity" /><span><strong>Voy a compartir este documento fuera</strong> · máxima seguridad</span>
+          <small>Convierte cada página en imagen tras tachar: no sobrevive nada que no se vea. Pesa más.</small></label>
+        <label class="toggle"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en máxima seguridad</span>
+          <small>Se genera por OCR sobre el resultado ya anonimizado.</small></label>
+        <label class="field"><span>Estilo de los cambios</span>
+          <select id="optMode"><option value="label" selected>Sustituir por [NOMBRE 1]</option><option value="blank">Borrar sin reemplazo visible</option></select></label>
+        <label class="toggle"><input type="checkbox" id="optUniform" /><span>Ocultar la longitud de los datos</span></label>
+        <label class="toggle"><input type="checkbox" id="optKeepName" /><span>Conservar el nombre del archivo</span>
+          <small>Se sustituyen los datos detectados. Por defecto: documento-1_anonimizado.pdf</small></label>
+        <label class="field"><span>Resolución de análisis</span>
+          <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+      </section>
+
+      <div class="sidebar-actions">
+        <p class="warning"><strong>Revisión obligatoria:</strong> comprueba cada página antes de compartir.</p>
+        <button id="btnRun" class="btn primary" disabled>Analizar documentos</button>
+        <button id="btnCancel" class="btn ghost small wide" hidden>Cancelar</button>
+        <p id="errMsg" class="err" role="alert" hidden></p>
+        <section class="progress-card" id="progressCard" hidden aria-label="Progreso">
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <p id="progressText" class="progress-text" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+    </aside>
+
+    <section class="preview-panel" aria-label="Revisión del documento">
+      <div id="emptyPreview" class="empty-preview">
+        <div class="empty-mark" aria-hidden="true"></div>
+        <h2>Añade tus documentos</h2>
+        <p>PDF, fotos o escaneos. Nada sale de este equipo.</p>
+      </div>
+
+      <div id="resultsCard" hidden>
+        <div class="results-head">
+          <div>
+            <p class="current-file" id="currentFileName"></p>
+            <h2>Revisión</h2>
+          </div>
+          <div class="stats" id="statsHost"></div>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn primary" id="btnPdf">Guardar PDF verificado</button>
+          <button class="btn ghost" id="btnAll">Guardar todos en una carpeta</button>
+          <button class="btn ghost" id="btnCsv">Registro CSV</button>
+          <button class="btn ghost" id="btnJson">Registro JSON</button>
+          <span class="spacer"></span>
+          <label class="inline-check"><input type="checkbox" id="optLogOriginals" /> Originales en registros</label>
+          <label class="inline-check"><input type="checkbox" id="optLogCoords" /> Coordenadas</label>
+          <button class="btn ghost small" id="btnReset">Vaciar lista</button>
+        </div>
+        <p id="logWarning" class="warning" hidden>El registro con valores originales <strong>es en sí mismo un dato personal</strong>. Guárdalo con la misma protección que el documento original.</p>
+
+        <div id="verifyCard" class="verify-card" hidden></div>
+        <p id="detectionNotice" class="detection-notice" hidden></p>
+
+        <div class="page-nav" aria-label="Navegación de páginas">
+          <button class="btn ghost small" id="btnPrevPage">← Anterior</button>
+          <span id="pageIndicator" aria-live="polite"></span>
+          <button class="btn ghost small" id="btnNextPage">Siguiente →</button>
+          <button class="btn ghost small" id="btnManual" aria-pressed="false">Ocultar zona (M)</button>
+          <span class="shortcuts">Atajos: ← → páginas · J/K hallazgos · Espacio incluir/excluir · M ocultar zona</span>
+        </div>
+
+        <div class="comparison-grid">
+          <section class="document-column">
+            <h3>Original · hallazgos marcados</h3>
+            <figure class="page"><div class="page-image-wrap" id="originalWrap"><img id="originalImg" alt="Página original" /></div></figure>
+          </section>
+          <section class="document-column anonymized-column">
+            <h3>Resultado anonimizado</h3>
+            <figure class="page"><div class="page-image-wrap" id="resultWrap"><img id="resultImg" alt="Página anonimizada" /></div></figure>
+            <p class="pdf-note">Vista generada con el mismo proceso que el archivo final. Al guardar se verifica que no queda rastro.</p>
+          </section>
+          <aside class="data-column">
+            <h3>Datos detectados <span id="rowsCount"></span></h3>
+            <div class="filter-row">
+              <select id="typeFilter" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option></select>
+              <button class="btn ghost small" id="btnAllOn">Incluir todo</button>
+              <button class="btn ghost small" id="btnAllOff">Excluir todo</button>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th></th><th>Pág.</th><th>Tipo</th><th>Conf.</th><th>Valor</th><th>Reemplazo</th></tr></thead>
+                <tbody id="rowsBody"></tbody>
+              </table>
+            </div>
+            <div id="notes" class="notes"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -17,7 +17,6 @@ import numpy as np
 import pikepdf
 import pymupdf
 import regex as re
-from rapidfuzz import fuzz
 
 from . import document
 from .rules import no_accents
@@ -179,12 +178,12 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
             check([str(value)[1:]], where)
         elif isinstance(value, pikepdf.Array):
             for item in value:
-                if not item.is_indirect:
+                if not getattr(item, "is_indirect", False):
                     walk(item, where, depth + 1)
         elif isinstance(value, (pikepdf.Dictionary, pikepdf.Stream)):
             for key, item in value.items():
                 check([key[1:]], where)
-                if not item.is_indirect:
+                if not getattr(item, "is_indirect", False):
                     walk(item, where, depth + 1)
 
     count = 0
@@ -226,23 +225,39 @@ def _scan_text(data: bytes, targets: list[Target], report: Report) -> None:
     doc = document.analysis_copy(document.open_pdf(data))
     report.pages = doc.page_count
     for index, page in enumerate(doc):
-        text = page.get_text("text", flags=document.TEXT_FLAGS, clip=pymupdf.INFINITE_RECT())
+        text = "\n".join(page.get_text("text", flags=flags, clip=pymupdf.INFINITE_RECT())
+                         for flags in (document.TEXT_FLAGS, document.TEXT_FLAGS_ACTUAL))
         for target in targets:
             if target.found_in(text):
                 report.add(Leak("texto", f"página {index + 1}", target.value, "texto extraíble"))
     doc.close()
 
 
+def substring_distance(needle: str, hay: str) -> int:
+    """Smallest edit distance between ``needle`` and any substring of ``hay`` (semi-global alignment)."""
+    if not needle:
+        return 0
+    previous = [0] * (len(hay) + 1)
+    for i, a in enumerate(needle, start=1):
+        current = [i] + [0] * len(hay)
+        for j, b in enumerate(hay, start=1):
+            current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a != b))
+        previous = current
+    return min(previous)
+
+
 def fuzzy_found(target: Target, text: str) -> bool:
+    """The value (allowing OCR errors: 1 edit up to 8 characters, 2 above) appears in ``text``."""
     needle = target.id_form if target.kind in ID_TYPES else target.text_form
     hay = norm_id(text) if target.kind in ID_TYPES else norm_text(text)
     if len(needle) < 5:
         return needle in hay
     if needle in hay:
         return True
+    if len(hay) < len(needle) - 2:
+        return False
     allowed = 1 if len(needle) < 9 else 2
-    score = fuzz.partial_ratio(needle, hay)
-    return score >= 100 * (1 - allowed / len(needle)) - 0.01
+    return substring_distance(needle, hay) <= allowed
 
 
 def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], services, report: Report) -> None:
@@ -269,9 +284,11 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
                     clip = (zone * page.rotation_matrix) & page.rect
                     if clip.is_empty:
                         continue
-                    pix = page.get_pixmap(matrix=pymupdf.Matrix(5, 5), clip=clip, alpha=False, colorspace=pymupdf.csRGB)
+                    pix = page.get_pixmap(matrix=pymupdf.Matrix(4, 4), clip=clip, alpha=False, colorspace=pymupdf.csRGB)
+                    if pix.height < 12 or pix.width < 12:
+                        continue  # too small to be legible as pixels (its text was already checked above)
                     image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
-                    zone_text = " ".join(line.text for line in ocr.read(image, detect_orientation=False))
+                    zone_text = ocr.read_line(image)
                     target = Target.build(finding.type, finding.value)
                     if target.id_form in protected and fuzzy_found(target, zone_text):
                         report.add(Leak("ocr-zona", f"página {index + 1}", finding.value,

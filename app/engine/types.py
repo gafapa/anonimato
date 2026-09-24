@@ -49,7 +49,9 @@ class PageText:
         for box in self.boxes[start:end]:
             if box is None:
                 continue
-            if current and abs(box[1] - current[1]) < 0.6 * (current[3] - current[1]) and box[0] >= current[0] - 1:
+            overlap = min(box[3], current[3]) - max(box[1], current[1]) if current else 0
+            smaller = min(box[3] - box[1], current[3] - current[1]) if current else 0
+            if current and overlap > 0.5 * smaller and box[0] >= current[0] - 1:
                 current[0] = min(current[0], box[0])
                 current[1] = min(current[1], box[1])
                 current[2] = max(current[2], box[2])

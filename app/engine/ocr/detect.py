@@ -12,7 +12,7 @@ STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 class LineDetector:
-    def __init__(self, use_gpu: bool = True, max_side: int = 2016):
+    def __init__(self, use_gpu: bool = True, max_side: int = 2048):
         from ..onnx_runtime import gpu_active
         self.session = session(str(models.model("ocr-det").path), use_gpu)
         if not gpu_active():
@@ -23,22 +23,35 @@ class LineDetector:
         self.max_side = max_side
 
     def _prepare(self, rgb: np.ndarray) -> tuple[np.ndarray, float, float]:
+        """Resize (keeping aspect) and pad to a small set of fixed sizes.
+
+        GPU back-ends compile one graph per input shape; padding to 256-pixel buckets keeps
+        the number of shapes (and compilations) small.
+        """
         h, w = rgb.shape[:2]
         ratio = min(1.0, self.max_side / max(h, w))
-        # Small images are enlarged so thin handwriting is detected.
-        if max(h, w) * ratio < 960:
+        if max(h, w) * ratio < 960:  # small images are enlarged so thin handwriting is detected
             ratio = 960 / max(h, w)
-        nh = max(32, int(round(h * ratio / 32)) * 32)
-        nw = max(32, int(round(w * ratio / 32)) * 32)
+        nh, nw = max(32, int(round(h * ratio))), max(32, int(round(w * ratio)))
         resized = cv2.resize(rgb, (nw, nh), interpolation=cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC)
-        bgr = resized[:, :, ::-1].astype(np.float32) / 255.0
+        bh, bw = -(-nh // 256) * 256, -(-nw // 256) * 256
+        canvas = np.full((bh, bw, 3), 255, dtype=np.uint8)
+        canvas[:nh, :nw] = resized
+        bgr = canvas[:, :, ::-1].astype(np.float32) / 255.0
         tensor = ((bgr - MEAN) / STD).transpose(2, 0, 1)[None]
         return np.ascontiguousarray(tensor, dtype=np.float32), w / nw, h / nh
 
     def detect(self, rgb: np.ndarray) -> list[np.ndarray]:
         """Return quadrilaterals (4x2 float arrays, pixel coords), reading order."""
         tensor, sx, sy = self._prepare(rgb)
-        prob = self.session.run(None, {self.input: tensor})[0][0, 0]
+        try:
+            prob = self.session.run(None, {self.input: tensor})[0][0, 0]
+        except Exception:  # noqa: BLE001 - GPU lost or out of memory: continue on CPU
+            self.session = session(str(models.model("ocr-det-mobile").path), False)
+            self.input = self.session.get_inputs()[0].name
+            self.max_side = min(self.max_side, 1600)
+            tensor, sx, sy = self._prepare(rgb)
+            prob = self.session.run(None, {self.input: tensor})[0][0, 0]
         bitmap = (prob > 0.3).astype(np.uint8)
         contours, _ = cv2.findContours(bitmap, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         contours = [c for c in contours if len(c) >= 4 and cv2.contourArea(c) >= 12]
@@ -84,7 +97,7 @@ class OrientationClassifier:
     """Predicts how a page image is rotated: 0, 90, 180 or 270 degrees."""
 
     def __init__(self, use_gpu: bool = True):
-        self.session = session(str(models.model("ocr-doc-ori").path), use_gpu)
+        self.session = session(str(models.model("ocr-doc-ori").path), False)
         self.input = self.session.get_inputs()[0].name
 
     def predict(self, rgb: np.ndarray) -> tuple[int, float]:

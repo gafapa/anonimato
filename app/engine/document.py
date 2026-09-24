@@ -12,7 +12,10 @@ from .types import PageText, Rect
 
 LIMITS = {"max_bytes": 300 * 1024 * 1024, "max_pages": 1000, "max_page_pixels": 60_000_000}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
-TEXT_FLAGS = (pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_PRESERVE_LIGATURES | pymupdf.TEXT_ACCURATE_BBOXES)
+# Real glyphs, not /ActualText replacements (which can hide the visible text from extraction).
+TEXT_FLAGS = (pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_PRESERVE_LIGATURES | pymupdf.TEXT_ACCURATE_BBOXES
+              | pymupdf.TEXT_IGNORE_ACTUALTEXT)
+TEXT_FLAGS_ACTUAL = TEXT_FLAGS & ~pymupdf.TEXT_IGNORE_ACTUALTEXT
 
 pymupdf.TOOLS.mupdf_display_errors(False)
 
@@ -121,7 +124,9 @@ def page_text(page: pymupdf.Page) -> PageText:
                 for char in span.get("chars", []):
                     chars.append(char["c"])
                     bbox = char["bbox"]
-                    boxes.append((bbox[0], bbox[1], bbox[2], bbox[3]) if bbox[2] > bbox[0] else None)
+                    # Degenerate boxes (spaces) carry no position.
+                    ok = bbox[2] - bbox[0] > 0.01 and bbox[3] - bbox[1] > 0.01
+                    boxes.append((bbox[0], bbox[1], bbox[2], bbox[3]) if ok else None)
             chars.append("\n")
             boxes.append(None)
         chars.append("\n")

@@ -38,6 +38,16 @@ class OcrEngine:
         angle, confidence = self.orientation.predict(rgb)
         return angle if confidence >= 0.6 else 0
 
+    def warm_up(self) -> None:
+        """Compile the GPU graphs for the usual shapes (runs in the background at start-up)."""
+        import numpy as _np
+        for h, w in ((2048, 1536), (1536, 2048), (2048, 2048), (1536, 1280), (1280, 1536), (1024, 1024)):
+            self.detector.session.run(None, {self.detector.input: _np.zeros((1, 3, h, w), dtype=_np.float32)})
+
+    def read_line(self, rgb: np.ndarray) -> str:
+        """Recognise a single-line crop directly (no detection)."""
+        return self.recognizer.recognize([rgb])[0][0]
+
     def read(self, rgb: np.ndarray, detect_orientation: bool = True) -> list[OcrLine]:
         height, width = rgb.shape[:2]
         angle = self.page_angle(rgb) if detect_orientation and min(height, width) > 300 else 0

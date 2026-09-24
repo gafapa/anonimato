@@ -409,7 +409,7 @@ def build_all() -> list[Fixture]:
         Fixture(14, "thumbnail", f14_thumbnail()),
         Fixture(15, "pieceinfo", f15_pieceinfo()),
         Fixture(16, "jpeg_exif", f16_jpeg_exif()),
-        Fixture(17, "incremental", f17_incremental()),
+        Fixture(17, "incremental", f17_incremental(), canaries=[NAME]),  # the DNI only exists in the old revision
         Fixture(18, "attachments_js", f18_attachments_js()),
         Fixture(19, "proportional", f19_proportional()),
         Fixture(20, "rotated", f20_rotated()),

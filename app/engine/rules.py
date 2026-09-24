@@ -387,8 +387,8 @@ def capture_name_run(text: str, from_pos: int, allow_unknown: bool = False, allo
             break
         if _all_caps(tok) and not allow_all_caps:
             break
-        if pending_break and not allow_unknown and not is_known_name(tok):
-            break
+        if pending_break and not is_known_name(tok) and (not allow_unknown or len(toks) >= 2):
+            break  # a name only continues on the next line with a known name (or a single wrapped word)
         if not toks:
             start = m.start()
         toks.append(tok)

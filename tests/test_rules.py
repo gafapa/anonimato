@@ -134,3 +134,20 @@ def test_no_false_positives_on_neutral_text():
             "Trimestre 1 · Curso 2021-2022 · Alumnado matriculado en 4º curso. Versión 3.2.1")
     kinds = {m.type for m in detect_all(text)}
     assert kinds <= {"id_other"}
+
+
+def test_fuzzy_verification_matching():
+    from app.engine.verify import Target, fuzzy_found
+    name = Target.build("name", "Juan García Pérez")
+    assert fuzzy_found(name, "texto JUAN GARCIA PEREZ texto")
+    assert fuzzy_found(name, "Juan Garcfa Pérez")          # one OCR error
+    assert not fuzzy_found(name, "r")
+    assert not fuzzy_found(name, "[NOMBRE 1] texto")
+    dni = Target.build("dni", "12345678Z")
+    assert fuzzy_found(dni, "DNI 12.345.678-Z")
+    assert fuzzy_found(dni, "DNI 1234567BZ")               # OCR confusion 8/B
+    assert not fuzzy_found(dni, "[DNI 1]")
+
+
+def test_name_does_not_swallow_next_line():
+    assert values("Paciente: Juan García Pérez\nRevisión posterior", "name") == ["Juan García Pérez"]

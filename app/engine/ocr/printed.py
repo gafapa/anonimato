@@ -12,6 +12,8 @@ from ..onnx_runtime import session
 
 HEIGHT = 48
 MAX_WIDTH = 3200
+WIDTH_STEP = 32
+BATCHES = tuple(range(1, 13))
 
 
 def crop_quad(rgb: np.ndarray, quad: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -30,11 +32,12 @@ class Recognizer:
         item = models.model("ocr-rec-latin")
         config = yaml.safe_load(models.model("ocr-rec-latin-yml").path.read_text(encoding="utf-8"))
         self.chars = ["<blank>"] + [str(c) for c in config["PostProcess"]["character_dict"]] + [" "]
-        self.session = session(str(item.path), use_gpu)
+        # The recogniser is faster on CPU than through DirectML (and has no per-shape compilation).
+        self.session = session(str(item.path), False)
         self.input = self.session.get_inputs()[0].name
 
     def _tensor(self, crop: np.ndarray) -> tuple[np.ndarray, int]:
-        h, w = crop.shape[:2]
+        h, w = max(1, crop.shape[0]), max(1, crop.shape[1])
         width = min(MAX_WIDTH, max(16, int(math.ceil(HEIGHT * w / h))))
         resized = cv2.resize(crop, (width, HEIGHT), interpolation=cv2.INTER_CUBIC if h < HEIGHT else cv2.INTER_AREA)
         bgr = resized[:, :, ::-1].astype(np.float32) / 255.0
@@ -47,8 +50,10 @@ class Recognizer:
         for start in range(0, len(order), batch):
             ids = order[start:start + batch]
             tensors = [self._tensor(crops[i]) for i in ids]
-            max_w = max(t[1] for t in tensors)
-            data = np.zeros((len(ids), 3, HEIGHT, max_w), dtype=np.float32)
+            # Fixed width/batch buckets: GPU back-ends compile one graph per input shape.
+            max_w = min(MAX_WIDTH, -(-max(t[1] for t in tensors) // WIDTH_STEP) * WIDTH_STEP)
+            rows = next(b for b in BATCHES if b >= len(ids))
+            data = np.zeros((rows, 3, HEIGHT, max_w), dtype=np.float32)
             for row, (tensor, width) in enumerate(tensors):
                 data[row, :, :, :width] = tensor
             probs = self.session.run(None, {self.input: data})[0]
