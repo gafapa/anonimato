@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+tmp/
+opencode.json
+legacy-web/node_modules/
+models/advanced/
+runtime/llama/
+tests/_out/
+tests/fixtures/out/
+eval/
+*.egg-info/
+.pytest_cache/
