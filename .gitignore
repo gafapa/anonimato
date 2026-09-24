@@ -13,3 +13,6 @@ tests/fixtures/out/
 eval/
 *.egg-info/
 .pytest_cache/
+models/base/
+models/candidates/
+runtime/
