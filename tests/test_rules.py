@@ -151,3 +151,15 @@ def test_fuzzy_verification_matching():
 
 def test_name_does_not_swallow_next_line():
     assert values("Paciente: Juan García Pérez\nRevisión posterior", "name") == ["Juan García Pérez"]
+
+
+def test_wrapped_and_unicode_values():
+    assert values("Contacto: uxía.varela@correo.es", "email") == ["uxía.varela@correo.es"]
+    assert "ES91 2100 0418\n4502 0005 1332" in spans("Pagar en la cuenta ES91 2100 0418\n4502 0005 1332 antes", "iban")
+    found = spans("con domicilio en Rúa do Vilar 1, 2ºA,\n33003 Oviedo. Otro texto", "address")
+    assert found and found[0].endswith("33003 Oviedo")
+
+
+def test_rare_given_name_before_known_surnames():
+    names = values("Comparecen Juan Pérez López y Jaione Varela Castro, vecinos de Vigo.", "name")
+    assert any("Jaione Varela Castro" in n for n in names)

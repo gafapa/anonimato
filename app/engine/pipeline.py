@@ -7,8 +7,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Callable
 
+import numpy as np
 import pymupdf
 import regex as re
+from rapidfuzz.distance import Levenshtein
 
 from . import document, propagate, rasterize, redact, rules, sanitize, signatures, verify
 from .rules import CATEGORIES, Match, canonical
@@ -74,8 +76,18 @@ def combine(matches: list[Match]) -> list[Match]:
     return sorted(kept, key=lambda m: m.start)
 
 
+NUMERIC_TYPES = {"nss", "card", "iban", "phone", "passport", "plate", "id_other", "ip"}
+
+
 def _useful_ai(match: Match) -> bool:
     words = len(match.value.split())
+    if match.type in NUMERIC_TYPES:
+        digits = sum(c.isdigit() for c in match.value)
+        return digits >= 4 and digits >= 0.4 * len(match.value.replace(" ", ""))
+    if match.type == "name":
+        tokens = [rules.no_accents(t.lower()).strip(".,") for t in match.value.split()]
+        if sum(t in rules.NAME_STOPS for t in tokens) * 2 >= len(tokens):
+            return False  # "Estimado cliente", "Sr. Director"…
     if match.type == "address" and words == 1:
         return match.confidence >= 0.9
     if match.type == "name" and words == 1:
@@ -198,13 +210,35 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
         lines: list[OcrLine] = []
         if needs_ocr:
             progress({"stage": "ocr", "page": index + 1, "total": total, "message": f"OCR de la página {index + 1}"})
+            page_area = rendered.image.shape[0] * rendered.image.shape[1]
             for line in ocr.read(rendered.image):
                 pixel_rect = line.rect
+                if (pixel_rect[2] - pixel_rect[0]) * (pixel_rect[3] - pixel_rect[1]) > 0.15 * page_area:
+                    continue  # not a text line (noise, photo, stain)
                 line.rect = rendered.to_page(line.rect)
                 line.char_rects = [rendered.to_page(r) for r in line.char_rects]
                 line.pixel_rect = pixel_rect  # type: ignore[attr-defined]
                 if _coverage(line.rect, native_boxes) < 0.5:
                     lines.append(line)
+            # Small images (stamps, ID cards, pasted photos) are re-read at a higher resolution.
+            for box in document.small_image_boxes(page):
+                clip = pymupdf.Rect(box) * page.rotation_matrix
+                zoom = min(8.0, max(options.dpi / 72 * 2, 1200 / max(1.0, clip.width)))
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=clip, alpha=False,
+                                      colorspace=pymupdf.csRGB, annots=False)
+                if pix.width < 32 or pix.height < 32:
+                    continue
+                image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+                for line in ocr.read(image, detect_orientation=False):
+                    def to_page(r, clip=clip, zoom=zoom):
+                        rect = pymupdf.Rect(clip.x0 + r[0] / zoom, clip.y0 + r[1] / zoom,
+                                            clip.x0 + r[2] / zoom, clip.y0 + r[3] / zoom) * page.derotation_matrix
+                        return (rect.x0, rect.y0, rect.x1, rect.y1)
+                    line.pixel_rect = rendered.from_page(to_page(line.rect))  # type: ignore[attr-defined]
+                    line.rect = to_page(line.rect)
+                    line.char_rects = [to_page(r) for r in line.char_rects]
+                    if not any(_coverage(line.rect, [other.rect]) > 0.5 for other in lines)                             and _coverage(line.rect, native_boxes) < 0.5:
+                        lines.append(line)
         alternatives: list[str] = [line.text for line in lines]
         if reader is not None:
             for position, line in enumerate(lines):
@@ -230,15 +264,19 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                 alt = ocr_page_text(lines, alternatives)
                 page_sources.append(("ocr-alt", alt))
                 texts.append(alt)
-            hand_rects = [line.rect for line in lines if line.handwritten]
+            # Whole-line covering only for lines whose reading is uncertain (clearly handwritten or the
+            # two readers disagree); confidently read printed lines keep their tight boxes.
+            hand_rects = [line.rect for position, line in enumerate(lines) if line.handwritten and (
+                line.confidence < 0.9 or (line.engine == "vlm" and Levenshtein.normalized_distance(
+                    line.text.lower(), alternatives[position].lower()) > 0.15))]
             for source_text in texts:
                 for match in detect_text(source_text.text, categories, pii):
                     rects = source_text.rects_for(match.start, match.end)
                     if not rects:
                         continue
                     handwritten = [h for h in hand_rects if any(_coverage(r, [h]) > 0.3 for r in rects)]
-                    if handwritten:  # conservative: cover the whole handwritten line
-                        rects = handwritten
+                    if handwritten:  # conservative: cover the whole handwritten line *in addition* to the data
+                        rects = rects + [h for h in handwritten if h not in rects]
                     add(index, match.type, match.value.strip(), rects, match.confidence,
                         "handwriting" if handwritten else "ocr", match.warning,
                         detail="manuscrito" if handwritten else "")
@@ -248,7 +286,12 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                     if not line.handwritten:
                         continue
                     reading = alternatives[position]
-                    doubtful = "[ilegible]" in reading or line.confidence < 0.6
+                    if line.engine == "vlm":
+                        # Illegible for the model, or the two readers disagree: treat as doubtful.
+                        disagreement = Levenshtein.normalized_distance(line.text.lower(), reading.lower())
+                        doubtful = "[ilegible]" in reading or disagreement > 0.4
+                    else:
+                        doubtful = line.confidence < 0.9
                     row_text = " ".join(l.text for l in lines if abs((l.rect[1] + l.rect[3]) / 2 - (line.rect[1] + line.rect[3]) / 2)
                                         < (line.rect[3] - line.rect[1]) * 0.6 and l.rect[0] < line.rect[0])
                     labelled = bool(PERSONAL_LABELS.search(row_text)) or bool(PERSONAL_LABELS.search(
@@ -267,6 +310,10 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                         labels_px.append(rendered.from_page(rect))
             text_px += [rendered.from_page(b) for b in native_boxes]
             text_px += [line.pixel_rect for line in lines if not line.handwritten]  # type: ignore[attr-defined]
+            # Handwritten lines that are already findings (e.g. a DNI above the signature) are not ink to cover again.
+            found_here = [r for f in analysis.findings if f.page == index and f.value for r in f.rects]
+            text_px += [line.pixel_rect for line in lines  # type: ignore[attr-defined]
+                        if line.handwritten and any(_coverage(line.rect, [r]) > 0.5 for r in found_here)]
             for box in signatures.find(rendered.image, labels_px, text_px):
                 add(index, "signature", None, [rendered.to_page(box)], 0.75, "signature", detail="posible firma")
         analysis.sources[index] = page_sources

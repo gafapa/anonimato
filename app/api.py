@@ -80,14 +80,14 @@ class Api:
 
     # ------------------------------------------------------------ status
     def status(self) -> dict:
-        manifest = models.load_manifest()
-        advanced_bytes = 0
+        from .engine import llm_server
+        variant = llm_server.installed_variant() or llm_server.recommended_variant()
         return {
             "version": VERSION,
             "services": self._services.status(),
             "advancedInstalled": self._services.advanced_available(),
-            "advancedSize": advanced_bytes,
-            "advancedFiles": [item.id for item in manifest.get("advanced", [])],
+            "advancedVariant": variant,
+            "advancedLabel": "Qwen3-VL 8B · ≈ 5,5 GB" if variant == "advanced" else "Qwen3-VL 4B · ≈ 2,8 GB",
             "categories": [
                 {"key": key, "label": value["label"], "token": value["token"], "default": key not in rules.DEFAULT_OFF}
                 for key, value in rules.CATEGORIES.items() if key in rules.SELECTABLE
@@ -410,7 +410,8 @@ class Api:
 
         def run() -> None:
             try:
-                items = models.load_manifest()["advanced"]
+                from .engine import llm_server
+                items = models.load_manifest()[llm_server.recommended_variant()]
                 sizes = {}
 
                 def progress(model_id: str, done: int, total: int) -> None:
@@ -437,6 +438,7 @@ class Api:
             return {"ok": False}
         try:
             models.import_zip(Path(paths[0]))
+            self._services.errors.pop("llm", None)
             return {"ok": True}
         except Exception as error:  # noqa: BLE001
             return {"ok": False, "message": str(error)}

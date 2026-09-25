@@ -166,9 +166,18 @@ def main() -> None:
         for set_name, samples in sets.items():
             readings = run_engine(engine, samples)
             cers, exact, kept, seconds = [], 0, [], []
+            census = set_name.startswith("Censo")
             for (image, truth), (reading, secs) in zip(samples, readings):
                 truth_n, reading_n = norm(truth), norm(reading)
-                cers.append(Levenshtein.distance(truth_n, reading_n) / max(1, len(truth_n)))
+                if census:
+                    # Table rows with empty cells and abbreviations: measure the error on the names only.
+                    from app.engine.verify import substring_distance
+                    names = census_names(truth)
+                    if names:
+                        total = sum(len(n) for n in names)
+                        cers.append(sum(substring_distance(n.lower(), reading_n.lower()) for n in names) / total)
+                else:
+                    cers.append(Levenshtein.distance(truth_n, reading_n) / max(1, len(truth_n)))
                 exact += truth_n == reading_n
                 seconds.append(secs)
                 flag = pii_kept(truth_n, reading_n, census_names(truth) if set_name.startswith("Censo") else None)
@@ -181,8 +190,9 @@ def main() -> None:
             print(f"   {set_name}: {results[set_name][engine]}", flush=True)
     lines = ["# Comparativa de OCR manuscrito", "",
              f"Generado: {time.strftime('%Y-%m-%d %H:%M')} · equipo: RTX 2070 8 GB (Vulkan) · {args.n} líneas por conjunto.", "",
-             "CER = error por carácter (menor es mejor). Exactas = líneas idénticas. Datos personales = líneas cuyos datos",
-             "personales siguen detectándose tras la transcripción. Tiempo = mediana por línea.", ""]
+             "CER = error por carácter (menor es mejor; en el censo, solo sobre los nombres). Exactas = líneas idénticas.",
+             "Datos personales = líneas cuyos datos personales siguen detectándose tras la transcripción (en el censo:",
+             "nombres y apellidos leídos con ≤ 15 % de error). Tiempo = mediana por línea.", ""]
     for set_name, per_engine in results.items():
         lines += [f"## {set_name}", "", "| Motor | CER | Exactas | Datos personales | s/línea |", "|---|---|---|---|---|"]
         for engine, r in per_engine.items():

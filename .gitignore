@@ -5,7 +5,6 @@ build/
 dist/
 tmp/
 opencode.json
-legacy-web/node_modules/
 models/advanced/
 runtime/llama/
 tests/_out/
@@ -16,3 +15,5 @@ eval/
 models/base/
 models/candidates/
 runtime/
+packaging/MicrosoftEdgeWebview2Setup.exe
+models/advanced-lite/

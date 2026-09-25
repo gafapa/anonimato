@@ -15,10 +15,11 @@ y se comprueban con SHA-256 fijados en `models/manifest.json` (también al arran
 | PP-OCRv5 server det, PP-OCRv5 mobile det, latin PP-OCRv5 mobile rec, PP-LCNet doc orientation | OCR | Apache-2.0 | huggingface.co/PaddlePaddle |
 | GLiNER multi PII v1 (ONNX fp16) | IA de datos personales | Apache-2.0 | huggingface.co/onnx-community/gliner_multi_pii-v1 (base: urchade/gliner_multi_pii-v1) |
 | YuNet 2023mar | rostros | MIT | github.com/opencv/opencv_zoo |
-| Qwen3-VL-4B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | manuscritos y revisión contextual (paquete avanzado) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF |
+| Qwen3-VL-8B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | manuscritos y revisión contextual (paquete avanzado, GPU ≥ 7 GB libres) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF |
+| Qwen3-VL-4B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | paquete avanzado ligero (GPU más pequeñas) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF |
 
-Modelos evaluados y no incluidos por defecto (ver `docs/benchmark.md`): Qwen3-VL-8B-Instruct (Apache-2.0),
-PaddleOCR-VL 1.6 (Apache-2.0).
+Modelo evaluado y no incluido (ver `docs/benchmark.md`): PaddleOCR-VL 1.6 (Apache-2.0): el más rápido, pero solo
+hace OCR (no sirve para la revisión contextual) y lee peor los nombres manuscritos que Qwen3-VL-8B.
 
 Datos de evaluación (no se distribuyen): Teklia/IAM-line (MIT en Hugging Face; datos IAM con licencia de
 investigación), agomberto/FrenchCensus-handwritten-texts (MIT). Imágenes de prueba de caras:

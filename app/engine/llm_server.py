@@ -37,8 +37,22 @@ def _exe() -> str:
     return str(models.runtime_dir() / "llama" / "llama-server.exe")
 
 
+def installed_variant() -> str | None:
+    """Advanced pack installed: "advanced" (Qwen3-VL-8B) is preferred over "advanced_lite" (4B)."""
+    for group in ("advanced", "advanced_lite"):
+        if models.group_installed(group):
+            return group
+    return None
+
+
+def recommended_variant() -> str:
+    """8B needs about 7 GB of free video memory; smaller GPUs get the 4B model."""
+    _, free = pick_device(_exe()) if os.path.exists(_exe()) else (None, 0)
+    return "advanced" if free >= 7000 else "advanced_lite"
+
+
 def available() -> bool:
-    return os.path.exists(_exe()) and models.group_installed("advanced")
+    return os.path.exists(_exe()) and installed_variant() is not None
 
 
 def pick_device(exe: str) -> tuple[str | None, int]:
@@ -75,7 +89,8 @@ class LlamaServer:
 
     @classmethod
     def default(cls) -> "LlamaServer":
-        return cls(str(models.model("vlm").path), str(models.model("vlm-mmproj").path))
+        prefix = "vlm" if installed_variant() == "advanced" else "vlm-lite"
+        return cls(str(models.model(prefix).path), str(models.model(f"{prefix}-mmproj").path))
 
     def running(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -93,7 +108,7 @@ class LlamaServer:
                     "--temp", "0", "--log-disable"]
             if self.mmproj_path:
                 args += ["--mmproj", self.mmproj_path]
-            if self.device and free > 3500:
+            if self.device and free > 3000:
                 args += ["--device", self.device, "-ngl", "999"]
             else:
                 args += ["-ngl", "0", "--device", "none"]

@@ -20,7 +20,7 @@ def find(image: np.ndarray, labels: list[tuple[float, float, float, float]],
     for x0, y0, x1, y1 in labels:
         lh = max(8.0, y1 - y0)
         regions = [
-            (x1, y0 - 2.5 * lh, min(w, x1 + 22 * lh), y1 + 3.5 * lh),       # right of the label
+            (x1, y0 - 0.8 * lh, min(w, x1 + 22 * lh), y1 + 3.5 * lh),       # right of the label
             (x0 - 2 * lh, y1, min(w, x0 + 22 * lh), min(h, y1 + 7 * lh)),   # below the label
         ]
         for rx0, ry0, rx1, ry1 in regions:

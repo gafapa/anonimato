@@ -177,17 +177,20 @@ PASSPORT_CTX = re.compile(r"(?i)pasaporte|passport|n\.?º?\s*pas\b")
 BIC_CTX = re.compile(r"(?i)\bbic\b|swift")
 CARD_CTX = re.compile(r"(?i)tarjeta|card|visa|mastercard|amex|cr[eé]dito|d[eé]bito")
 
+# Separator inside long numbers: space or dash, or a line break (numbers wrap in paragraphs).
+WRAP_SEP = r"(?:[ -]|[ \t]*\n[ \t]*)"
+
 RULES: list[dict] = [
     {"type": "email", "prio": 1000, "conf": 0.99,
-     "re": re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")},
+     "re": re.compile(r"(?i)(?<![\w.%+-])[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Z]{2,}\b")},
     {"type": "url", "prio": 950, "conf": 0.9,
      "re": re.compile(r"(?i)\b(?:https?://|www\.)[^\s<>\"']+[^\s<>\"'.,;:)]")},
     {"type": "iban", "prio": 930, "conf": 0.99, "validate": valid_iban,
-     "re": re.compile(r"\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{2,4}){3,8}\b")},
+     "re": re.compile(r"\b[A-Z]{2}\d{2}(?:" + WRAP_SEP + r"?[A-Z0-9]{2,4}){3,8}\b")},
     {"type": "iban", "prio": 925, "conf": 0.97, "validate": valid_ccc,
-     "re": re.compile(r"(?<![\d-])\d{4}[ -]?\d{4}[ -]?\d{2}[ -]?\d{10}(?![\d-])")},
+     "re": re.compile(r"(?<![\d-])\d{4}" + WRAP_SEP + r"?\d{4}" + WRAP_SEP + r"?\d{2}" + WRAP_SEP + r"?\d{10}(?![\d-])")},
     {"type": "card", "prio": 920, "conf": 0.98, "validate": valid_card,
-     "re": re.compile(r"(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])")},
+     "re": re.compile(r"(?<![\d-])(?:\d" + WRAP_SEP + r"?){12,18}\d(?![\d-])")},
     {"type": "nss", "prio": 910, "conf": 0.97, "validate": valid_nss, "keep_invalid_ctx": NSS_CTX, "invalid_conf": 0.6,
      "re": re.compile(r"(?<![\d/-])\d{2}[ /-]?\d{8}[ /-]?\d{2}(?![\d/-])")},
     {"type": "phone", "prio": 900, "conf": 0.93,
@@ -249,7 +252,9 @@ STREET_ABBR = (
     r"c/|c\.|cl\.|cl|avda\.?|av\.|avd\.|avda|pza\.?|pl\.|plza\.?|p[ºo]\.|ps\.|ctra\.?|crta\.?|cmno\.?|"
     r"urb\.|pol\.|polg\.|p\.\s?i\.|bº|b[ºo]\.|rda\.|gta\.|trav\.|trva\.|pje\.|r/|rúa|c\\"
 )
-ADDRESS_ANCHOR = re.compile(r"(?i)(?<![\p{L}])(?:" + STREET_WORDS + r")\b|(?<![\p{L}])(?:" + STREET_ABBR + r")(?=\s*[\p{Lu}\d])")
+# Abbreviations ending in "." or "/" may touch the name ("C/Mayor"); the others need a space ("Cl Mayor").
+ADDRESS_ANCHOR = re.compile(r"(?i)(?<![\p{L}])(?:" + STREET_WORDS + r")\b|(?<![\p{L}])(?:" + STREET_ABBR
+                            + r")(?:(?<=[./\º])\s*|\s+)(?=[\p{Lu}\d])")
 ADDRESS_FIELD = re.compile(r"(?i)\b(?:direcci[óo]n(?:\s+postal)?|domicilio(?:\s+(?:social|fiscal|a\s+efectos\s+de\s+notificaci[óo]n))?|"
                            r"reside\s+en|residente\s+en|con\s+domicilio\s+en|vive\s+en|sito\s+en|sita\s+en|address|enderezo|helbidea)\s*:?\s+")
 ADDR_TOKEN = re.compile(r"[\p{L}\d][\p{L}'’.\-\d/º°ª]*")
@@ -280,8 +285,19 @@ def _capture_address(text: str, start: int, from_pos: int, abbreviated: bool) ->
     end = pos
     tokens: list[str] = []
     upper = digits = 0
-    limit = min(len(text), from_pos + 110)
-    while pos < limit and text[pos] not in "\r\n":
+    limit = min(len(text), from_pos + 130)
+    wrapped = False
+    while pos < limit:
+        if text[pos] in "\r\n":
+            # An address may continue on the next line after a comma, or with a postcode / floor.
+            following = ADDR_TOKEN.match(text, _skip(text, pos))
+            continues = text[max(0, pos - 4):pos].rstrip().endswith(",") or (
+                following is not None and re.match(r"(?i)^(?:\d{5}|\d+[ºª°]|bajo|piso|puerta|esc)", following.group()))
+            if wrapped or not tokens or not continues:
+                break
+            wrapped = True
+            pos = _skip(text, pos)
+            continue
         m = ADDR_TOKEN.match(text, pos)
         if not m:
             break
@@ -292,6 +308,10 @@ def _capture_address(text: str, start: int, from_pos: int, abbreviated: bool) ->
             upper += tok[0].isupper()
             digits += tok[0].isdigit()
             end = m.end()
+            gap = text[m.end():_skip(text, m.end(), True)]
+            sentence_end = (tok.endswith(".") and len(low) > 4) or any(c in gap for c in ".;")
+            if digits and sentence_end:
+                break  # "…, 33003 Oviedo. Otro texto": the address ends with the sentence
         elif low in PARTICLES:
             pass
         else:
@@ -338,6 +358,8 @@ NAME_STOPS = {no_accents(w) for w in (
     "direccion domicilio iban cuenta calle avenida plaza juzgado tribunal ayuntamiento concello consejeria "
     "conselleria ministerio universidad colegio instituto hospital banco seguridad social agencia tributaria "
     "sr sra don dona doña firma firmado fdo nombre apellidos apellido expediente referencia asunto "
+    "estimado estimada estimados querido querida señor señora señores usuario usuaria cliente clientes atentamente "
+    "saludos cordiales distinguido distinguida interesado interesada destinatario remitente "
     "lunes martes miercoles jueves viernes sabado domingo enero febrero marzo abril mayo junio julio agosto "
     "septiembre octubre noviembre diciembre madrid barcelona"
 ).split()}
@@ -398,7 +420,9 @@ def capture_name_run(text: str, from_pos: int, allow_unknown: bool = False, allo
         pos = nxt
     if not toks:
         return None
-    if not is_known_name(toks[0]) and (not allow_unknown or len(toks) < 2):
+    surnames_after = sum(1 for t in toks[1:] if no_accents(t.lower()).rstrip(".") in names_data.SURNAMES)
+    rare_given_name = len(toks) >= 3 and surnames_after >= 2
+    if not is_known_name(toks[0]) and (not allow_unknown or len(toks) < 2) and not rare_given_name:
         return None
     return start, end, " ".join(toks)
 
@@ -445,6 +469,14 @@ def find_names(text: str) -> list[Match]:
         if not found:
             continue
         known = [t for t in found[2].split() if is_known_name(t)]
+        # A rare given name right before two known surnames ("… y Jaione Varela Castro").
+        before = re.search(r"(\p{Lu}[\p{Ll}'’-]{2,})[ \t]+$", text[max(0, found[0] - 30):found[0]])
+        if before and len(known) >= 2 and not any(no_accents(t.lower()) in names_data.FIRST_NAMES for t in known):
+            word = before.group(1)
+            preceding = text[max(0, found[0] - 30):found[0]][:before.start(1)].rstrip()
+            if no_accents(word.lower()) not in NAME_STOPS and preceding and preceding[-1] not in ".:;!?\n":
+                found = (found[0] - len(before.group(0)), found[1], word + " " + found[2])
+                known = [word] + known
         if len(known) >= 2 and any(no_accents(t.lower()) in names_data.FIRST_NAMES for t in known) or len(known) >= 3:
             out.append(Match(found[0], found[1], "name", found[2], 0.7, prio=450))
             pos = max(pos, found[1])

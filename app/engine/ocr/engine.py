@@ -9,7 +9,7 @@ from .detect import LineDetector, OrientationClassifier
 from .printed import Recognizer, crop_quad
 
 # Lines read with lower confidence are candidates for the handwriting model.
-HANDWRITING_CONFIDENCE = 0.9
+HANDWRITING_CONFIDENCE = 0.985  # measured in tools/benchmark_handwriting.py (docs/benchmark.md)
 
 # cv2.rotate code that turns an image predicted as rotated by N degrees upright.
 # (The classifier answers 90 for an image turned 90° clockwise.)

@@ -254,3 +254,34 @@ legacy-web/            versión actual, congelada hasta alcanzar paridad; luego 
 - **Riesgo – PDF hostiles** (el motor abre archivos no confiables). Mitigación: procesado en un proceso hijo con límites de memoria/tiempo, que se reinicia si falla.
 
 **Límite honesto:** la garantía de "ni rastro" es absoluta sobre lo marcado (fases 1–2) y sobre todo lo no visible (fase 3). Lo que ninguna detección encuentre ni el usuario marque seguirá visible; la revisión humana página a página sigue siendo obligatoria y la UI la facilita, no la sustituye.
+
+---
+
+## 6. Estado de la implementación (2026-09-25)
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| 0 · Esqueleto y corpus adversarial | Hecho | `tests/fixtures/generate.py`: 23 PDF (22 vías de fuga + formulario manuscrito). Reglas portadas y ampliadas en `app/engine/rules.py`. |
+| 1 · Borrado y limpieza estructural | Hecho | `redact.py`, `sanitize.py`: quads exactos por carácter, bake previo, contenido fuera del CropBox, XMP/Info/estructuras, `/ActualText`, JPEG APPn, JPX recodificado, nombre neutro. Opción «Pixelar» eliminada. |
+| 2 · Verificación obligatoria | Hecho | `verify.py`: estructura, objetos y flujos en varias codificaciones, texto (con y sin ActualText, capas ocultas), OCR de página y de zonas, rostros, detección residual. `test_verifier_blocks_a_leaky_pdf`. |
+| 3 · Máxima seguridad | Hecho | `rasterize.py` + capa OCR del resultado; tokens de longitud uniforme. `test_max_security_mode`. |
+| 4 · Detección con IA | Hecho | PP-OCRv5 (det servidor en GPU, rec en CPU), orientación, re-lectura de imágenes pequeñas, GLiNER-PII fp16, Qwen3-VL (manuscritos + revisión contextual), YuNet por mosaicos, firmas, propagación. `docs/benchmark.md` (4.0), `docs/deteccion.md`. |
+| 5 · Interfaz | Hecho | `app/ui`, `app/api.py`: archivos, carpetas, arrastrar, imágenes y fotos con corrección de perspectiva, revisión con cajas, atajos, zonas manuales, lote a carpeta con informe, registros sin originales por defecto. `tests/test_api.py`, `tools/ui_smoke.py`. |
+| 6 · Instalador | Hecho | `packaging/`: PyInstaller + Inno Setup → `dist/AnonimatoSetup-2.0.0.exe` (≈ 745 MB). Probado: instalación silenciosa sin administrador, `--selftest` del programa instalado (GPU, verificación, integridad) y desinstalación sin restos. |
+| 7 · Retirada de la versión web | Hecho | `legacy-web/` eliminado; repositorio git con `.gitignore`. |
+
+**Decisiones tomadas con datos (fase 4.0):**
+- OCR manuscrito: Qwen3-VL-8B como paquete avanzado estándar (mejor en nombres manuscritos reales: 13,7 % de error
+  frente a 23,7 % del 4B) y Qwen3-VL-4B como variante ligera elegida automáticamente en GPU con < 7 GB libres.
+  PaddleOCR-VL descartado: solo OCR, no sirve para la revisión contextual.
+- Umbral de envío al VLM: confianza < 0,985 (deja sin revisar un 0–2 % de líneas manuscritas mal leídas).
+- GLiNER en fp16: la versión int8 publicada no detecta nada; la cuantización propia de las incrustaciones la rompe.
+- Reconocedor de líneas en CPU: DirectML es más lento con este modelo y recompila con cada tamaño de entrada.
+
+**Desviaciones respecto al plan:**
+- Instalador base de ≈ 745 MB (no 250 MB): GLiNER fp16 ocupa 550 MB y es imprescindible para la calidad medida.
+- El conjunto de evaluación de la fase 4.0 usa datos públicos (IAM, censo francés) y documentos sintéticos con datos
+  ficticios; para medir con documentos propios basta con colocarlos en `eval/own` y `eval/docs` (fuera de git).
+- Sin firma de código (requiere un certificado de pago): Windows mostrará el aviso de SmartScreen la primera vez.
+- El «manifiesto firmado» se implementa como hashes SHA-256 fijados en el manifiesto que viaja dentro del
+  instalador y se comprueban en cada descarga, importación y arranque.

@@ -51,11 +51,11 @@
     }
     const box = $('advancedBox');
     if (s.advancedInstalled) {
-      box.textContent = 'IA avanzada instalada: lectura de manuscritos y revisión contextual.';
+      box.textContent = `IA avanzada instalada (${s.advancedLabel}): lectura de manuscritos y revisión contextual.`;
       return;
     }
     box.replaceChildren(
-      el('p', { textContent: 'La IA avanzada (≈ 3 GB) lee letra manuscrita y hace una revisión contextual. Solo se descargan modelos; ningún documento sale del equipo.' }),
+      el('p', { textContent: `La IA avanzada (${s.advancedLabel}) lee letra manuscrita y hace una revisión contextual. Solo se descargan modelos; ningún documento sale del equipo.` }),
       el('button', { className: 'btn ghost small', id: 'btnInstall', textContent: 'Descargar IA avanzada', onclick: installAdvanced }),
       el('button', { className: 'btn ghost small', textContent: 'Importar paquete sin conexión (.zip)', onclick: importAdvanced }),
       el('div', { className: 'progress-track', id: 'installTrack', hidden: true }, [el('div', { className: 'progress-fill', id: 'installFill' })]),
@@ -232,6 +232,7 @@
   }
 
   function renderTable() {
+    if (!state.details) return;
     const body = $('rowsBody');
     body.replaceChildren();
     const list = visibleFindings();
@@ -293,13 +294,15 @@
 
   async function renderPage() {
     const d = state.details;
+    if (!d) return;
     state.page = Math.max(0, Math.min(state.page, d.pages.length - 1));
     $('pageIndicator').textContent = `Página ${state.page + 1} de ${d.pages.length}`;
     $('btnPrevPage').disabled = state.page === 0;
     $('btnNextPage').disabled = state.page === d.pages.length - 1;
     const seq = ++state.previewSeq;
-    $('originalImg').src = await api.page_image(d.id, state.page, 'original', options());
-    if (seq !== state.previewSeq) return;
+    const src = await api.page_image(d.id, state.page, 'original', options());
+    if (seq !== state.previewSeq || state.details !== d) return;
+    $('originalImg').src = src;
     drawBoxes();
     schedulePreview();
   }
@@ -310,6 +313,7 @@
     wrap.classList.add('loading-preview');
     $('resultImg').removeAttribute('src');  // never show the original while the result is generated
     state.previewTimer = setTimeout(async () => {
+      if (!state.details) return;
       const seq = ++state.previewSeq;
       try {
         const src = await api.page_image(state.details.id, state.page, 'result', options());
@@ -322,6 +326,7 @@
   }
 
   function drawBoxes() {
+    if (!state.details) return;
     const wrap = $('originalWrap');
     for (const node of wrap.querySelectorAll('.box')) node.remove();
     const list = visibleFindings();
@@ -452,7 +457,8 @@
     document.addEventListener('dragover', (e) => e.preventDefault());
     document.addEventListener('drop', (e) => e.preventDefault());
     document.addEventListener('keydown', (event) => {
-      if (event.target.matches('input, select, textarea') || !state.details || $('resultsCard').hidden) return;
+      const target = event.target;
+      if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden) return;
       const key = event.key.toLowerCase();
       if (key === 'arrowleft' && state.page > 0) { state.page -= 1; renderPage(); }
       else if (key === 'arrowright' && state.page < state.details.pages.length - 1) { state.page += 1; renderPage(); }

@@ -61,7 +61,7 @@ class ModelFile:
 
     @property
     def path(self) -> Path:
-        if self.group in ("advanced", "candidates"):
+        if self.group in ("advanced", "advanced_lite", "candidates"):
             return (user_models_dir() / self.file).resolve()
         return (bundled_models_dir() / self.file).resolve()
 
@@ -144,19 +144,26 @@ def download(item: ModelFile, progress: Progress | None = None) -> Path:
     return target
 
 
-def import_zip(archive_path: Path, group: str = "advanced") -> None:
-    """Offline installation: a zip containing the files named in the manifest."""
-    items = {Path(item.file).name: item for item in load_manifest()[group]}
+def import_zip(archive_path: Path) -> list[str]:
+    """Offline installation: a zip whose entries are named like the manifest files (e.g. advanced/vlm.gguf)."""
+    manifest = load_manifest()
+    items = {item.file: item for group in ("advanced", "advanced_lite") for item in manifest.get(group, [])}
+    imported = []
     with zipfile.ZipFile(archive_path) as archive:
         for member in archive.namelist():
-            name = Path(member).name
-            if name not in items:
+            item = items.get(member.replace("\\", "/"))
+            if item is None:
                 continue
-            item = items[name]
             item.path.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(member) as source, item.path.open("wb") as destination:
+            partial = item.path.with_suffix(item.path.suffix + ".part")
+            with archive.open(member) as source, partial.open("wb") as destination:
                 while chunk := source.read(CHUNK):
                     destination.write(chunk)
-            if item.sha256 and sha256_of(item.path) != item.sha256:
-                item.path.unlink(missing_ok=True)
+            if item.sha256 and sha256_of(partial) != item.sha256:
+                partial.unlink(missing_ok=True)
                 raise RuntimeError(f"Checksum incorrecto para {item.id}")
+            partial.replace(item.path)
+            imported.append(item.id)
+    if not imported:
+        raise RuntimeError("El archivo no contiene ningún modelo reconocido")
+    return imported

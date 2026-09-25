@@ -6,6 +6,11 @@ import numpy as np
 
 from . import models
 
+try:
+    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+except AttributeError:  # older OpenCV builds
+    pass
+
 TILE = 640
 OVERLAP = 0.25
 

@@ -84,7 +84,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .toolbar .spacer { flex: 1; }
 .page-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 20px 0 14px; }
 .page-nav span { min-width: 112px; color: var(--muted); text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
-.comparison-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr) minmax(270px, .78fr); gap: clamp(14px, 1.4vw, 22px); align-items: start; }
+.comparison-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr) minmax(360px, .95fr); gap: clamp(14px, 1.4vw, 22px); align-items: start; }
 .document-column { min-width: 0; }
 .document-column h3, .data-column h3 { margin: 0 0 9px; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
 .anonymized-column h3 { color: var(--success); }
@@ -176,7 +176,9 @@ tr.off { opacity: .38; }
 .filter-row { display: flex; gap: 6px; margin-bottom: 8px; }
 .filter-row select { flex: 1; min-height: 40px; }
 .table-scroll { max-height: calc(100vh - 330px); min-height: 200px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
-table { min-width: 520px; }
+table { min-width: 0; }
+td.orig { max-width: 190px; }
+th:first-child, td:first-child { width: 28px; padding-right: 4px; }
 tr.current td { background: rgba(67, 214, 174, .09); }
 tbody tr { cursor: pointer; }
 td .src { display: block; color: #7488a3; font-size: 10px; }

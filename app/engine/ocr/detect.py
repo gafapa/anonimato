@@ -62,8 +62,8 @@ class LineDetector:
             (cx, cy), (bw, bh), angle = cv2.minAreaRect(contour)
             if min(bw, bh) < 3:
                 continue
-            if min(bw, bh) > limit and max(bw, bh) / max(1.0, min(bw, bh)) < 1.6:
-                continue  # blob (texture, photo, stain), not a text line
+            if min(bw, bh) > limit and max(bw, bh) / max(1.0, min(bw, bh)) < 3:
+                continue  # blob (texture, photo, stain, noise), not a text line
             x, y, cw, ch = cv2.boundingRect(contour)
             mask = np.zeros((ch, cw), dtype=np.uint8)
             cv2.drawContours(mask, [contour - [x, y]], -1, 1, -1)
@@ -77,8 +77,8 @@ class LineDetector:
             if min(rect[1]) < 5:
                 continue
             pts = cv2.boxPoints(rect)
-            pts[:, 0] *= sx
-            pts[:, 1] *= sy
+            pts[:, 0] = np.clip(pts[:, 0] * sx, 0, rgb.shape[1] - 1)
+            pts[:, 1] = np.clip(pts[:, 1] * sy, 0, rgb.shape[0] - 1)
             boxes.append(_order(pts))
         boxes.sort(key=lambda q: (round(q[:, 1].mean() / 10), q[:, 0].min()))
         return boxes

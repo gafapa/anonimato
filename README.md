@@ -6,10 +6,10 @@ servidor ni se envía ningún documento a ninguna parte.
 
 ## Instalación
 
-1. Ejecuta `AnonimatoSetup-2.0.0.exe`. No pide permisos de administrador ni necesita Python ni CUDA.
+1. Ejecuta `AnonimatoSetup-2.0.0.exe` (≈ 750 MB). No pide permisos de administrador ni necesita Python ni CUDA.
 2. Abre **Anonimato** desde el menú Inicio.
-3. (Opcional) En la barra lateral pulsa **Descargar IA avanzada** (≈ 3 GB) para leer texto manuscrito y hacer
-   una revisión contextual. Es la única conexión que realiza la aplicación: descarga modelos desde su origen
+3. (Opcional) En la barra lateral pulsa **Descargar IA avanzada** para leer texto manuscrito y hacer una revisión
+   contextual: Qwen3-VL-8B (≈ 5,5 GB) si la tarjeta gráfica tiene ≥ 7 GB libres, o Qwen3-VL-4B (≈ 2,8 GB) si no. Es la única conexión que realiza la aplicación: descarga modelos desde su origen
    oficial y comprueba su SHA-256. En equipos sin Internet usa **Importar paquete sin conexión (.zip)**.
 
 Sin certificado de firma de código, Windows puede mostrar «Windows protegió su PC» la primera vez:
@@ -61,6 +61,10 @@ uv run python -m app                                      # abrir la aplicación
 ```
 
 - Comparativa de OCR manuscrito: `uv run python tools/benchmark_handwriting.py` → `docs/benchmark.md`.
+- Evaluación de la detección (recall/precisión por categoría): `uv run python tools/evaluate_detection.py --scanned`
+  → `docs/deteccion.md`. Añade tus documentos anotados en `eval/docs/*.pdf` + `*.json` (no se versionan).
+- Prueba de la interfaz real: `uv run python tools/ui_smoke.py`. Autocomprobación del ejecutable:
+  `Anonimato.exe --selftest=informe.json`.
   Añade tus propias líneas en `eval/own/*.png` + `eval/own/labels.json` (no se versionan).
 - Paquete de IA sin conexión: `uv run python tools/make_offline_pack.py`.
 - Instalador: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.0.0.exe` (requiere Inno Setup 6).

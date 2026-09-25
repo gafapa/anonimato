@@ -11,7 +11,49 @@ def _ui_path() -> Path:
     return app_root() / "app" / "ui" / "index.html"
 
 
+def selftest(report_path: str) -> int:
+    """Headless check of the installed engine: analyse, redact, clean and verify a generated document."""
+    import json
+    import time
+
+    import pymupdf
+
+    from .engine import pipeline, rules
+    from .engine.services import Services
+    from .engine.types import Options
+
+    started = time.time()
+    result: dict = {"ok": False}
+    services = Services(use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
+    try:
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((72, 100), "Paciente: Juan García Pérez, DNI 12345678Z, teléfono 612 345 678", fontsize=11)
+        doc.set_metadata({"author": "Juan García Pérez"})
+        options = Options(categories=set(rules.SELECTABLE) - rules.DEFAULT_OFF, handwriting=False, llm_review=False)
+        analysis = pipeline.analyze(doc.tobytes(), "prueba.pdf", options, services)
+        exported = pipeline.export(analysis, options, services)
+        text = pymupdf.open("pdf", exported.data)[0].get_text()
+        result = {
+            "ok": exported.report.ok and "12345678Z" not in text and "García" not in text,
+            "findings": sorted({f.type for f in analysis.findings}),
+            "report": exported.report.to_json(),
+            "services": services.status(),
+            "integrity": services.check_integrity(),
+            "seconds": round(time.time() - started, 1),
+        }
+    except Exception as error:  # noqa: BLE001
+        result = {"ok": False, "error": repr(error)}
+    finally:
+        services.shutdown()
+    Path(report_path).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if result.get("ok") else 1
+
+
 def main() -> None:
+    for arg in sys.argv[1:]:
+        if arg.startswith("--selftest="):
+            sys.exit(selftest(arg.split("=", 1)[1]))
     import webview
     from webview.dom import DOMEventHandler
 
