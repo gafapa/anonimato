@@ -45,6 +45,15 @@
       el('span', { className: 'pill ' + (s.advancedInstalled ? 'ok' : 'warn'), textContent: s.advancedInstalled ? 'IA avanzada lista' : 'IA avanzada no instalada' }),
       el('span', { className: 'pill ok', textContent: 'Sin conexión · local' }),
     );
+    const errors = Object.entries(s.errors || {});
+    const banner = $('engineErrors');
+    banner.hidden = !errors.length;
+    const labels = { integrity: 'Integridad', ocr: 'OCR', pii: 'IA de datos personales', faces: 'Rostros', llm: 'IA avanzada', engine: 'Motor' };
+    banner.replaceChildren(
+      el('strong', { textContent: s.blocked ? 'Procesamiento bloqueado por seguridad. ' : 'Atención: ' }),
+      ...errors.map(([key, message]) => el('span', { textContent: `${labels[key] || key}: ${message}. ` })),
+    );
+    $('btnRun').dataset.blocked = s.blocked ? '1' : '';
     for (const label of document.querySelectorAll('.toggle.advanced')) {
       label.classList.toggle('unavailable', !s.advancedInstalled);
       label.querySelector('input').disabled = !s.advancedInstalled;
@@ -95,7 +104,8 @@
     for (const doc of state.docs) {
       const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos`
         : doc.status === 'processing' ? 'Analizando…'
-          : doc.status === 'failed' ? `Error: ${doc.error}` : `${Math.round(doc.size / 1024)} KB · pendiente`;
+          : doc.status === 'failed' ? `Error: ${doc.error}`
+            : doc.status === 'locked' ? 'Protegido con contraseña' : `${Math.round(doc.size / 1024)} KB · pendiente`;
       const select = el('button', { className: 'document-select', type: 'button', disabled: false }, [
         el('span', { className: 'document-name', textContent: doc.name }),
         el('span', { className: `document-status ${doc.status}`, textContent: status }),
@@ -109,9 +119,25 @@
           await refreshDocuments();
         }
       });
-      queue.append(el('div', { className: 'document-item' + (doc.id === state.activeId ? ' active' : '') }, [select, remove]));
+      const item = el('div', { className: 'document-item' + (doc.id === state.activeId ? ' active' : '') }, [select, remove]);
+      if (doc.status === 'locked') {
+        const input = el('input', { type: 'password', placeholder: 'Contraseña del PDF', className: 'password' });
+        input.setAttribute('aria-label', `Contraseña de ${doc.name}`);
+        const unlock = el('button', { className: 'btn ghost small', type: 'button', textContent: 'Abrir' });
+        const submit = async () => {
+          const result = await api.unlock(doc.id, input.value);
+          input.value = '';
+          if (!result.ok) { setError(result.message); return; }
+          setError('');
+          await refreshDocuments();
+        };
+        unlock.addEventListener('click', submit);
+        input.addEventListener('keydown', (event) => { if (event.key === 'Enter') submit(); });
+        item.append(el('div', { className: 'unlock-row' }, [input, unlock]));
+      }
+      queue.append(item);
     }
-    $('btnRun').disabled = !state.docs.length || state.polling;
+    $('btnRun').disabled = !state.docs.length || state.polling || $('btnRun').dataset.blocked === '1';
   }
 
   async function refreshDocuments() {
@@ -224,8 +250,15 @@
         : `Verificación fallida: ${report.leaks.length} resto(s). No se ha guardado el archivo.`,
     })];
     if (!report.ok) {
-      children.push(el('ul', {}, report.leaks.map((leak) => el('li', { textContent: `${leak.where}: ${leak.detail} (${leak.check}) «${leak.value}»` }))));
-      children.push(el('p', { textContent: 'Prueba el modo «Voy a compartir este documento fuera» o añade una zona manual sobre el dato.' }));
+      children.push(el('ul', {}, report.leaks.map((leak) => {
+        const located = leak.page !== null && leak.page !== undefined && leak.view && leak.view.length;
+        const text = `${leak.where}: ${leak.detail} (${leak.check}) «${leak.value}»`
+          + (located ? ' · ver en la página' : leak.page === null ? ' · en la estructura del archivo' : '');
+        const item = el('li', { textContent: text, className: located ? 'leak-link' : '' });
+        if (located) item.addEventListener('click', () => { state.page = leak.page; renderPage(); });
+        return item;
+      })));
+      children.push(el('p', { textContent: 'Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o usa el modo «Voy a compartir este documento fuera».' }));
     }
     if (report.warnings?.length) {
       children.push(el('ul', { className: 'warn-list' }, report.warnings.map((w) => el('li', { textContent: w }))));
@@ -319,7 +352,7 @@
       const seq = ++state.previewSeq;
       try {
         const src = await api.page_image(state.details.id, state.page, 'result', options());
-        if (seq === state.previewSeq) { $('resultImg').src = src; wrap.classList.remove('loading-preview'); }
+        if (seq === state.previewSeq) { $('resultImg').src = src; wrap.classList.remove('loading-preview'); drawLeaks(); }
       } catch (error) {
         setError(`No se pudo generar la vista previa: ${error.message || error}`);
         wrap.classList.remove('loading-preview');
@@ -327,8 +360,24 @@
     }, 200);
   }
 
+  function drawLeaks() {
+    const wrap = $('resultWrap');
+    for (const node of wrap.querySelectorAll('.leak-box')) node.remove();
+    const report = state.details && state.details.report;
+    if (!report || report.ok) return;
+    for (const leak of report.leaks) {
+      if (leak.page !== state.page || !leak.view) continue;
+      for (const [x0, y0, x1, y1] of leak.view) {
+        const box = el('div', { className: 'leak-box', title: `${leak.detail} (${leak.check})` });
+        Object.assign(box.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
+        wrap.append(box);
+      }
+    }
+  }
+
   function drawBoxes() {
     if (!state.details) return;
+    drawLeaks();
     const wrap = $('originalWrap');
     for (const node of wrap.querySelectorAll('.box')) node.remove();
     const list = visibleFindings();
@@ -402,22 +451,44 @@
     $('btnPdf').disabled = true;
     $('progressCard').hidden = false;
     $('progressText').textContent = 'Generando y verificando…';
+    const ticker = setInterval(async () => {
+      const info = await api.poll();
+      if (info.busy) {
+        $('progressFill').style.width = `${info.progress.percent || 0}%`;
+        $('progressText').textContent = info.progress.message || 'Generando y verificando…';
+      }
+    }, 500);
     try {
       const result = await api.save_pdf(state.details.id, options());
       state.details.report = result.report || null;
       renderReport(state.details.report);
+      drawLeaks();
       if (!result.ok) setError(result.message);
       else if (result.saved) $('progressText').textContent = `Guardado: ${result.path}`;
     } catch (error) {
       setError(`Error al guardar: ${error.message || error}`);
     } finally {
+      clearInterval(ticker);
       $('btnPdf').disabled = false;
       setTimeout(() => { if (!state.polling) $('progressCard').hidden = true; }, 2500);
     }
   }
   async function saveAll() {
     setError('');
-    const result = await api.save_all(options());
+    $('progressCard').hidden = false;
+    const ticker = setInterval(async () => {
+      const info = await api.poll();
+      if (info.busy) {
+        $('progressFill').style.width = `${info.progress.percent || 0}%`;
+        $('progressText').textContent = info.progress.message || '';
+      }
+    }, 500);
+    let result;
+    try {
+      result = await api.save_all(options());
+    } finally {
+      clearInterval(ticker);
+    }
     if (result.message) setError(result.message);
     else if (result.folder) {
       $('progressCard').hidden = false;

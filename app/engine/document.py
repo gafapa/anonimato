@@ -24,6 +24,36 @@ class DocumentError(Exception):
     pass
 
 
+class PasswordRequired(DocumentError):
+    pass
+
+
+def unlock(data: bytes, password: str) -> bytes:
+    """Decrypt a password-protected PDF. The anonymised output is never encrypted."""
+    doc = pymupdf.open("pdf", data)
+    try:
+        if doc.needs_pass and not doc.authenticate(password):
+            raise DocumentError("Contraseña incorrecta")
+        return doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_NONE, garbage=1)
+    finally:
+        doc.close()
+
+
+def is_signed(data: bytes) -> bool:
+    """The PDF carries digital signatures (they cannot survive any modification)."""
+    doc = pymupdf.open("pdf", data)
+    try:
+        if doc.get_sigflags() > 0:
+            return True
+        for page in doc:
+            for widget in page.widgets() or []:
+                if widget.field_type == pymupdf.PDF_WIDGET_TYPE_SIGNATURE:
+                    return True
+        return False
+    finally:
+        doc.close()
+
+
 def _order_quad(pts: np.ndarray) -> np.ndarray:
     total = pts.sum(axis=1)
     diff = np.diff(pts, axis=1).ravel()
@@ -111,7 +141,7 @@ def load_bytes(data: bytes, filename: str) -> bytes:
         raise DocumentError("El PDF está dañado o no se puede abrir") from error
     try:
         if doc.needs_pass:
-            raise DocumentError("El PDF está protegido con contraseña")
+            raise PasswordRequired("El PDF está protegido con contraseña")
         if doc.page_count == 0:
             raise DocumentError("El PDF no tiene páginas")
         if doc.page_count > LIMITS["max_pages"]:

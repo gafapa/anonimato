@@ -185,3 +185,10 @@ tbody tr { cursor: pointer; }
 td .src { display: block; color: #7488a3; font-size: 10px; }
 .notes { margin-top: 10px; color: var(--warning); font-size: 12px; }
 .data-column h3 span { color: var(--muted); text-transform: none; letter-spacing: 0; }
+
+.engine-errors { padding: 10px 28px; color: #fff; background: #7a1f33; font-size: 13px; }
+.unlock-row { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 6px; }
+.unlock-row input { flex: 1; min-height: 38px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); background: var(--panel-raised); font: inherit; font-size: 13px; }
+.leak-box { position: absolute; border: 3px solid var(--danger); background: rgba(255, 107, 133, .25); border-radius: 2px; pointer-events: none; }
+.leak-link { cursor: pointer; text-decoration: underline; }

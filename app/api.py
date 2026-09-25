@@ -1,6 +1,8 @@
 """Bridge between the window (JavaScript) and the engine.
 
-Everything stays in memory; the only files written are the ones the user saves.
+The window process never parses a document: analysis, export and previews run in
+isolated engine processes (see engine/worker.py). Everything stays in memory; the only
+files written are the ones the user saves.
 """
 from __future__ import annotations
 
@@ -8,18 +10,14 @@ import base64
 import json
 import threading
 import time
-import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import pymupdf
-
-from .engine import document, logs, models, pipeline, rules
-from .engine.services import Services
+from .engine import document, llm_server, logs, models, pipeline, rules
 from .engine.types import Options
+from .engine.worker import EngineError, EngineProcess
 
-VERSION = "2.0.0"
-SUPPORTED = ("*.pdf", "*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff", "*.bmp", "*.webp")
+VERSION = "2.1.0"
 
 
 @dataclass
@@ -28,13 +26,12 @@ class Doc:
     name: str
     size: int
     data: bytes
-    status: str = "pending"          # pending | processing | ready | failed
+    status: str = "pending"          # pending | processing | ready | failed | locked
     error: str = ""
     analysis: pipeline.Analysis | None = None
     preview_key: str = ""
     preview_bytes: bytes | None = None
     report: dict | None = None
-    report_key: str = ""
 
 
 @dataclass
@@ -68,24 +65,60 @@ def _options(raw: dict) -> Options:
     )
 
 
+def _transform(matrix: tuple, rect) -> tuple[float, float, float, float]:
+    a, b, c, d, e, f = matrix
+    xs, ys = [], []
+    for x, y in ((rect[0], rect[1]), (rect[2], rect[1]), (rect[0], rect[3]), (rect[2], rect[3])):
+        xs.append(a * x + c * y + e)
+        ys.append(b * x + d * y + f)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _invert(matrix: tuple) -> tuple:
+    a, b, c, d, e, f = matrix
+    det = a * d - b * c
+    ia, ib, ic, id_ = d / det, -b / det, -c / det, a / det
+    return ia, ib, ic, id_, -(e * ia + f * ic), -(e * ib + f * id_)
+
+
 class Api:
-    def __init__(self, services: Services | None = None):
-        self._services = services or Services()
+    def __init__(self, use_gpu: bool = True, engine: EngineProcess | None = None, light: EngineProcess | None = None):
+        self._engine = engine or EngineProcess(with_models=True, use_gpu=use_gpu)
+        self._light = light or EngineProcess(with_models=False, use_gpu=False, stall_seconds=180)
         self._state = State()
         self._lock = threading.RLock()
         self._window = None
+        self._status_cache: dict | None = None
+        threading.Thread(target=self._engine.ensure_started, daemon=True).start()
+        threading.Thread(target=self._light.ensure_started, daemon=True).start()
 
     def attach(self, window) -> None:
         self._window = window
 
+    def shutdown(self) -> None:
+        self._engine.stop()
+        self._light.stop()
+
     # ------------------------------------------------------------ status
+    def _engine_status(self) -> dict:
+        if self._state.busy and self._status_cache is not None:
+            return self._status_cache
+        try:
+            status = self._engine.call("status", stall_seconds=600)
+        except EngineError as error:
+            status = {"base": False, "advanced": False, "gpu": False, "errors": {"engine": str(error)}}
+        self._status_cache = status
+        return status
+
     def status(self) -> dict:
-        from .engine import llm_server
         variant = llm_server.installed_variant() or llm_server.recommended_variant()
+        services = self._engine_status()
         return {
             "version": VERSION,
-            "services": self._services.status(),
-            "advancedInstalled": self._services.advanced_available(),
+            "services": services,
+            "errors": services.get("errors", {}),
+            "blocked": "integrity" in services.get("errors", {}),
+            "advancedInstalled": llm_server.available(),
             "advancedVariant": variant,
             "advancedLabel": "Qwen3-VL 8B · ≈ 5,5 GB" if variant == "advanced" else "Qwen3-VL 4B · ≈ 2,8 GB",
             "categories": [
@@ -164,21 +197,36 @@ class Api:
         with self._lock:
             return [self._doc_summary(self._state.docs[i]) for i in self._state.order]
 
+    def unlock(self, doc_id: str, password: str) -> dict:
+        """Decrypt a password-protected PDF (in the isolated process); the output is never encrypted."""
+        doc = self._state.docs[doc_id]
+        try:
+            doc.data = self._light.call("unlock", doc.data, password)
+        except EngineError as error:
+            return {"ok": False, "message": str(error)}
+        doc.status, doc.error, doc.size = "pending", "", len(doc.data)
+        return {"ok": True}
+
     # ------------------------------------------------------------ processing
     def process(self, raw_options: dict, only: list[str] | None = None) -> bool:
+        if self.status().get("blocked"):
+            self._state.progress = {"message": "Modelos alterados: reinstala la aplicación", "percent": 0}
+            return False
         with self._lock:
             if self._state.busy:
                 return False
             self._state.busy = True
             self._state.cancel = False
             self._state.progress = {"message": "Preparando…", "percent": 0}
+        self._engine.cancel.clear()
         options = _options(raw_options)
-        targets = only or list(self._state.order)
+        targets = only or [i for i in self._state.order if self._state.docs[i].status != "locked"]
         threading.Thread(target=self._run, args=(targets, options), daemon=True).start()
         return True
 
     def cancel(self) -> None:
         self._state.cancel = True
+        self._engine.cancel.set()
 
     def _run(self, targets: list[str], options: Options) -> None:
         try:
@@ -201,19 +249,19 @@ class Api:
                     }
 
                 try:
-                    doc.analysis = pipeline.analyze(doc.data, doc.name, options, self._services, progress,
-                                                    lambda: self._state.cancel)
+                    doc.analysis = self._engine.call("analyze", doc.data, doc.name, options, progress=progress)
                     doc.status = "ready"
                 except pipeline.Cancelled:
                     doc.status, doc.error = "pending", ""
-                except Exception as error:  # noqa: BLE001
-                    doc.status, doc.error = "failed", str(error) or error.__class__.__name__
-                    traceback.print_exc()
+                except EngineError as error:
+                    if error.kind == "PasswordRequired":
+                        doc.status, doc.error = "locked", "Protegido con contraseña"
+                    else:
+                        doc.status, doc.error = "failed", str(error)
         finally:
             with self._lock:
                 self._state.busy = False
                 self._state.progress = {"message": "", "percent": 100}
-            self._services.release_llm_if_idle(0)
 
     def poll(self) -> dict:
         return {"busy": self._state.busy, "progress": self._state.progress, "documents": self.documents(),
@@ -230,11 +278,20 @@ class Api:
         """Unrotated page rects -> normalised rects on the displayed (rotated) page."""
         info = analysis.pages[page]
         out = []
-        matrix = _rotation_matrix(analysis, page)
         for rect in rects:
-            r = pymupdf.Rect(rect) * matrix
-            out.append([r.x0 / info.width, r.y0 / info.height, r.x1 / info.width, r.y1 / info.height])
+            x0, y0, x1, y1 = _transform(info.matrix, rect)
+            out.append([x0 / info.width, y0 / info.height, x1 / info.width, y1 / info.height])
         return out
+
+    def _report_view(self, analysis: pipeline.Analysis, report: dict | None) -> dict | None:
+        if not report:
+            return report
+        for leak in report.get("leaks", []):
+            page = leak.get("page")
+            if page is not None and 0 <= page < len(analysis.pages):
+                leak["view"] = self._view_rects(analysis, page, leak.get("rects", []))
+            leak.pop("rects", None)
+        return report
 
     def details(self, doc_id: str) -> dict:
         doc, analysis = self._analysis(doc_id)
@@ -248,7 +305,7 @@ class Api:
         return {
             "id": doc.id, "name": doc.name, "pages": [{"width": p.width, "height": p.height} for p in analysis.pages],
             "findings": findings, "notes": analysis.notes, "seconds": analysis.seconds,
-            "nativeChars": analysis.native_chars, "report": doc.report,
+            "nativeChars": analysis.native_chars, "report": doc.report, "signed": analysis.signed,
         }
 
     def set_enabled(self, doc_id: str, finding_ids: list[str], enabled: bool) -> int:
@@ -264,10 +321,8 @@ class Api:
     def add_manual(self, doc_id: str, page: int, view_rect: list[float]) -> dict:
         _, analysis = self._analysis(doc_id)
         info = analysis.pages[page]
-        rect = pymupdf.Rect(view_rect[0] * info.width, view_rect[1] * info.height,
-                            view_rect[2] * info.width, view_rect[3] * info.height)
-        rect = rect * ~_rotation_matrix(analysis, page)
-        finding = pipeline.add_manual(analysis, page, (rect.x0, rect.y0, rect.x1, rect.y1))
+        shown = (view_rect[0] * info.width, view_rect[1] * info.height, view_rect[2] * info.width, view_rect[3] * info.height)
+        finding = pipeline.add_manual(analysis, page, _transform(_invert(info.matrix), shown))
         data = finding.to_json()
         data["label"] = rules.CATEGORIES["manual"]["label"]
         data["view"] = self._view_rects(analysis, page, finding.rects)
@@ -282,7 +337,7 @@ class Api:
 
     # ------------------------------------------------------------ previews
     def _state_key(self, analysis: pipeline.Analysis, options: Options) -> str:
-        enabled = ",".join(sorted(f.id for f in analysis.findings if f.enabled))
+        enabled = ",".join(sorted(f.id + str(f.rects) for f in analysis.findings if f.enabled))
         return f"{options.mode}|{options.max_security}|{options.uniform_tokens}|{enabled}"
 
     def page_image(self, doc_id: str, page: int, which: str, raw_options: dict) -> str:
@@ -294,39 +349,50 @@ class Api:
             key = self._state_key(analysis, options)
             if doc.preview_key != key or doc.preview_bytes is None:
                 # Exactly the pipeline used for saving, minus the (slow) verification.
-                doc_pdf = pymupdf.open("pdf", analysis.working)
-                from .engine import rasterize, redact, sanitize
-                redact.apply(doc_pdf, analysis.findings, options.mode, options.uniform_tokens)
-                data = sanitize.sanitize(redact.render_output(doc_pdf.tobytes()))
-                doc_pdf.close()
-                if options.max_security:
-                    data = sanitize.sanitize(rasterize.rasterize(data, options.raster_dpi, None))
-                doc.preview_bytes, doc.preview_key = data, key
+                doc.preview_bytes = self._light.call("build_preview", analysis, options)
+                doc.preview_key = key
             data = doc.preview_bytes
-        png = pipeline.preview(data, page, 1100)
+        png = self._light.call("page_png", data, page, 1100)
         return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
     # ------------------------------------------------------------ export
-    def _export(self, doc: Doc, options: Options, index: int, keep_name: bool) -> pipeline.ExportResult:
-        result = pipeline.export(doc.analysis, options, self._services, index=index, keep_name=keep_name,
-                                 progress=lambda e: self._state.progress.update({"message": e.get("message", "")}))
-        doc.report = result.report.to_json()
-        doc.report_key = self._state_key(doc.analysis, options)
+    def _export(self, doc: Doc, options: Options, index: int, keep_name: bool, share: tuple[int, int] = (0, 1)):
+        def progress(event: dict) -> None:
+            page, pages = event.get("page"), event.get("total")
+            fraction = page / pages if page and pages else 0.0
+            self._state.progress = {"message": f"{doc.name}: {event.get('message', '')}",
+                                    "percent": round(100 * (share[0] + fraction) / max(1, share[1]), 1)}
+
+        result = self._engine.call("export", doc.analysis, options, index, keep_name, progress=progress)
+        doc.report = self._report_view(doc.analysis, result.report.to_json())
         return result
+
+    def _begin(self) -> bool:
+        with self._lock:
+            if self._state.busy:
+                return False
+            self._state.busy = True
+            self._state.progress = {"message": "Generando y verificando…", "percent": 0}
+            return True
+
+    def _end(self) -> None:
+        with self._lock:
+            self._state.busy = False
+            self._state.progress = {"message": "", "percent": 100}
 
     def save_pdf(self, doc_id: str, raw_options: dict) -> dict:
         import webview
-        doc, analysis = self._analysis(doc_id)
+        doc, _ = self._analysis(doc_id)
         options = _options(raw_options)
         keep = bool(raw_options.get("keepName", False))
         index = self._state.order.index(doc_id) + 1
-        with self._lock:
-            if self._state.busy:
-                return {"ok": False, "message": "Hay un proceso en curso"}
-            self._state.busy = True
+        if not self._begin():
+            return {"ok": False, "message": "Hay un proceso en curso"}
         try:
-            self._state.progress = {"message": "Generando y verificando…", "percent": 50}
-            result = self._export(doc, options, index, keep)
+            try:
+                result = self._export(doc, options, index, keep)
+            except EngineError as error:
+                return {"ok": False, "message": f"No se pudo generar el PDF: {error}"}
             if not result.report.ok:
                 return {"ok": False, "report": doc.report,
                         "message": "La verificación ha encontrado restos del dato original. No se ha guardado nada."}
@@ -338,9 +404,7 @@ class Api:
             path.write_bytes(result.data)
             return {"ok": True, "saved": True, "path": str(path), "report": doc.report}
         finally:
-            with self._lock:
-                self._state.busy = False
-                self._state.progress = {"message": "", "percent": 100}
+            self._end()
 
     def save_all(self, raw_options: dict) -> dict:
         import webview
@@ -354,18 +418,20 @@ class Api:
         keep = bool(raw_options.get("keepName", False))
         root = Path(folder)
         results = []
-        with self._lock:
-            if self._state.busy:
-                return {"ok": False, "message": "Hay un proceso en curso"}
-            self._state.busy = True
+        if not self._begin():
+            return {"ok": False, "message": "Hay un proceso en curso"}
         try:
             ready = [self._state.docs[i] for i in self._state.order if self._state.docs[i].status == "ready"]
-            for position, doc in enumerate(ready, start=1):
-                self._state.progress = {"message": f"Exportando {position} de {len(ready)}",
-                                        "percent": round(100 * (position - 1) / max(1, len(ready)))}
-                result = self._export(doc, options, self._state.order.index(doc.id) + 1, keep)
-                entry = {"documento": f"documento-{self._state.order.index(doc.id) + 1}", "ok": result.report.ok,
-                         "verificacion": doc.report}
+            for position, doc in enumerate(ready):
+                number = self._state.order.index(doc.id) + 1
+                entry = {"documento": f"documento-{number}"}
+                try:
+                    result = self._export(doc, options, number, keep, share=(position, len(ready)))
+                except EngineError as error:
+                    entry.update(ok=False, error=str(error))
+                    results.append(entry)
+                    continue
+                entry.update(ok=result.report.ok, verificacion=doc.report)
                 if result.report.ok:
                     path = root / result.filename
                     counter = 2
@@ -381,9 +447,7 @@ class Api:
             return {"ok": all(r["ok"] for r in results), "saved": sum(1 for r in results if r["ok"]),
                     "failed": sum(1 for r in results if not r["ok"]), "folder": str(root)}
         finally:
-            with self._lock:
-                self._state.busy = False
-                self._state.progress = {"message": "", "percent": 100}
+            self._end()
 
     def save_log(self, doc_id: str, fmt: str, include_originals: bool, include_coords: bool) -> dict:
         import webview
@@ -407,29 +471,28 @@ class Api:
         if self._state.install.get("running"):
             return False
         self._state.install = {"running": True, "message": "Descargando…", "percent": 0}
-
-        def run() -> None:
-            try:
-                from .engine import llm_server
-                items = models.load_manifest()[llm_server.recommended_variant()]
-                sizes = {}
-
-                def progress(model_id: str, done: int, total: int) -> None:
-                    sizes[model_id] = (done, total)
-                    got = sum(d for d, _ in sizes.values())
-                    tot = sum(t for _, t in sizes.values()) or 1
-                    self._state.install = {"running": True, "percent": round(100 * got / tot, 1),
-                                           "message": f"Descargando modelos de IA ({got >> 20} MB)"}
-
-                for item in items:
-                    models.download(item, progress)
-                self._state.install = {"running": False, "done": True, "percent": 100,
-                                       "message": "IA avanzada instalada"}
-            except Exception as error:  # noqa: BLE001
-                self._state.install = {"running": False, "error": str(error), "message": f"Error: {error}"}
-
-        threading.Thread(target=run, daemon=True).start()
+        threading.Thread(target=self._install, daemon=True).start()
         return True
+
+    def _install(self, group: str | None = None) -> None:
+        try:
+            items = models.load_manifest()[group or llm_server.recommended_variant()]
+            sizes: dict[str, tuple[int, int]] = {}
+
+            def progress(model_id: str, done: int, total: int) -> None:
+                sizes[model_id] = (done, total)
+                got = sum(d for d, _ in sizes.values())
+                tot = sum(t for _, t in sizes.values()) or 1
+                self._state.install = {"running": True, "percent": round(100 * got / tot, 1),
+                                       "message": f"Descargando modelos de IA ({got >> 20} MB)"}
+
+            for item in items:
+                models.download(item, progress)
+            self._engine.call("reload_models")
+            self._status_cache = None
+            self._state.install = {"running": False, "done": True, "percent": 100, "message": "IA avanzada instalada"}
+        except Exception as error:  # noqa: BLE001
+            self._state.install = {"running": False, "error": str(error), "message": f"Error: {error}"}
 
     def import_advanced(self) -> dict:
         import webview
@@ -438,17 +501,8 @@ class Api:
             return {"ok": False}
         try:
             models.import_zip(Path(paths[0]))
-            self._services.errors.pop("llm", None)
+            self._engine.call("reload_models")
+            self._status_cache = None
             return {"ok": True}
         except Exception as error:  # noqa: BLE001
             return {"ok": False, "message": str(error)}
-
-
-def _rotation_matrix(analysis: pipeline.Analysis, page: int) -> pymupdf.Matrix:
-    cache = getattr(analysis, "_rotation_cache", None)
-    if cache is None:
-        doc = pymupdf.open("pdf", analysis.working)
-        cache = [p.rotation_matrix for p in doc]
-        doc.close()
-        analysis._rotation_cache = cache  # type: ignore[attr-defined]
-    return cache[page]

@@ -1,6 +1,8 @@
 """Text-line detection (PP-OCRv5 server det, DB post-processing) and page orientation."""
 from __future__ import annotations
 
+import threading
+
 import cv2
 import numpy as np
 
@@ -21,6 +23,7 @@ class LineDetector:
             max_side = min(max_side, 1600)
         self.input = self.session.get_inputs()[0].name
         self.max_side = max_side
+        self._run_lock = threading.Lock()
 
     def _prepare(self, rgb: np.ndarray) -> tuple[np.ndarray, float, float]:
         """Resize (keeping aspect) and pad to a small set of fixed sizes.
@@ -45,7 +48,8 @@ class LineDetector:
         """Return quadrilaterals (4x2 float arrays, pixel coords), reading order."""
         tensor, sx, sy = self._prepare(rgb)
         try:
-            prob = self.session.run(None, {self.input: tensor})[0][0, 0]
+            with self._run_lock:  # DirectML sessions must not run concurrently
+                prob = self.session.run(None, {self.input: tensor})[0][0, 0]
         except Exception:  # noqa: BLE001 - GPU lost or out of memory: continue on CPU
             self.session = session(str(models.model("ocr-det-mobile").path), False)
             self.input = self.session.get_inputs()[0].name

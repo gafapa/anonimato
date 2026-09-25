@@ -15,7 +15,6 @@ sys.path.insert(0, str(ROOT))
 import webview  # noqa: E402
 
 from app.api import Api  # noqa: E402
-from app.engine.services import Services  # noqa: E402
 from app.main import _ui_path  # noqa: E402
 from tests.fixtures.generate import build_all  # noqa: E402
 
@@ -137,12 +136,11 @@ def scenario(window, api):
 
 
 def main():
-    services = Services(use_gpu="--gpu" in sys.argv)
-    api = Api(services)
+    api = Api(use_gpu="--gpu" in sys.argv)
     window = webview.create_window("Anonimato (prueba)", url=_ui_path().as_uri(), js_api=api, width=1480, height=940)
     api.attach(window)
     webview.start(scenario, (window, api), gui="edgechromium", private_mode=True)
-    services.shutdown()
+    api.shutdown()
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 

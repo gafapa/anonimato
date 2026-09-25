@@ -75,7 +75,7 @@ def load_manifest() -> dict[str, list[ModelFile]]:
     return {
         group: [ModelFile(group=group, unzip=item.get("unzip", False), **{k: v for k, v in item.items() if k != "unzip"})
                 for item in items]
-        for group, items in raw.items()
+        for group, items in raw.items() if isinstance(items, list)
     }
 
 
@@ -167,3 +167,51 @@ def import_zip(archive_path: Path) -> list[str]:
     if not imported:
         raise RuntimeError("El archivo no contiene ningún modelo reconocido")
     return imported
+
+
+INTEGRITY_GROUPS = ("base", "advanced", "advanced_lite")
+
+
+def _runtime_files() -> dict[str, str]:
+    raw = json.loads(manifest_path().read_text(encoding="utf-8"))
+    return raw.get("runtime_files", {})
+
+
+def _integrity_cache_path() -> Path:
+    return user_data_dir() / "integrity.json"
+
+
+def verify_all(force: bool = False) -> list[str]:
+    """Names of files whose SHA-256 does not match the manifest (models and llama.cpp runtime)."""
+    targets: list[tuple[str, Path, str]] = []
+    manifest = load_manifest()
+    for group in INTEGRITY_GROUPS:
+        for item in manifest.get(group, []):
+            if item.sha256:
+                targets.append((item.id, item.path, item.sha256))
+    for name, digest in _runtime_files().items():
+        targets.append((f"runtime/{name}", runtime_dir() / name, digest))
+    try:
+        cache = {} if force else json.loads(_integrity_cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    bad = []
+    for label, path, expected in targets:
+        if not path.exists():
+            continue
+        stat = path.stat()
+        key = str(path)
+        entry = cache.get(key)
+        if entry and entry[0] == stat.st_size and entry[1] == stat.st_mtime_ns and entry[2] == expected:
+            continue
+        actual = sha256_of(path)
+        if actual != expected:
+            bad.append(label)
+            cache.pop(key, None)
+        else:
+            cache[key] = [stat.st_size, stat.st_mtime_ns, expected]
+    try:
+        _integrity_cache_path().write_text(json.dumps(cache), encoding="utf-8")
+    except OSError:
+        pass
+    return bad

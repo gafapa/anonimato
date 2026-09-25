@@ -36,6 +36,15 @@ def main() -> None:
                 item = models.model(entry["id"])
                 if not entry["sha256"] and item.path.exists():
                     entry["sha256"] = models.sha256_of(item.path)
+        # Every llama.cpp file that the application ships is pinned too (checked at start-up).
+        runtime = models.runtime_dir() / "llama"
+        if runtime.exists():
+            shipped = ("ggml", "llama-server", "llama.dll", "llama-common", "mtmd", "libomp")
+            raw["runtime_files"] = {
+                f"llama/{path.name}": models.sha256_of(path)
+                for path in sorted(runtime.iterdir())
+                if path.suffix in (".exe", ".dll") and path.name.startswith(shipped)
+            }
         models.manifest_path().write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
         print("Checksums pinned.")
 

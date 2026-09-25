@@ -391,6 +391,41 @@ def f23_handwritten():
     return _bytes(doc)
 
 
+def f24_jpx():
+    """JPEG 2000 image with the name in its pixels and a copy in an XML box of the codestream."""
+    image = Image.new("RGB", (900, 120), "white")
+    ImageDraw.Draw(image).text((20, 30), f"{NAME} {DNI}", fill="black", font=ImageFont.truetype(str(FONTS / "arial.ttf"), 46))
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG2000", irreversible=False)
+    payload = f"<meta><autor>{NAME}</autor><dni>{DNI}</dni></meta>".encode("utf-8")
+    jp2 = buffer.getvalue() + (len(payload) + 8).to_bytes(4, "big") + b"xml " + payload
+    doc = _base()
+    doc[0].insert_image(fitz.Rect(72, 300, 522, 360), stream=jp2)
+    return _bytes(doc)
+
+
+def f25_signed():
+    """Digitally signed form: the signature dictionary names the signer and embeds a certificate."""
+    doc = _base()
+    widget = fitz.Widget()
+    widget.field_type = fitz.PDF_WIDGET_TYPE_SIGNATURE
+    widget.field_name = "firma"
+    widget.rect = fitz.Rect(72, 400, 300, 450)
+    doc[0].add_widget(widget)
+    pdf = _pike(_bytes(doc))
+    certificate = b"0\x82\x03\x10" + f"CN={NAME}, SERIALNUMBER=IDCES-{DNI}, C=ES".encode("utf-8") + bytes(64)
+    signature = pikepdf.Dictionary(
+        Type=pikepdf.Name.Sig, Filter=pikepdf.Name("/Adobe.PPKLite"), SubFilter=pikepdf.Name("/adbe.pkcs7.detached"),
+        Name=pikepdf.String(NAME), ContactInfo=pikepdf.String(f"{DNI} · 612 345 678"), Reason=pikepdf.String(f"Firmado por {NAME}"),
+        Location=pikepdf.String("Madrid"), M=pikepdf.String("D:20240101000000"),
+        Contents=pikepdf.String(certificate), ByteRange=pikepdf.Array([0, 0, 0, 0]))
+    for field in pdf.Root.AcroForm.Fields:
+        if field.get("/FT") == pikepdf.Name.Sig:
+            field.V = pdf.make_indirect(signature)
+    pdf.Root.AcroForm.SigFlags = 3
+    return _pike_bytes(pdf)
+
+
 def build_all() -> list[Fixture]:
     return [
         Fixture(1, "info", f01_info()),
@@ -416,6 +451,8 @@ def build_all() -> list[Fixture]:
         Fixture(21, "filename", f21_filename(), filename="Juan_Garcia_Perez_12345678Z_informe.pdf"),
         Fixture(22, "scan_photo", f22_scan_with_photo(), needs_ocr=True, needs_faces=True),
         Fixture(23, "handwritten", f23_handwritten(), needs_ocr=True),
+        Fixture(24, "jpeg2000", f24_jpx(), needs_ocr=True),
+        Fixture(25, "digital_signature", f25_signed()),
     ]
 
 

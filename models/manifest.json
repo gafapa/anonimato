@@ -121,5 +121,32 @@
       "license": "Apache-2.0",
       "sha256": "30ba2c7dd3127a4561b6cba9d13d0f711c91bdb38742e2f56d73c8cb596bd06d"
     }
-  ]
+  ],
+  "runtime_files": {
+    "llama/ggml-base.dll": "d89998150858fe33d90286f64e35e5f3958b0a0f15693247d43e02fdb9b81b60",
+    "llama/ggml-cpu-alderlake.dll": "cebfecef33196250ff3310695b23d12eed6a64cdf03d57331a49e2e28a07039b",
+    "llama/ggml-cpu-cannonlake.dll": "1d0027a4ec004580c90a07855fe58f510e952564779636e70e05dc9cec77aea0",
+    "llama/ggml-cpu-cascadelake.dll": "f86f81d15b9b6fda3a40b4375ecd07bbf04cb48bbf45663be0618401716cc399",
+    "llama/ggml-cpu-cooperlake.dll": "38cd621ab77958374d71ec45b3e378e946c6bde7000b048fba019c85b885c68e",
+    "llama/ggml-cpu-haswell.dll": "3b31df47f4318955d336100e799f8ecac1270fd04de03f168054f2691ab9f6ef",
+    "llama/ggml-cpu-icelake.dll": "e2e4304cb7b36ed387f6a1caf802d2f8a1f62be31d49fa86b1691f2cbc58853e",
+    "llama/ggml-cpu-ivybridge.dll": "b97271da845bf6e9b55b8bcb88786c2795256d1b30a562db79c465993110afa1",
+    "llama/ggml-cpu-piledriver.dll": "0ccdae29761cf1316657511e528b7e26644e0421ab0d67a83a9389bd4c81bc8c",
+    "llama/ggml-cpu-sandybridge.dll": "a54dbde580e42dcb125926510964fa6fe05004cafe3333632978929536b129bc",
+    "llama/ggml-cpu-sapphirerapids.dll": "b2b1c5985ab6b9f97edc0516fc42b528d6992dcd9c23515198198c784cf5ca6a",
+    "llama/ggml-cpu-skylakex.dll": "13646a05eed6c330c57cca35fc190ebc513ca36be13b6353df27571e1e45198f",
+    "llama/ggml-cpu-sse42.dll": "fabedbdf61fdb8d55c19b52f33f48887afcd9a53b2bc2a274110ed7702571a2d",
+    "llama/ggml-cpu-x64.dll": "0edf78a03a6747f4ee8b5f037ecca88b0ef49e73b507eeb1ac5ac06a1b08647b",
+    "llama/ggml-cpu-zen4.dll": "472e6de95e1d454187c01fd85818abc5779096a46f9bcc905db36215307586c6",
+    "llama/ggml-rpc-server.exe": "250a8cfab3e8dc5711e83aa18c08052e2404a1c09ac6b941672d0296d8a1e201",
+    "llama/ggml-rpc.dll": "57c2a0287054819fc1a508466856d0d6b53653df7b6793d9b086e536d36ce705",
+    "llama/ggml-vulkan.dll": "26f2744fb1d3c90b9c664599fad6fa36dc218762e43bc86af5e108badeb3433a",
+    "llama/ggml.dll": "988ba1823409987a2efe5e2e1460bfdd551a74363310db95e92744b08278b4b0",
+    "llama/libomp.dll": "a12116ba72d1d6820407cf30be23da04ce79d6bb8a71a5ee71759c5a1faa6f1c",
+    "llama/llama-common.dll": "6bf579b80731e583ee92843ab06f61bd992e7631f4d4ce6fdcc4aab6cb91f25e",
+    "llama/llama-server-impl.dll": "d2562673442bb9bd237d5b888aa037690ada5ab2ed92fea2df56d5c06df2170c",
+    "llama/llama-server.exe": "f7ccb964dc4b7a205e1f2d7ebdb3de4c2e111ca338d0c78f25e8d13ab75ff239",
+    "llama/llama.dll": "5823720bf2822ca2206f07d324c8ade21d974eb13041016936de926a8c29b795",
+    "llama/mtmd.dll": "e53804485c92012deead64f3257e00c0f1730333d35022d014d0b7da52d7ef3d"
+  }
 }

@@ -12,40 +12,49 @@ def _ui_path() -> Path:
 
 
 def selftest(report_path: str) -> int:
-    """Headless check of the installed engine: analyse, redact, clean and verify a generated document."""
+    """Headless check of the installed application through the isolated engine process:
+    analyse, redact, clean and verify a generated document; also checks crash recovery."""
     import json
     import time
 
     import pymupdf
 
-    from .engine import pipeline, rules
-    from .engine.services import Services
+    from .engine import rules
     from .engine.types import Options
+    from .engine.worker import EngineCrashed, EngineProcess
 
     started = time.time()
     result: dict = {"ok": False}
-    services = Services(use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
+    engine = EngineProcess(with_models=True, use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
     try:
         doc = pymupdf.open()
         page = doc.new_page()
         page.insert_text((72, 100), "Paciente: Juan García Pérez, DNI 12345678Z, teléfono 612 345 678", fontsize=11)
         doc.set_metadata({"author": "Juan García Pérez"})
         options = Options(categories=set(rules.SELECTABLE) - rules.DEFAULT_OFF, handwriting=False, llm_review=False)
-        analysis = pipeline.analyze(doc.tobytes(), "prueba.pdf", options, services)
-        exported = pipeline.export(analysis, options, services)
+        analysis = engine.call("analyze", doc.tobytes(), "prueba.pdf", options)
+        exported = engine.call("export", analysis, options, 1, False)
         text = pymupdf.open("pdf", exported.data)[0].get_text()
+        try:
+            engine.call("_test_crash")
+            recovered = False
+        except EngineCrashed:
+            recovered = engine.call("ping") > 0
+        status = engine.call("status")
         result = {
-            "ok": exported.report.ok and "12345678Z" not in text and "García" not in text,
+            "ok": exported.report.ok and "12345678Z" not in text and "García" not in text and recovered
+                  and "integrity" not in status.get("errors", {}),
             "findings": sorted({f.type for f in analysis.findings}),
             "report": exported.report.to_json(),
-            "services": services.status(),
-            "integrity": services.check_integrity(),
+            "services": status,
+            "integrity": engine.call("integrity"),
+            "crash_recovery": recovered,
             "seconds": round(time.time() - started, 1),
         }
     except Exception as error:  # noqa: BLE001
         result = {"ok": False, "error": repr(error)}
     finally:
-        services.shutdown()
+        engine.stop()
     Path(report_path).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if result.get("ok") else 1
 
@@ -58,11 +67,8 @@ def main() -> None:
     from webview.dom import DOMEventHandler
 
     from .api import Api
-    from .engine.services import Services
 
-    services = Services(use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
-    services.warm_up()
-    api = Api(services)
+    api = Api(use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
     window = webview.create_window(
         "Anonimato", url=_ui_path().as_uri(), js_api=api, width=1480, height=940, min_size=(980, 640),
         background_color="#0b111c", text_select=True,
@@ -84,7 +90,7 @@ def main() -> None:
     try:
         webview.start(gui="edgechromium", private_mode=True, debug="--debug" in sys.argv)
     finally:
-        services.shutdown()
+        api.shutdown()
 
 
 if __name__ == "__main__":

@@ -42,7 +42,8 @@ class OcrEngine:
         """Compile the GPU graphs for the usual shapes (runs in the background at start-up)."""
         import numpy as _np
         for h, w in ((2048, 1536), (1536, 2048), (2048, 2048), (1536, 1280), (1280, 1536), (1024, 1024)):
-            self.detector.session.run(None, {self.detector.input: _np.zeros((1, 3, h, w), dtype=_np.float32)})
+            with self.detector._run_lock:
+                self.detector.session.run(None, {self.detector.input: _np.zeros((1, 3, h, w), dtype=_np.float32)})
 
     def read_line(self, rgb: np.ndarray) -> str:
         """Recognise a single-line crop directly (no detection)."""

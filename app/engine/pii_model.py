@@ -75,10 +75,15 @@ class PiiModel:
         spans = np.array([[[i, i + j] for i in range(n) for j in range(self.max_width)]], dtype=np.int64)
         span_mask = spans[..., 1] < n
         spans = np.where(span_mask[..., None], spans, 0)
-        logits = self.session.run(["logits"], {
+        feeds = {
             "input_ids": ids, "attention_mask": attention, "words_mask": words_mask,
             "text_lengths": np.array([[n]], dtype=np.int64), "span_idx": spans, "span_mask": span_mask,
-        })[0][0]
+        }
+        try:
+            logits = self.session.run(["logits"], feeds)[0][0]
+        except Exception:  # noqa: BLE001 - GPU lost: retry once on the CPU, then give up loudly
+            self.session = session(str(models.model("pii-model").path), False, cpu_basic=True)
+            logits = self.session.run(["logits"], feeds)[0][0]
         probs = 1 / (1 + np.exp(-logits))  # (n, max_width, classes)
         found = []
         for i, j, c in zip(*np.where(probs > self.threshold)):

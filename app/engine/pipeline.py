@@ -1,8 +1,8 @@
 """Analysis (detection) and export (redaction → cleaning → verification) pipeline."""
 from __future__ import annotations
 
-import itertools
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from typing import Callable
@@ -32,6 +32,7 @@ class PageInfo:
     width: float
     height: float
     rotation: int
+    matrix: tuple = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)   # unrotated -> displayed (rotated) page coordinates
 
 
 @dataclass
@@ -46,7 +47,12 @@ class Analysis:
     notes: list[str] = field(default_factory=list)
     native_chars: int = 0
     seconds: float = 0.0
-    counter: itertools.count = field(default_factory=lambda: itertools.count(1))
+    next_id: int = 1
+    signed: bool = False
+
+    def new_id(self, page: int) -> str:
+        self.next_id += 1
+        return f"p{page + 1}-{self.next_id - 1}"
 
 
 @dataclass
@@ -97,13 +103,15 @@ def _useful_ai(match: Match) -> bool:
     return len(match.value.strip()) >= 2
 
 
-def detect_text(text: str, categories: set[str], pii=None) -> list[Match]:
+def detect_text(text: str, categories: set[str], pii=None, notes: list[str] | None = None) -> list[Match]:
     matches = rules.detect_all(text)
     if pii is not None and text.strip():
         try:
             matches += [m for m in pii.detect(text) if _useful_ai(m)]
-        except Exception:  # noqa: BLE001 - the model is an extra layer; rules still apply
-            pass
+        except Exception as error:  # noqa: BLE001 - rules still apply, but the user is told
+            message = f"IA de datos personales con error ({error}); en este texto solo se han aplicado las reglas."
+            if notes is not None and message not in notes:
+                notes.append(message)
     return [m for m in combine(matches) if m.type in categories]
 
 
@@ -168,8 +176,19 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
     working = working_doc.tobytes(garbage=1)
     scan = document.analysis_copy(working_doc)
     analysis = Analysis(id=uuid.uuid4().hex, filename=filename, working=working, findings=[], options=options,
-                        pages=[PageInfo(p.rect.width, p.rect.height, p.rotation) for p in working_doc])
+                        pages=[PageInfo(p.rect.width, p.rect.height, p.rotation, tuple(p.rotation_matrix))
+                               for p in working_doc])
+    try:
+        analysis.signed = document.is_signed(pdf_bytes)
+    except Exception:  # noqa: BLE001
+        analysis.signed = False
+    if analysis.signed:
+        analysis.notes.append("El PDF original tiene firma digital: el documento anonimizado no conservará una firma "
+                              "válida (cualquier modificación la invalida). Los datos del firmante se eliminan.")
     pii = services.pii() if services is not None and options.ai else None
+    if services is not None and options.ai and pii is None:
+        analysis.notes.append("IA de datos personales no disponible: " + services.errors.get("pii", "error al cargar")
+                              + ". Se han aplicado solo las reglas.")
     ocr = services.ocr() if services is not None and options.ocr else None
     faces = services.faces() if services is not None and options.faces else None
     llm = services.llm() if services is not None and (options.handwriting or options.llm_review) else None
@@ -182,7 +201,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
 
     def add(page: int, kind: str, value: str | None, rects: list[Rect], confidence: float, source: str,
             warning: str | None = None, detail: str = "", key: str = "") -> Finding:
-        finding = Finding(id=f"p{page + 1}-{next(analysis.counter)}", page=page, type=kind, value=value,
+        finding = Finding(id=analysis.new_id(page), page=page, type=kind, value=value,
                           rects=rects, confidence=round(float(confidence), 3), source=source, warning=warning,
                           detail=detail, key=key)
         analysis.findings.append(finding)
@@ -195,7 +214,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
         native = document.page_text(page)
         analysis.native_chars += len(native.text.strip())
         page_sources: list[tuple[str, PageText]] = [("text", native)]
-        for match in detect_text(native.text, categories, pii):
+        for match in detect_text(native.text, categories, pii, analysis.notes):
             rects = native.rects_for(match.start, match.end)
             if rects:
                 add(index, match.type, match.value.strip(), rects, match.confidence,
@@ -270,7 +289,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                 line.confidence < 0.9 or (line.engine == "vlm" and Levenshtein.normalized_distance(
                     line.text.lower(), alternatives[position].lower()) > 0.15))]
             for source_text in texts:
-                for match in detect_text(source_text.text, categories, pii):
+                for match in detect_text(source_text.text, categories, pii, analysis.notes):
                     rects = source_text.rects_for(match.start, match.end)
                     if not rects:
                         continue
@@ -447,7 +466,7 @@ def assign_tokens(findings: list[Finding]) -> None:
 
 def add_manual(analysis: Analysis, page: int, rect: Rect) -> Finding:
     number = sum(1 for f in analysis.findings if f.type == "manual") + 1
-    finding = Finding(id=f"p{page + 1}-{next(analysis.counter)}", page=page, type="manual", value=None,
+    finding = Finding(id=analysis.new_id(page), page=page, type="manual", value=None,
                       rects=[rect], confidence=1.0, source="manual", token=f"[{CATEGORIES['manual']['token']} {number}]")
     finding.key = finding.id
     analysis.findings.append(finding)
@@ -475,17 +494,35 @@ def safe_filename(original: str, findings: list[Finding], index: int, keep_name:
     return f"{cleaned}_anonimizado.pdf"
 
 
-def residual_detector(categories: set[str]):
-    token = re.compile(r"\[[A-ZÁÉÍÓÚÑ ]+ \d+\]")
+def residual_detector(categories: set[str], services=None):
+    """Personal data still present in the output (warnings): rules and, if available, the AI model,
+    over the extractable text and the OCR text of each page."""
+    # Replacement tokens, also as OCR reads them ("NOMBRE 1]", "(DNI 2)", "[TELEFONO 3").
+    words = "|".join(re.escape(rules.no_accents(c["token"])) for c in CATEGORIES.values())
+    token = re.compile(r"[\[\(\{|]?\s*(?:" + words + r")\s*\d{1,3}\s*[\]\)\}|]?", re.IGNORECASE)
+    pii = services.pii() if services is not None else None
 
-    def run(data: bytes) -> list[str]:
+    def run(data: bytes, ocr_texts: dict[int, str] | None = None) -> list[str]:
         doc = document.analysis_copy(document.open_pdf(data))
         messages = []
-        for number, page in enumerate(doc, start=1):
-            text = token.sub(" ", page.get_text("text", flags=document.TEXT_FLAGS, clip=pymupdf.INFINITE_RECT()))
-            for match in rules.detect_all(text):
-                if match.type in categories and match.confidence >= 0.8:
-                    messages.append(f"Página {number}: posible {CATEGORIES[match.type]['label'].lower()} sin ocultar "
+        for index, page in enumerate(doc):
+            native = page.get_text("text", flags=document.TEXT_FLAGS, clip=pymupdf.INFINITE_RECT())
+            text = unicodedata.normalize("NFC", native + "\n" + (ocr_texts or {}).get(index, ""))
+            plain = rules.no_accents(text)  # same length as the NFC text: spans can be reused
+            for match in reversed(list(token.finditer(plain))):
+                text = text[:match.start()] + " " * (match.end() - match.start()) + text[match.end():]
+            matches = [m for m in rules.detect_all(text) if m.confidence >= 0.8]
+            if pii is not None and text.strip():
+                try:
+                    matches += [m for m in pii.detect(text) if _useful_ai(m) and m.confidence >= 0.8]
+                except Exception:  # noqa: BLE001
+                    pass
+            seen = set()
+            for match in matches:
+                key = (match.type, match.value.lower())
+                if match.type in categories and key not in seen:
+                    seen.add(key)
+                    messages.append(f"Página {index + 1}: posible {CATEGORIES[match.type]['label'].lower()} sin ocultar "
                                     f"(«{match.value[:2]}…»)")
         doc.close()
         return messages
@@ -510,7 +547,7 @@ def export(analysis: Analysis, options: Options, services=None, progress: Progre
         data = sanitize.sanitize(rasterize.rasterize(data, options.raster_dpi, ocr))
     progress({"stage": "verify", "message": "Verificando que no queda ningún rastro"})
     report = verify.verify(data, analysis.findings, services if verify_pixels else None,
-                           residual=residual_detector(set(options.categories)))
+                           residual=residual_detector(set(options.categories), services), progress=progress)
     return ExportResult(data, report, safe_filename(analysis.filename, analysis.findings, index, keep_name),
                         round(time.time() - started, 1))
 

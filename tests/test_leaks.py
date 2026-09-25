@@ -146,3 +146,15 @@ def test_user_can_keep_a_value(services):
     result = pipeline.export(analysis, options, services)
     assert result.report.ok  # a value the user chose to keep is not a leak
     assert DNI in pymupdf.open("pdf", result.data)[0].get_text()
+
+
+def test_residual_detection_uses_the_ai_model(services):
+    """A name the user decided to keep is still reported as a possible residue by the AI model."""
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 100), "Acta firmada por Iraitz Eguzkitza Urquiola en la sede.", fontsize=11)
+    options = _options()
+    analysis = pipeline.analyze(doc.tobytes(), "acta.pdf", options, services)
+    for finding in analysis.findings:
+        finding.enabled = False
+    result = pipeline.export(analysis, options, services)
+    assert any("nombre" in warning.lower() for warning in result.report.warnings), result.report.warnings

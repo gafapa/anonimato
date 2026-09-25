@@ -36,6 +36,8 @@ class Leak:
     where: str
     value: str
     detail: str = ""
+    page: int | None = None                       # 0-based; None = in the file structure
+    rects: list = field(default_factory=list)     # unrotated page coordinates
 
 
 @dataclass
@@ -56,7 +58,8 @@ class Report:
         return {
             "ok": self.ok, "objects": self.objects, "pages": self.pages, "values": self.values,
             "checks": self.checks, "warnings": self.warnings,
-            "leaks": [{"check": l.check, "where": l.where, "value": _mask(l.value), "detail": l.detail} for l in self.leaks],
+            "leaks": [{"check": l.check, "where": l.where, "value": _mask(l.value), "detail": l.detail,
+                       "page": l.page, "rects": [list(r) for r in l.rects]} for l in self.leaks],
         }
 
 
@@ -221,15 +224,34 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
     report.objects = count
 
 
-def _scan_text(data: bytes, targets: list[Target], report: Report) -> None:
+def _locate(source, target: Target) -> list:
+    """Rectangles of every occurrence of the value in a page text (to show the user where it is)."""
+    from .propagate import NormalizedText
+    norm = NormalizedText(source.text)
+    if target.kind in ID_TYPES:
+        pattern = r"[\s.\-/]?".join(re.escape(c) for c in target.id_form)
+    else:
+        pattern = r"[\W_]+".join(re.escape(w) for w in target.text_form.split())
+    rects = []
+    for match in re.finditer(pattern, norm.text):
+        start, end = norm.span(match.start(), match.end())
+        rects += source.rects_for(start, end)
+    return rects
+
+
+def _scan_text(data: bytes, targets: list[Target], report: Report, progress=None) -> None:
     doc = document.analysis_copy(document.open_pdf(data))
     report.pages = doc.page_count
     for index, page in enumerate(doc):
-        text = "\n".join(page.get_text("text", flags=flags, clip=pymupdf.INFINITE_RECT())
-                         for flags in (document.TEXT_FLAGS, document.TEXT_FLAGS_ACTUAL))
+        if progress:
+            progress({"stage": "verify", "page": index + 1, "total": doc.page_count,
+                      "message": f"Verificando el texto de la página {index + 1} de {doc.page_count}"})
+        source = document.page_text(page)
+        actual = page.get_text("text", flags=document.TEXT_FLAGS_ACTUAL, clip=pymupdf.INFINITE_RECT())
         for target in targets:
-            if target.found_in(text):
-                report.add(Leak("texto", f"página {index + 1}", target.value, "texto extraíble"))
+            if target.found_in(source.text + "\n" + actual):
+                report.add(Leak("texto", f"página {index + 1}", target.value, "texto extraíble",
+                                page=index, rects=_locate(source, target)))
     doc.close()
 
 
@@ -260,27 +282,48 @@ def fuzzy_found(target: Target, text: str) -> bool:
     return substring_distance(needle, hay) <= allowed
 
 
-def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], services, report: Report) -> None:
+def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], services, report: Report,
+                 progress=None) -> dict[int, str]:
+    """Rendered pages: OCR, zoomed OCR of every redacted area, handwriting re-read and faces.
+
+    Returns the OCR text of each page (reused by the residual detection)."""
     doc = document.open_pdf(data)
     ocr = services.ocr() if services else None
     faces = services.faces() if services else None
+    reader = None
+    if services is not None and services.advanced_available():
+        llm = services.llm()
+        if llm is not None:
+            from .ocr.handwriting import HandwritingReader
+            reader = HandwritingReader(llm)
     protected = {target.id_form for target in targets}
+    texts: dict[int, str] = {}
     for index, page in enumerate(doc):
-        needs_ocr = ocr is not None
+        if progress:
+            progress({"stage": "verify", "page": index + 1, "total": doc.page_count,
+                      "message": f"Verificando la imagen de la página {index + 1} de {doc.page_count}"})
         rendered = document.render(page, 200)
-        if needs_ocr:
+        if ocr is not None:
             lines = ocr.read(rendered.image)
             text = "\n".join(line.text for line in lines)
+            texts[index] = text
             for target in targets:
                 if fuzzy_found(target, text):
-                    report.add(Leak("ocr", f"página {index + 1}", target.value, "visible en la página renderizada"))
-            # Zoomed OCR of each redacted area (catches half-covered characters).
+                    rects = [rendered.to_page(line.rect) for line in lines if fuzzy_found(target, line.text)]
+                    report.add(Leak("ocr", f"página {index + 1}", target.value, "visible en la página renderizada",
+                                    page=index, rects=rects))
+            # Zoomed OCR of each redacted area (catches half-covered characters). Handwritten areas are
+            # also re-read with the vision-language model when it is installed.
             for finding in findings:
                 if finding.page != index or not finding.enabled or not finding.value:
                     continue
+                target = Target.build(finding.type, finding.value)
+                if target.id_form not in protected:
+                    continue
                 for rect in finding.rects:
                     r = pymupdf.Rect(rect)
-                    zone = pymupdf.Rect(r.x0 - r.height * 2, r.y0 - r.height * 0.8, r.x1 + r.height * 2, r.y1 + r.height * 0.8)
+                    zone = pymupdf.Rect(r.x0 - r.height * 2, r.y0 - r.height * 0.8, r.x1 + r.height * 2,
+                                        r.y1 + r.height * 0.8)
                     clip = (zone * page.rotation_matrix) & page.rect
                     if clip.is_empty:
                         continue
@@ -288,11 +331,16 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
                     if pix.height < 12 or pix.width < 12:
                         continue  # too small to be legible as pixels (its text was already checked above)
                     image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
-                    zone_text = ocr.read_line(image)
-                    target = Target.build(finding.type, finding.value)
-                    if target.id_form in protected and fuzzy_found(target, zone_text):
+                    readings = [ocr.read_line(image)]
+                    if reader is not None and finding.source == "handwriting":
+                        try:
+                            readings.append(reader.read(image))
+                        except Exception:  # noqa: BLE001 - the printed-text check above still applies
+                            pass
+                    if any(fuzzy_found(target, reading) for reading in readings):
                         report.add(Leak("ocr-zona", f"página {index + 1}", finding.value,
-                                        "legible dentro o junto a la zona tachada"))
+                                        "legible dentro o junto a la zona tachada", page=index,
+                                        rects=[(zone.x0, zone.y0, zone.x1, zone.y1)]))
         if faces is not None:
             face_findings = [f for f in findings if f.page == index and f.enabled and f.type == "face"]
             if face_findings:
@@ -300,11 +348,13 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
                     rect = pymupdf.Rect(rendered.to_page(box))
                     for finding in face_findings:
                         if any(rect.intersects(pymupdf.Rect(r)) for r in finding.rects):
-                            report.add(Leak("rostros", f"página {index + 1}", "rostro", "rostro reconocible"))
+                            report.add(Leak("rostros", f"página {index + 1}", "rostro", "rostro reconocible",
+                                            page=index, rects=[tuple(rect)]))
     doc.close()
+    return texts
 
 
-def verify(data: bytes, findings: list[Finding], services=None, residual=None) -> Report:
+def verify(data: bytes, findings: list[Finding], services=None, residual=None, progress=None) -> Report:
     report = Report()
     targets = protected_targets(findings)
     report.values = len(targets)
@@ -314,16 +364,19 @@ def verify(data: bytes, findings: list[Finding], services=None, residual=None) -
         report.checks.append("estructura")
         _scan_objects(pdf, targets, report)
         report.checks.append("objetos y flujos")
-    _scan_text(data, targets, report)
+    _scan_text(data, targets, report, progress)
     report.checks.append("texto de páginas")
+    ocr_texts: dict[int, str] = {}
     if services is not None:
-        _scan_pixels(data, findings, targets, services, report)
+        ocr_texts = _scan_pixels(data, findings, targets, services, report, progress)
         report.checks.append("OCR de la página renderizada")
+        if services.advanced_available():
+            report.checks.append("relectura de manuscritos con IA")
         if services.faces() is not None:
             report.checks.append("rostros")
     if residual is not None:
         try:
-            for message in residual(data):
+            for message in residual(data, ocr_texts):
                 report.warnings.append(message)
             report.checks.append("detección residual")
         except Exception as error:  # noqa: BLE001
@@ -331,6 +384,10 @@ def verify(data: bytes, findings: list[Finding], services=None, residual=None) -
     # Deduplicate identical leaks.
     unique = {}
     for leak in report.leaks:
-        unique.setdefault((leak.check, leak.where, leak.value), leak)
+        key = (leak.check, leak.where, leak.value)
+        if key in unique:
+            unique[key].rects.extend(r for r in leak.rects if r not in unique[key].rects)
+        else:
+            unique[key] = leak
     report.leaks = list(unique.values())
     return report

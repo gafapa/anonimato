@@ -16,6 +16,9 @@ class Services:
         self._faces = None
         self._llm = None
         self.errors: dict[str, str] = {}
+        self._integrity_checked = threading.Event()
+        self._ready = threading.Event()
+        self._ready.set()  # only cleared while a warm-up is running
 
     def _load(self, name: str, factory):
         with self._lock:
@@ -43,27 +46,54 @@ class Services:
     def warm_up(self) -> None:
         """Load models and compile GPU graphs in the background so the first document is fast."""
         def run() -> None:
-            self.check_integrity()
-            engine = self.ocr()
-            if engine is not None:
-                try:
-                    engine.warm_up()
-                except Exception:  # noqa: BLE001
-                    pass
-            self.pii()
-            self.faces()
+            try:
+                self.check_integrity()
+                engine = self.ocr()
+                if engine is not None:
+                    try:
+                        engine.warm_up()
+                    except Exception:  # noqa: BLE001
+                        pass
+                self.pii()
+                self.faces()
+            finally:
+                self._ready.set()
+        self._ready.clear()
         threading.Thread(target=run, daemon=True).start()
 
-    def check_integrity(self) -> bool:
-        """SHA-256 of every bundled and installed model against the pinned manifest."""
-        bad = []
-        for group in ("base", "advanced"):
-            for item in models.load_manifest().get(group, []):
-                if item.path.exists() and item.sha256 and models.sha256_of(item.path) != item.sha256:
-                    bad.append(item.id)
+    def check_integrity(self, force: bool = False) -> bool:
+        """SHA-256 of every model and runtime file against the pinned manifest.
+
+        Hashes are cached by (size, modification time) so unchanged multi-GB files are not re-read
+        at every start; any change triggers a full re-hash.
+        """
+        try:
+            bad = models.verify_all(force=force)
+        finally:
+            self._integrity_checked.set()
         if bad:
-            self.errors["integrity"] = "Modelos alterados o dañados: " + ", ".join(bad)
+            self.errors["integrity"] = "Archivos alterados o dañados: " + ", ".join(bad)
+        else:
+            self.errors.pop("integrity", None)
         return not bad
+
+    def require_integrity(self) -> None:
+        """Block until the integrity check and the warm-up have run; refuse to work with altered models.
+
+        (GPU sessions must not be used by the warm-up thread and an analysis at the same time.)"""
+        self._ready.wait(1800)
+        if not self._integrity_checked.is_set():
+            if not self._integrity_checked.wait(900):
+                self.check_integrity()
+        if "integrity" in self.errors:
+            raise RuntimeError(self.errors["integrity"] + ". Reinstala la aplicación o la IA avanzada.")
+
+    def reset_advanced(self) -> None:
+        with self._lock:
+            if self._llm is not None:
+                self._llm.stop()
+            self._llm = None
+            self.errors.pop("llm", None)
 
     def advanced_available(self) -> bool:
         return llm_server.available()
