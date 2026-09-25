@@ -288,5 +288,5 @@ legacy-web/            versión actual, congelada hasta alcanzar paridad; luego 
 
 **Resultados medidos:** 73 tests automáticos en verde (reglas, 23 PDF adversariales sin rastro según un escáner
 independiente, máxima seguridad, puente de la interfaz, IA avanzada, modelos). Detección sobre 80 documentos
-(nativos y escaneados): recall del 100 % en todas las categorías con la IA avanzada y ≥ 98,6 % sin ella; precisión
-del 99,5 %.
+(nativos y escaneados): recall del 100 % en todas las categorías, con y sin IA avanzada; precisión del 99,8 % sin ella
+y del 99,5 % con ella.
