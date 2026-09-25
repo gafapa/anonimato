@@ -1,5 +1,5 @@
 ; Inno Setup script: per-user installation, no administrator rights.
-#define AppVersion "2.0.0"
+#define AppVersion "2.1.0"
 
 [Setup]
 AppId={{6B0E7C9E-4E2B-4C0B-9D1A-8E6A2D3F1A47}

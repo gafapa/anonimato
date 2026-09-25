@@ -290,3 +290,21 @@ legacy-web/            versión actual, congelada hasta alcanzar paridad; luego 
 independiente, máxima seguridad, puente de la interfaz, IA avanzada, modelos). Detección sobre 80 documentos
 (nativos y escaneados): recall del 100 % en todas las categorías, con y sin IA avanzada; precisión del 99,8 % sin ella
 y del 99,5 % con ella.
+
+
+## 7. Revisión de objetivos y segunda ronda (2026-09-25)
+
+Huecos encontrados al revisar el plan y cómo se han cerrado:
+
+| Hueco | Solución | Evidencia |
+|---|---|---|
+| PDF hostiles en el proceso de la ventana (mitigación prevista en el plan, no hecha) | `engine/worker.py`: motor en procesos aparte (uno con modelos, otro ligero para vistas previas), límite de memoria con Job Object de Windows (incluye llama-server), vigilancia de inactividad y reinicio automático. La ventana nunca abre un PDF. | `tests/test_worker.py` (caída, bloqueo, memoria, PDF dañado, contraseña); `--selftest` comprueba la recuperación tras una caída |
+| Integridad parcial y silenciosa | `models.verify_all`: modelos base, avanzados y ligeros + 25 archivos del runtime de llama.cpp; caché por tamaño/fecha; el análisis y la exportación esperan a la comprobación y se niegan si algo está alterado; aviso en la interfaz | `tests/test_models.py`, banner de la interfaz |
+| Errores de modelos silenciosos | Avisos en la interfaz (`status.errors`) y notas del documento; GLiNER reintenta en CPU si la GPU falla | `test_status_reports_engine_state` |
+| Condición de carrera en GPU (precalentamiento y análisis simultáneos sobre la misma sesión DirectML) | Encontrada al aislar el motor: el análisis espera al precalentamiento; cerrojo en el detector | autocomprobación |
+| Verificación sin VLM ni GLiNER | Relectura por IA de zonas manuscritas tapadas; detección residual con GLiNER sobre texto y OCR, tolerante a tokens mal leídos | `test_residual_detection_uses_the_ai_model`, `test_advanced.py` |
+| Resto sin ubicación / sin progreso | Cada resto lleva página y caja; se marca en rojo sobre el resultado; progreso por página al guardar | `test_blocked_export_shows_where_the_leak_is` |
+| Tests que faltaban | Cancelar, contraseña, firma digital, longitud uniforme, descarga de la IA avanzada, JPEG 2000 (PDF 24), firma digital como vía de fuga (PDF 25) | `tests/test_api.py`, `tests/test_leaks.py` |
+
+Pendiente, fuera de mi alcance: evaluación con documentos reales del usuario (`eval/own`, `eval/docs`) y firma de
+código del instalador (requiere certificado).

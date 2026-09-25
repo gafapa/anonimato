@@ -6,7 +6,7 @@ servidor ni se envía ningún documento a ninguna parte.
 
 ## Instalación
 
-1. Ejecuta `AnonimatoSetup-2.0.0.exe` (≈ 710 MB). No pide permisos de administrador ni necesita Python ni CUDA.
+1. Ejecuta `AnonimatoSetup-2.1.0.exe` (≈ 710 MB). No pide permisos de administrador ni necesita Python ni CUDA.
 2. Abre **Anonimato** desde el menú Inicio.
 3. (Opcional) En la barra lateral pulsa **Descargar IA avanzada** para leer texto manuscrito y hacer una revisión
    contextual: Qwen3-VL-8B (≈ 5,5 GB) si la tarjeta gráfica tiene ≥ 7 GB libres, o Qwen3-VL-4B (≈ 2,8 GB) si no. Es la única conexión que realiza la aplicación: descarga modelos desde su origen
@@ -39,7 +39,14 @@ pulsa **Más información → Ejecutar de todas formas**.
   texto buscable generada por OCR sobre el resultado ya anonimizado.
 - **Verificación obligatoria:** sobre los mismos bytes que se guardan: estructura, todos los objetos y flujos
   (varias codificaciones), texto de cada página (incluido invisible, fuera de caja y capas ocultas), OCR de la
-  página renderizada y OCR ampliado de cada zona tachada, rostros, y detección residual.
+  página renderizada y OCR ampliado de cada zona tachada (con relectura por IA de las zonas manuscritas), rostros,
+  y detección residual con reglas e IA. Si algo falla, no se guarda nada y el resto se marca en rojo sobre la página.
+- **Aislamiento:** cada documento se analiza en un proceso separado con límite de memoria y vigilancia de bloqueos.
+  Un PDF dañado o malicioso no puede cerrar ni colgar la aplicación; el motor se reinicia solo.
+- **Integridad:** los modelos y el motor de IA se comprueban con SHA-256 al arrancar; si algo está alterado, el
+  procesamiento se bloquea y se avisa.
+- **PDF con contraseña** (se pide al abrirlos; la salida nunca va cifrada) y **PDF con firma digital** (se avisa de
+  que la firma no puede conservarse y se eliminan los datos del firmante).
 - **Nombre del archivo:** por defecto `documento-N_anonimizado.pdf`.
 - **Registros:** CSV/JSON sin valores originales ni coordenadas salvo que se pidan expresamente.
 
@@ -67,7 +74,7 @@ uv run python -m app                                      # abrir la aplicación
   `Anonimato.exe --selftest=informe.json`.
   Añade tus propias líneas en `eval/own/*.png` + `eval/own/labels.json` (no se versionan).
 - Paquete de IA sin conexión: `uv run python tools/make_offline_pack.py`.
-- Instalador: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.0.0.exe` (requiere Inno Setup 6).
+- Instalador: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.1.0.exe` (requiere Inno Setup 6).
 
 Estructura: `app/engine` (motor), `app/ui` (interfaz), `app/api.py` (puente), `models/manifest.json`
 (modelos con SHA-256), `tests/` (corpus adversarial y tests), `packaging/` (PyInstaller + Inno Setup).
