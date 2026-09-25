@@ -6,7 +6,7 @@ servidor ni se envía ningún documento a ninguna parte.
 
 ## Instalación
 
-1. Ejecuta `AnonimatoSetup-2.0.0.exe` (≈ 750 MB). No pide permisos de administrador ni necesita Python ni CUDA.
+1. Ejecuta `AnonimatoSetup-2.0.0.exe` (≈ 710 MB). No pide permisos de administrador ni necesita Python ni CUDA.
 2. Abre **Anonimato** desde el menú Inicio.
 3. (Opcional) En la barra lateral pulsa **Descargar IA avanzada** para leer texto manuscrito y hacer una revisión
    contextual: Qwen3-VL-8B (≈ 5,5 GB) si la tarjeta gráfica tiene ≥ 7 GB libres, o Qwen3-VL-4B (≈ 2,8 GB) si no. Es la única conexión que realiza la aplicación: descarga modelos desde su origen

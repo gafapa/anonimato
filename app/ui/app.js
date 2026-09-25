@@ -180,6 +180,8 @@
       const installing = info.install && info.install.running;
       if (info.busy || installing) { setTimeout(tick, 400); return; }
       state.polling = false;
+      state.status = await api.status();
+      renderStatus();
       $('progressCard').hidden = true;
       $('btnCancel').hidden = true;
       renderQueue();

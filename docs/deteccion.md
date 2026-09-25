@@ -1,6 +1,6 @@
 # Evaluación de la detección
 
-Generado: 2026-09-25 02:40 · 80 documentos · 149 s · IA avanzada: no
+Generado: 2026-09-25 03:10 · 80 documentos · 1806 s · IA avanzada: sí
 
 Recall = valores reales completamente cubiertos por un hallazgo. Objetivos del plan: ≥ 98 % en
 identificadores y ≥ 95 % en nombres impresos.
@@ -32,9 +32,10 @@ identificadores y ≥ 95 % en nombres impresos.
 | nativo | Teléfono | 100.0 % | 21 |
 | nativo | Matrícula | 100.0 % | 7 |
 
-Precisión global: 99.8 % (411/412 hallazgos con valor).
+Precisión global: 99.5 % (411/413 hallazgos con valor).
 
 ## Hallazgos sin correspondencia (posibles falsos positivos)
 
+- escaneado sint-1: id_other «NSS» (llm)
 - escaneado sint-36: address «Avenida de Madrid
 95, 7ºD, 36201 Vig0» (ocr)

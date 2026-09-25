@@ -267,7 +267,7 @@ legacy-web/            versión actual, congelada hasta alcanzar paridad; luego 
 | 3 · Máxima seguridad | Hecho | `rasterize.py` + capa OCR del resultado; tokens de longitud uniforme. `test_max_security_mode`. |
 | 4 · Detección con IA | Hecho | PP-OCRv5 (det servidor en GPU, rec en CPU), orientación, re-lectura de imágenes pequeñas, GLiNER-PII fp16, Qwen3-VL (manuscritos + revisión contextual), YuNet por mosaicos, firmas, propagación. `docs/benchmark.md` (4.0), `docs/deteccion.md`. |
 | 5 · Interfaz | Hecho | `app/ui`, `app/api.py`: archivos, carpetas, arrastrar, imágenes y fotos con corrección de perspectiva, revisión con cajas, atajos, zonas manuales, lote a carpeta con informe, registros sin originales por defecto. `tests/test_api.py`, `tools/ui_smoke.py`. |
-| 6 · Instalador | Hecho | `packaging/`: PyInstaller + Inno Setup → `dist/AnonimatoSetup-2.0.0.exe` (≈ 745 MB). Probado: instalación silenciosa sin administrador, `--selftest` del programa instalado (GPU, verificación, integridad) y desinstalación sin restos. |
+| 6 · Instalador | Hecho | `packaging/`: PyInstaller + Inno Setup → `dist/AnonimatoSetup-2.0.0.exe` (≈ 710 MB). Probado: instalación silenciosa sin administrador, `--selftest` del programa instalado (GPU, verificación, integridad) y desinstalación sin restos. |
 | 7 · Retirada de la versión web | Hecho | `legacy-web/` eliminado; repositorio git con `.gitignore`. |
 
 **Decisiones tomadas con datos (fase 4.0):**
@@ -279,9 +279,14 @@ legacy-web/            versión actual, congelada hasta alcanzar paridad; luego 
 - Reconocedor de líneas en CPU: DirectML es más lento con este modelo y recompila con cada tamaño de entrada.
 
 **Desviaciones respecto al plan:**
-- Instalador base de ≈ 745 MB (no 250 MB): GLiNER fp16 ocupa 550 MB y es imprescindible para la calidad medida.
+- Instalador base de ≈ 710 MB (no 250 MB): GLiNER fp16 ocupa 550 MB y es imprescindible para la calidad medida.
 - El conjunto de evaluación de la fase 4.0 usa datos públicos (IAM, censo francés) y documentos sintéticos con datos
   ficticios; para medir con documentos propios basta con colocarlos en `eval/own` y `eval/docs` (fuera de git).
 - Sin firma de código (requiere un certificado de pago): Windows mostrará el aviso de SmartScreen la primera vez.
 - El «manifiesto firmado» se implementa como hashes SHA-256 fijados en el manifiesto que viaja dentro del
   instalador y se comprueban en cada descarga, importación y arranque.
+
+**Resultados medidos:** 73 tests automáticos en verde (reglas, 23 PDF adversariales sin rastro según un escáner
+independiente, máxima seguridad, puente de la interfaz, IA avanzada, modelos). Detección sobre 80 documentos
+(nativos y escaneados): recall del 100 % en todas las categorías con la IA avanzada y ≥ 98,6 % sin ella; precisión
+del 99,5 %.

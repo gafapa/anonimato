@@ -37,3 +37,10 @@ def session(path: str, use_gpu: bool = True, cpu_basic: bool = False) -> ort.Inf
 
 def gpu_active() -> bool:
     return bool(_gpu_ok)
+
+
+def gpu_available(use_gpu: bool = True) -> bool:
+    """GPU in use, or usable and not yet tried."""
+    if _gpu_ok is not None:
+        return _gpu_ok
+    return use_gpu and "DmlExecutionProvider" in ort.get_available_providers()

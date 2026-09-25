@@ -84,10 +84,10 @@ class Services:
                 self._llm.stop()
 
     def status(self) -> dict:
-        from .onnx_runtime import gpu_active
+        from .onnx_runtime import gpu_available
         return {
             "base": models.group_installed("base"),
             "advanced": self.advanced_available(),
-            "gpu": gpu_active(),
+            "gpu": gpu_available(self.use_gpu),
             "errors": dict(self.errors),
         }
