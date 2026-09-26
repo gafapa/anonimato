@@ -54,9 +54,25 @@ pulsa **Más información → Ejecutar de todas formas**.
 seguridad). Lo que ni la detección ni la persona que revisa marcan sigue visible: la revisión página a página
 sigue siendo obligatoria.
 
+## Plataformas
+
+Windows es la plataforma principal (instalador probado de principio a fin). macOS y Linux usan el mismo código con
+las piezas nativas de cada sistema; sus paquetes se compilan y prueban en GitHub Actions (`.github/workflows/build.yml`).
+
+| | Windows 10/11 x64 | macOS 12+ (Apple Silicon) | Linux x86-64 |
+|---|---|---|---|
+| Paquete | `AnonimatoSetup-x.y.z.exe` (Inno Setup, sin administrador) | `.dmg` con `Anonimato.app` | `.AppImage` |
+| Aceleración de modelos | DirectML (cualquier GPU) | CoreML | CUDA/ROCm si se instala `onnxruntime-gpu`; si no, CPU |
+| IA avanzada (llama.cpp) | Vulkan | Metal | Vulkan |
+| Límite de memoria del motor aislado | Job Object (motor y llama-server) | vigilante de bloqueos (macOS no aplica límites de memoria por proceso) | `RLIMIT_AS` en el proceso ligero |
+| Firma | opcional (aviso SmartScreen) | recomendable: sin firma y notarización hay que abrirla con clic derecho → Abrir | no necesaria |
+
+Compilación local: `packaging/build.ps1` (Windows), `bash packaging/build_macos.sh` (macOS; firma y notarización si
+se definen `MACOS_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`), `bash packaging/build_linux.sh` (Linux).
+
 ## Desarrollo
 
-Requisitos: Windows 10/11 x64, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv lo instala).
+Requisitos: [uv](https://docs.astral.sh/uv/) y Python 3.12 (uv lo instala), en Windows, macOS o Linux.
 
 ```powershell
 uv sync

@@ -18,11 +18,12 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from . import models
+from . import models, system
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -34,7 +35,7 @@ def _free_port() -> int:
 
 
 def _exe() -> str:
-    return str(models.runtime_dir() / "llama" / "llama-server.exe")
+    return str(models.runtime_dir() / "llama" / system.exe("llama-server"))
 
 
 def installed_variant() -> str | None:
@@ -59,7 +60,7 @@ def pick_device(exe: str) -> tuple[str | None, int]:
     """Best discrete GPU (most free memory, not an integrated Intel GPU)."""
     try:
         output = subprocess.run([exe, "--list-devices"], capture_output=True, text=True, timeout=60,
-                                creationflags=CREATE_NO_WINDOW).stdout
+                                creationflags=CREATE_NO_WINDOW, env=system.llama_env(Path(exe).parent)).stdout
     except Exception:  # noqa: BLE001
         return None, 0
     best, best_free = None, 0
@@ -68,7 +69,7 @@ def pick_device(exe: str) -> tuple[str | None, int]:
         if not match:
             continue
         name, label, free = match.group(1), match.group(2), int(match.group(4))
-        integrated = "Intel" in label and ("UHD" in label or "Iris" in label)
+        integrated = system.is_integrated_gpu(label)
         if not integrated and free > best_free:
             best, best_free = name, free
     return best, best_free
@@ -113,7 +114,8 @@ class LlamaServer:
             else:
                 args += ["-ngl", "0", "--device", "none"]
             self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                            stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+                                            stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW,
+                                            env=system.llama_env(Path(exe).parent))
             deadline = time.time() + timeout
             while time.time() < deadline:
                 if self.process.poll() is not None:

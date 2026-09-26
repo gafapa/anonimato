@@ -31,11 +31,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.engine import models, rules  # noqa: E402
+from app.engine.system import font as system_font  # noqa: E402
 from app.engine.llm_server import LlamaServer, image_part  # noqa: E402
 from app.engine.ocr.handwriting import PROMPT  # noqa: E402
 
 EVAL = ROOT / "eval"
-FONTS = Path("C:/Windows/Fonts")
 CANDIDATES = {
     "qwen3vl-4b": ("vlm", "vlm-mmproj", PROMPT),
     "qwen3vl-8b": ("qwen3vl-8b", "qwen3vl-8b-mmproj", PROMPT),
@@ -68,7 +68,7 @@ SYNTH_LINES = [
     "Uxía Rial Lorenzo", "maria.lopez@correo.es", "ES91 2100 0418 4502 0005 1332", "Avda. de América 12",
     "Nacido el 3 de marzo de 1990", "Aaliyah Kuznetsova", "Plaza de España 3, Sevilla", "91 234 56 78",
 ]
-SYNTH_FONTS = ["Inkfree.ttf", "segoesc.ttf", "segoepr.ttf", "comic.ttf"]
+SYNTH_FONTS = ["hand", "hand2", "hand3", "comic"]
 
 
 def synthetic(n: int, seed: int = 11) -> list[tuple[Image.Image, str]]:
@@ -76,7 +76,7 @@ def synthetic(n: int, seed: int = 11) -> list[tuple[Image.Image, str]]:
     out = []
     for i in range(n):
         text = SYNTH_LINES[i % len(SYNTH_LINES)]
-        font = ImageFont.truetype(str(FONTS / SYNTH_FONTS[(i // len(SYNTH_LINES)) % len(SYNTH_FONTS)]), rng.randint(30, 44))
+        font = ImageFont.truetype(system_font(SYNTH_FONTS[(i // len(SYNTH_LINES)) % len(SYNTH_FONTS)]), rng.randint(30, 44))
         width = int(font.getlength(text)) + 40
         image = Image.new("RGB", (width, 80), (rng.randint(235, 255),) * 3)
         ImageDraw.Draw(image).text((20, 12), text, fill=(rng.randint(10, 60), rng.randint(10, 60), rng.randint(60, 140)), font=font)

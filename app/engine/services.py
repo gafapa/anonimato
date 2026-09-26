@@ -7,6 +7,10 @@ import time
 from . import llm_server, models
 
 
+class WarmupTimeout(RuntimeError):
+    pass
+
+
 class Services:
     def __init__(self, use_gpu: bool = True):
         self.use_gpu = use_gpu
@@ -77,11 +81,19 @@ class Services:
             self.errors.pop("integrity", None)
         return not bad
 
-    def require_integrity(self) -> None:
+    def require_integrity(self, progress=None, timeout: float = 300) -> None:
         """Block until the integrity check and the warm-up have run; refuse to work with altered models.
 
-        (GPU sessions must not be used by the warm-up thread and an analysis at the same time.)"""
-        self._ready.wait(1800)
+        (GPU sessions must not be used by the warm-up thread and an analysis at the same time.)
+        If the warm-up does not finish in time (a GPU driver that stopped responding), a
+        ``WarmupTimeout`` is raised so the engine can restart on the CPU."""
+        waited = 0.0
+        while not self._ready.wait(5):
+            waited += 5
+            if progress:
+                progress({"stage": "prepare", "message": "Preparando los modelos de IA…"})
+            if waited >= timeout:
+                raise WarmupTimeout("La tarjeta gráfica no responde al preparar los modelos")
         if not self._integrity_checked.is_set():
             if not self._integrity_checked.wait(900):
                 self.check_integrity()

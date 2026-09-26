@@ -7,6 +7,7 @@ import pymupdf
 import pytest
 
 from app.api import Api
+from app.engine.system import font as system_font
 from tests.fixtures.generate import DNI, NAME, build_all
 from tests.test_leaks import independent_scan
 
@@ -110,7 +111,7 @@ def test_logs_exclude_originals_by_default(api, tmp_path):
 def test_images_are_accepted(tmp_path):
     from PIL import Image, ImageDraw, ImageFont
     image = Image.new("RGB", (1200, 400), "white")
-    ImageDraw.Draw(image).text((40, 150), f"DNI: {DNI}", fill="black", font=ImageFont.truetype("arial.ttf", 60))
+    ImageDraw.Draw(image).text((40, 150), f"DNI: {DNI}", fill="black", font=ImageFont.truetype(system_font("sans"), 60))
     exif = Image.Exif()
     exif[0x013B] = NAME
     path = tmp_path / "foto.jpg"
@@ -138,7 +139,7 @@ def test_phone_photo_perspective_is_corrected():
 
     from app.engine import document
     sheet = Image.new("RGB", (850, 1100), "white")
-    ImageDraw.Draw(sheet).text((80, 200), f"DNI: {DNI}", fill="black", font=ImageFont.truetype("arial.ttf", 48))
+    ImageDraw.Draw(sheet).text((80, 200), f"DNI: {DNI}", fill="black", font=ImageFont.truetype(system_font("sans"), 48))
     src = np.float32([[0, 0], [850, 0], [850, 1100], [0, 1100]])
     dst = np.float32([[180, 120], [1020, 200], [960, 1380], [120, 1300]])
     photo = cv2.warpPerspective(np.asarray(sheet), cv2.getPerspectiveTransform(src, dst), (1200, 1500),

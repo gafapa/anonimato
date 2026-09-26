@@ -25,22 +25,25 @@ def main() -> None:
             print(f"  {model_id}: {percent}% ({done >> 20} MB)", flush=True)
 
     for group in groups:
-        for item in manifest[group]:
+        for item in models.for_this_platform(manifest[group]):
             print(f"[{group}] {item.id}", flush=True)
             models.download(item, progress)
 
     if pin:
+        from app.engine.system import SYSTEM as SYSTEM_NAME
         raw = json.loads(models.manifest_path().read_text(encoding="utf-8"))
         for group in groups:
             for entry in raw[group]:
+                if entry.get("platform", "") not in ("", SYSTEM_NAME):
+                    continue
                 item = models.model(entry["id"])
                 if not entry["sha256"] and item.path.exists():
                     entry["sha256"] = models.sha256_of(item.path)
         # Every llama.cpp file that the application ships is pinned too (checked at start-up).
         runtime = models.runtime_dir() / "llama"
-        if runtime.exists():
+        if runtime.exists() and SYSTEM_NAME == "windows":
             shipped = ("ggml", "llama-server", "llama.dll", "llama-common", "mtmd", "libomp")
-            raw["runtime_files"] = {
+            raw.setdefault("runtime_files", {})["windows"] = {
                 f"llama/{path.name}": models.sha256_of(path)
                 for path in sorted(runtime.iterdir())
                 if path.suffix in (".exe", ".dll") and path.name.startswith(shipped)

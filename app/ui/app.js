@@ -48,7 +48,7 @@
     const errors = Object.entries(s.errors || {});
     const banner = $('engineErrors');
     banner.hidden = !errors.length;
-    const labels = { integrity: 'Integridad', ocr: 'OCR', pii: 'IA de datos personales', faces: 'Rostros', llm: 'IA avanzada', engine: 'Motor' };
+    const labels = { integrity: 'Integridad', ocr: 'OCR', pii: 'IA de datos personales', faces: 'Rostros', llm: 'IA avanzada', engine: 'Motor', gpu: 'GPU' };
     banner.replaceChildren(
       el('strong', { textContent: s.blocked ? 'Procesamiento bloqueado por seguridad. ' : 'Atención: ' }),
       ...errors.map(([key, message]) => el('span', { textContent: `${labels[key] || key}: ${message}. ` })),

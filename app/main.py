@@ -88,7 +88,8 @@ def main() -> None:
 
     window.events.loaded += on_loaded
     try:
-        webview.start(gui="edgechromium", private_mode=True, debug="--debug" in sys.argv)
+        from .engine.system import webview_gui
+        webview.start(gui=webview_gui(), private_mode=True, debug="--debug" in sys.argv)
     finally:
         api.shutdown()
 

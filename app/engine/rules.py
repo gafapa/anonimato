@@ -360,6 +360,10 @@ NAME_STOPS = {no_accents(w) for w in (
     "sr sra don dona doña firma firmado fdo nombre apellidos apellido expediente referencia asunto "
     "estimado estimada estimados querido querida señor señora señores usuario usuaria cliente clientes atentamente "
     "saludos cordiales distinguido distinguida interesado interesada destinatario remitente "
+    "paciente pacientes solicitante firmante beneficiario beneficiaria menor tutor tutora padre madre hijo hija "
+    "testigo conyuge demandante demandado demandada denunciante denunciado arrendador arrendadora arrendatario "
+    "arrendataria comprador compradora vendedor vendedora trabajador trabajadora empleado empleada propietario "
+    "propietaria heredero heredera causante compareciente contacto "
     "lunes martes miercoles jueves viernes sabado domingo enero febrero marzo abril mayo junio julio agosto "
     "septiembre octubre noviembre diciembre madrid barcelona"
 ).split()}

@@ -49,3 +49,14 @@ def test_offline_import_verifies_checksums(tmp_path, fake_manifest):
     with pytest.raises(RuntimeError):
         models.import_zip(bad)
     assert not models.group_installed("advanced")
+
+
+def test_unexpected_backend_library_is_refused():
+    llama = models.runtime_dir() / "llama"
+    intruder = llama / "ggml-intruso.dll"
+    intruder.write_bytes(b"MZ")
+    try:
+        assert any("ggml-intruso" in item for item in models.verify_all())
+    finally:
+        intruder.unlink()
+    assert models.verify_all() == []

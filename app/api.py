@@ -107,6 +107,8 @@ class Api:
             status = self._engine.call("status", stall_seconds=600)
         except EngineError as error:
             status = {"base": False, "advanced": False, "gpu": False, "errors": {"engine": str(error)}}
+        if self._engine.gpu_disabled:
+            status = {**status, "gpu": False, "errors": {**status.get("errors", {}), "gpu": self._engine.gpu_disabled}}
         self._status_cache = status
         return status
 

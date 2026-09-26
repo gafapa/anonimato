@@ -65,19 +65,6 @@ JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 PROCESS_ALL_ACCESS = 0x1F0FFF
 
 
-def physical_memory_mb() -> int:
-    class MemoryStatus(ctypes.Structure):
-        _fields_ = [("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD),
-                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
-    status = MemoryStatus()
-    status.dwLength = ctypes.sizeof(MemoryStatus)
-    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-    return int(status.ullTotalPhys // (1024 * 1024))
-
-
 class JobObject:
     """Kill-on-close job with a per-process memory limit (no-op outside Windows)."""
 
@@ -117,12 +104,12 @@ def _handlers():
     from . import document, pipeline, rasterize, redact, sanitize
 
     def analyze(ctx, data, filename, options):
-        ctx.services.require_integrity()
+        ctx.services.require_integrity(ctx.progress)
         ctx.cancel.clear()
         return pipeline.analyze(data, filename, options, ctx.services, ctx.progress, ctx.cancel.is_set)
 
     def export(ctx, analysis, options, index, keep_name):
-        ctx.services.require_integrity()
+        ctx.services.require_integrity(ctx.progress)
         return pipeline.export(analysis, options, ctx.services, ctx.progress, index=index, keep_name=keep_name)
 
     def build_preview(ctx, analysis, options):
@@ -180,7 +167,17 @@ class _Context:
         self.conn.send(("progress", event))
 
 
-def serve(conn, cancel, use_gpu: bool, with_models: bool) -> None:
+def serve(conn, cancel, use_gpu: bool, with_models: bool, memory_limit_mb: int = 0) -> None:
+    from .system import child_setup
+    child_setup(memory_limit_mb, limit_memory=not with_models)
+    debug_log = os.environ.get("ANONIMATO_DEBUG_LOG")
+    if debug_log:  # diagnostics only: periodic stack dumps of every thread (no document content)
+        import faulthandler
+        import sys as _sys
+        handle = open(f"{debug_log}.{os.getpid()}.txt", "w", encoding="utf-8")
+        _sys.stderr = handle
+        faulthandler.enable(handle)
+        faulthandler.dump_traceback_later(20, repeat=True, file=handle)
     services = None
     if with_models:
         from .services import Services
@@ -218,7 +215,8 @@ class EngineProcess:
                  stall_seconds: float = 900):
         self.with_models = with_models
         self.use_gpu = use_gpu
-        total = physical_memory_mb() if os.name == "nt" else 16384
+        from .system import physical_memory_mb
+        total = physical_memory_mb()
         self.memory_limit_mb = memory_limit_mb or max(2048, min(16384, int(total * 0.7)))
         self.stall_seconds = stall_seconds
         self._ctx = mp.get_context("spawn")
@@ -228,10 +226,12 @@ class EngineProcess:
         self._job: JobObject | None = None
         self.cancel = self._ctx.Event()
         self.restarts = 0
+        self.gpu_disabled = ""   # reason, when the engine fell back to the CPU
 
     def _start(self) -> None:
         parent, child = self._ctx.Pipe()
-        process = self._ctx.Process(target=serve, args=(child, self.cancel, self.use_gpu, self.with_models),
+        process = self._ctx.Process(target=serve, args=(child, self.cancel, self.use_gpu, self.with_models,
+                                                        self.memory_limit_mb),
                                     daemon=True, name="anonimato-engine")
         process.start()
         child.close()
@@ -244,6 +244,8 @@ class EngineProcess:
             self._job.close()
             self._job = None
         if self._process is not None:
+            from .system import kill_process_tree
+            kill_process_tree(self._process.pid)  # macOS/Linux: the engine and its llama-server
             if self._process.is_alive():
                 self._process.kill()
             self._process.join(5)
@@ -262,6 +264,24 @@ class EngineProcess:
 
     def call(self, op: str, *args, progress: Callable[[dict], None] | None = None,
              stall_seconds: float | None = None):
+        """Run an operation in the engine. If the GPU stops responding while the models are being
+        prepared, the engine restarts on the CPU and the operation is retried once."""
+        try:
+            return self._call(op, *args, progress=progress, stall_seconds=stall_seconds)
+        except EngineError as error:
+            gpu_hang = error.kind == "WarmupTimeout" or (isinstance(error, EngineTimeout) and op in ("analyze", "export"))
+            if not (gpu_hang and self.with_models and self.use_gpu):
+                raise
+            self.use_gpu = False
+            self.gpu_disabled = "La tarjeta gráfica no respondía: se continúa en modo CPU (más lento)"
+            with self._lock:
+                self._restart()
+            if progress:
+                progress({"stage": "prepare", "message": self.gpu_disabled})
+            return self._call(op, *args, progress=progress, stall_seconds=stall_seconds)
+
+    def _call(self, op: str, *args, progress: Callable[[dict], None] | None = None,
+              stall_seconds: float | None = None):
         stall = stall_seconds or self.stall_seconds
         with self._lock:
             if not self.alive():

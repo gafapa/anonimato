@@ -139,7 +139,8 @@ def main():
     api = Api(use_gpu="--gpu" in sys.argv)
     window = webview.create_window("Anonimato (prueba)", url=_ui_path().as_uri(), js_api=api, width=1480, height=940)
     api.attach(window)
-    webview.start(scenario, (window, api), gui="edgechromium", private_mode=True)
+    from app.engine.system import webview_gui
+    webview.start(scenario, (window, api), gui=webview_gui(), private_mode=True)
     api.shutdown()
     print(json.dumps(results, ensure_ascii=False, indent=2))
 

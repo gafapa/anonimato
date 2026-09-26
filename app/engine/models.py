@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import sys
+import tarfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -30,10 +31,8 @@ def bundled_models_dir() -> Path:
 
 
 def user_data_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
-    path = Path(base) / "Anonimato"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    from .system import user_data_dir as _user_data_dir
+    return _user_data_dir()
 
 
 def user_models_dir() -> Path:
@@ -58,6 +57,7 @@ class ModelFile:
     sha256: str
     group: str
     unzip: bool = False
+    platform: str = ""        # "", "windows", "macos" or "linux"
 
     @property
     def path(self) -> Path:
@@ -139,9 +139,31 @@ def download(item: ModelFile, progress: Progress | None = None) -> Path:
             raise RuntimeError(f"Checksum incorrecto para {item.id}: {actual}")
     partial.replace(target)
     if item.unzip:
-        with zipfile.ZipFile(target) as archive:
-            archive.extractall(target.parent)
+        extract_runtime(target)
     return target
+
+
+def extract_runtime(archive_path: Path) -> None:
+    """Unpack a llama.cpp release next to the archive (top-level folder stripped, links kept)."""
+    destination = archive_path.parent
+    if archive_path.suffix == ".zip":
+        with zipfile.ZipFile(archive_path) as archive:
+            archive.extractall(destination)
+        return
+    with tarfile.open(archive_path) as archive:
+        members = []
+        for member in archive.getmembers():
+            parts = member.name.split("/", 1)
+            if len(parts) < 2 or not parts[1]:
+                continue
+            member.name = parts[1]
+            members.append(member)
+        archive.extractall(destination, members=members, filter="data")
+
+
+def for_this_platform(items: list[ModelFile]) -> list[ModelFile]:
+    from .system import SYSTEM
+    return [item for item in items if item.platform in ("", SYSTEM)]
 
 
 def import_zip(archive_path: Path) -> list[str]:
@@ -173,8 +195,9 @@ INTEGRITY_GROUPS = ("base", "advanced", "advanced_lite")
 
 
 def _runtime_files() -> dict[str, str]:
+    from .system import SYSTEM
     raw = json.loads(manifest_path().read_text(encoding="utf-8"))
-    return raw.get("runtime_files", {})
+    return raw.get("runtime_files", {}).get(SYSTEM, {})
 
 
 def _integrity_cache_path() -> Path:
@@ -191,6 +214,16 @@ def verify_all(force: bool = False) -> list[str]:
                 targets.append((item.id, item.path, item.sha256))
     for name, digest in _runtime_files().items():
         targets.append((f"runtime/{name}", runtime_dir() / name, digest))
+    # llama.cpp loads every ggml backend library found next to it: an unexpected one is refused.
+    pinned = set(_runtime_files())
+    llama_dir = runtime_dir() / "llama"
+    unexpected = []
+    if pinned and llama_dir.exists():
+        for path in llama_dir.iterdir():
+            name = path.name.lower()
+            is_backend = name.startswith(("ggml", "libggml")) and any(ext in name for ext in (".dll", ".so", ".dylib"))
+            if is_backend and f"llama/{path.name}" not in pinned:
+                unexpected.append(f"runtime/llama/{path.name} (no esperado)")
     try:
         cache = {} if force else json.loads(_integrity_cache_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -214,4 +247,4 @@ def verify_all(force: bool = False) -> list[str]:
         _integrity_cache_path().write_text(json.dumps(cache), encoding="utf-8")
     except OSError:
         pass
-    return bad
+    return bad + unexpected

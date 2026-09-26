@@ -14,11 +14,12 @@ import pymupdf as fitz
 import pikepdf
 from PIL import Image, ImageDraw, ImageFont
 
+from app.engine.system import font as system_font
+
 NAME = "Juan García Pérez"
 DNI = "12345678Z"
 CANARIES = [NAME, DNI]
 ASSETS = Path(__file__).parent / "assets"
-FONTS = Path("C:/Windows/Fonts")
 
 
 @dataclass
@@ -81,10 +82,10 @@ def _metadata_stream(pdf: pikepdf.Pdf, value: str) -> pikepdf.Stream:
     return stream
 
 
-def _jpeg_with_text(text: str, size=(420, 80), font="arial.ttf", exif_text: str | None = None) -> bytes:
+def _jpeg_with_text(text: str, size=(420, 80), font="sans", exif_text: str | None = None) -> bytes:
     image = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(image)
-    draw.text((10, 20), text, fill="black", font=ImageFont.truetype(str(FONTS / font), 30))
+    draw.text((10, 20), text, fill="black", font=ImageFont.truetype(system_font(font), 30))
     buffer = io.BytesIO()
     kwargs = {}
     if exif_text:
@@ -333,7 +334,7 @@ def f18_attachments_js():
 def f19_proportional():
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
-    font = fitz.Font(fontfile=str(FONTS / "times.ttf"))
+    font = fitz.Font(fontfile=system_font("serif"))
     writer = fitz.TextWriter(page.rect)
     writer.append((72, 100), f"WWWWWWMMMM iiiiillll Paciente {NAME} con DNI {DNI} iiiillllWWWW", font=font, fontsize=12)
     writer.write_text(page)
@@ -357,7 +358,7 @@ def f21_filename():
 def f22_scan_with_photo():
     page_img = Image.new("RGB", (1240, 1754), "white")  # A4 at 150 dpi
     draw = ImageDraw.Draw(page_img)
-    font = ImageFont.truetype(str(FONTS / "arial.ttf"), 34)
+    font = ImageFont.truetype(system_font("sans"), 34)
     draw.text((120, 200), f"Nombre: {NAME}", fill="black", font=font)
     draw.text((120, 260), f"DNI: {DNI}", fill="black", font=font)
     draw.text((120, 320), "Teléfono: 612 345 678", fill="black", font=font)
@@ -374,8 +375,8 @@ def f22_scan_with_photo():
 def f23_handwritten():
     page_img = Image.new("RGB", (1240, 1754), (250, 250, 245))
     draw = ImageDraw.Draw(page_img)
-    printed = ImageFont.truetype(str(FONTS / "arial.ttf"), 30)
-    hand = ImageFont.truetype(str(FONTS / "Inkfree.ttf"), 44)
+    printed = ImageFont.truetype(system_font("sans"), 30)
+    hand = ImageFont.truetype(system_font("hand"), 44)
     draw.text((120, 200), "SOLICITUD DE CITA", fill="black", font=printed)
     draw.text((120, 300), "Nombre:", fill="black", font=printed)
     draw.text((300, 290), NAME, fill=(20, 30, 120), font=hand)
@@ -394,7 +395,7 @@ def f23_handwritten():
 def f24_jpx():
     """JPEG 2000 image with the name in its pixels and a copy in an XML box of the codestream."""
     image = Image.new("RGB", (900, 120), "white")
-    ImageDraw.Draw(image).text((20, 30), f"{NAME} {DNI}", fill="black", font=ImageFont.truetype(str(FONTS / "arial.ttf"), 46))
+    ImageDraw.Draw(image).text((20, 30), f"{NAME} {DNI}", fill="black", font=ImageFont.truetype(system_font("sans"), 46))
     buffer = io.BytesIO()
     image.save(buffer, "JPEG2000", irreversible=False)
     payload = f"<meta><autor>{NAME}</autor><dni>{DNI}</dni></meta>".encode("utf-8")
