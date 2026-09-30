@@ -66,3 +66,52 @@ def test_unexpected_backend_library_is_refused(tmp_path, monkeypatch):
     finally:
         intruder.unlink()
     assert models.verify_runtime() == []
+
+
+@pytest.fixture
+def bundled_runtime(tmp_path, monkeypatch):
+    archive = tmp_path / "bundle" / "runtime" / "runtime.zip"
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("llama-server", b"trusted executable")
+        output.writestr("LICENSE", b"MIT")
+    item = models.ModelFile("runtime", "../runtime/runtime.zip", "https://example.invalid/runtime", "MIT",
+                            models.sha256_of(archive), "runtime", unzip=True)
+    monkeypatch.setattr(models, "app_root", lambda: tmp_path / "bundle")
+    monkeypatch.setattr(models, "user_data_dir", lambda: tmp_path / "user")
+    monkeypatch.setattr(models, "load_manifest", lambda: {"runtime": [item]})
+    monkeypatch.setattr(models, "_runtime_files", lambda: {
+        "llama/llama-server": hashlib.sha256(b"trusted executable").hexdigest()})
+    monkeypatch.setattr(models, "runtime_dir", models._installed_bundled_runtime)
+    return archive, item
+
+
+def test_bundled_runtime_extracts_original_bytes_and_rechecks_cached_files(bundled_runtime):
+    archive, item = bundled_runtime
+    destination = models.runtime_dir()
+    assert destination.name == item.sha256
+    assert (destination / "llama" / "LICENSE").read_bytes() == b"MIT"
+    assert models.verify_runtime() == []
+    assert models.runtime_dir() == destination
+    (destination / "llama" / "llama-server").write_bytes(b"tampered")
+    assert models.verify_runtime() == ["runtime/llama/llama-server"]
+    assert archive.exists()
+    assert not list(destination.parent.glob(".extract-*"))
+
+
+def test_bundled_runtime_rejects_an_altered_archive(bundled_runtime):
+    archive, _ = bundled_runtime
+    archive.write_bytes(b"untrusted replacement")
+    with pytest.raises(RuntimeError, match="SHA-256"):
+        models.runtime_dir()
+    assert not (archive.parents[2] / "user" / "runtime").exists()
+
+
+def test_concurrent_runtime_extraction_publishes_one_complete_directory(bundled_runtime):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        destinations = list(pool.map(lambda _: models.runtime_dir(), range(3)))
+    assert len(set(destinations)) == 1
+    assert models.verify_runtime() == []
+    assert sorted(path.name for path in destinations[0].parent.iterdir()) == [destinations[0].name]

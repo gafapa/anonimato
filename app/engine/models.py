@@ -43,8 +43,45 @@ def user_models_dir() -> Path:
 
 def runtime_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return app_root() / "runtime"
+        return _installed_bundled_runtime()
     return app_root() / "runtime"
+
+
+def _installed_bundled_runtime() -> Path:
+    """Extract the pinned archive without allowing packaging tools to rewrite native binaries."""
+    import shutil
+    import tempfile
+
+    items = for_this_platform(load_manifest().get("runtime", []))
+    if len(items) != 1:
+        raise RuntimeError("Exactly one pinned runtime archive is required for this platform")
+    item = items[0]
+    if len(item.sha256) != 64 or any(char not in "0123456789abcdef" for char in item.sha256):
+        raise RuntimeError("Invalid runtime archive checksum")
+    cache = user_data_dir() / "runtime"
+    target = cache / item.sha256
+    if target.is_dir():
+        return target  # verify_runtime still hashes every extracted executable and library.
+    archive = app_root() / "runtime" / Path(item.file).name
+    if sha256_of(archive) != item.sha256:
+        raise RuntimeError("Bundled runtime archive failed its SHA-256 check")
+    cache.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".extract-", dir=cache) as temporary:
+        payload = Path(temporary) / "payload"
+        destination = payload / "llama"
+        destination.mkdir(parents=True)
+        staged_archive = destination / archive.name
+        shutil.copyfile(archive, staged_archive)
+        if sha256_of(staged_archive) != item.sha256:
+            raise RuntimeError("Runtime archive changed during extraction preparation")
+        extract_runtime(staged_archive)
+        staged_archive.unlink()
+        try:
+            payload.rename(target)
+        except OSError:
+            if not target.is_dir():
+                raise
+    return target
 
 
 @dataclass(frozen=True)

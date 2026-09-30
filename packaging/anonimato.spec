@@ -17,13 +17,12 @@ datas = [
     (str(ROOT / "LICENSE"), "."),
     (str(ROOT / "THIRD_PARTY.md"), "."),
 ]
-# Exactly the llama.cpp files pinned in the manifest for this platform (checked again at start-up).
-for name in manifest.get("runtime_files", {}).get(SYSTEM, {}):
-    source = ROOT / "runtime" / name
-    if source.exists():
-        datas.append((str(source), "runtime/llama"))
-for license_file in (ROOT / "runtime" / "llama").glob("LICENSE*"):  # third-party licences shipped alongside
-    datas.append((str(license_file), "runtime/llama"))
+# Preserve original bytes: PyInstaller rewrites and signs native files on macOS.
+# The application verifies this archive before extracting it into its private runtime cache.
+for item in manifest.get("runtime", []):
+    if item.get("platform") == SYSTEM:
+        source = (ROOT / "models" / item["file"]).resolve()
+        datas.append((str(source), "runtime"))
 
 binaries = []
 hiddenimports = ["app.engine.ocr.handwriting", "app.engine.llm_review", "app.engine.worker", "yaml"]
