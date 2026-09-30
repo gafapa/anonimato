@@ -1,310 +1,107 @@
-# Plan: Anonimato de escritorio, sin rastro
+# Anonimato desktop plan and implementation record
 
-**Objetivo:** una aplicación de Windows que se instala con un solo `AnonimatoSetup.exe` (sin permisos de administrador, sin Python ni CUDA), que funciona 100 % sin conexión y que **garantiza con una verificación automática** que en los archivos producidos (PDF, CSV, JSON, nombre de archivo) no queda ningún rastro de los datos anonimizados: ni visible ni recuperable.
+## Goal and limits
 
-Equipo de referencia: Windows 11, RTX 2070 8 GB, 32 GB RAM.
+Build a locally running desktop application that removes marked personal data from PDFs and images, verifies the exact output bytes, and blocks export if a trace remains. The Windows installer runs without administrator rights, Python, or CUDA. Reference hardware: Windows 11, RTX 2070 with 8 GB VRAM, and 32 GB RAM.
 
----
+The guarantee covers marked content and, in maximum-security mode, non-visible document content. Data that neither the detectors nor a human reviewer marks can remain visible. The interface therefore requires page-by-page review before sharing.
 
-## 1. Arquitectura
+## Architecture
 
-```
-┌───────────────── Ventana nativa (pywebview + WebView2) ─────────────────┐
-│  UI actual (index.html / css / js) adaptada: cola, vista previa, tabla  │
-│              │ llamadas directas JS ↔ Python (sin servidor HTTP)        │
-└──────────────┼──────────────────────────────────────────────────────────┘
-               ▼
-        Motor Python (proceso local)
-        ├─ PyMuPDF ........ lectura, texto con quad por carácter, render, redacción
-        ├─ pikepdf ........ limpieza estructural y verificación objeto a objeto
-        │
-        ├─ OCR en dos etapas
-        │   ├─ Localizar: detector de líneas de texto (PP-OCRv5 det, ONNX) → cajas exactas
-        │   │             + clasificador impreso / manuscrito por línea
-        │   ├─ Leer impreso:    PP-OCRv5 rec (rápido)
-        │   └─ Leer manuscrito: modelo de visión-lenguaje (VLM) sobre cada recorte de línea
-        │
-        ├─ IA de detección de datos personales
-        │   ├─ GLiNER-PII ...... NER multilingüe "zero-shot" (nombres, direcciones, etc.) en GPU
-        │   ├─ Reglas + validación (DNI, IBAN, NSS…) ... precisión en identificadores
-        │   └─ LLM local revisor ... segunda pasada contextual: identificadores indirectos
-        │                            ("la hija del alcalde de Lalín"), datos de salud, etc.
-        │
-        ├─ OpenCV YuNet ... detección de rostros (ONNX, 300 KB)
-        │
-        └─ Runtimes
-            ├─ llama.cpp (build Vulkan: funciona con el driver NVIDIA, sin CUDA) → VLM + LLM en GGUF
-            └─ onnxruntime-directml → detector, OCR impreso, GLiNER, YuNet; CPU de reserva
+```text
+Native window (pywebview + WebView2)
+  └─ HTML/CSS/JavaScript interface
+       └─ direct JavaScript–Python bridge; no application HTTP server
+            └─ isolated Python document engine
+                 ├─ PyMuPDF: reading, exact character positions, rendering, redaction
+                 ├─ pikepdf: structural cleanup and object-level verification
+                 ├─ PP-OCRv5: text-line boxes and printed text
+                 ├─ Qwen3-VL via llama.cpp: optional handwriting and contextual review
+                 ├─ GLiNER-PII and validated rules: personal-data detection
+                 ├─ YuNet: faces
+                 └─ ONNX Runtime: DirectML/CoreML/CPU inference
 ```
 
-**Por qué OCR en dos etapas:** los modelos de visión-lenguaje leen muy bien (incluida letra manuscrita), pero devuelven texto, no coordenadas fiables, y pueden "inventar" o corregir palabras. Para tachar hace falta saber *dónde* está cada dato. Por eso las cajas las pone siempre un detector clásico y el VLM solo lee el contenido de cada caja. Una alucinación del VLM no puede mover una caja; como mucho produce texto que no coincide con nada.
+OCR uses two stages because a vision-language model can transcribe handwriting but does not provide reliable redaction coordinates. A conventional detector supplies the text-line boxes; the VLM reads their contents. Uncertain handwriting next to personal-data labels is proposed for full-line redaction. Large models are loaded in sequence to fit an 8 GB GPU.
 
-**Regla conservadora para manuscritos:** si una línea manuscrita no se puede leer con confianza suficiente, o está en una zona con contexto personal (junto a "Nombre", "Firma", "Domicilio"…), se propone **tachar la línea entera** para revisión. Ante la duda, se tapa.
+`llama-server` is the only local socket: it binds to `127.0.0.1` with a random port and session key, then closes with the application. The document engine is isolated from the window and restarts after a crash or hang.
 
-**Memoria de GPU (8 GB):** los modelos grandes no caben a la vez. El motor los carga por turnos: primero OCR de todo el documento, luego detección y revisión LLM, y descarga cada modelo al terminar su fase.
+## Design decisions
 
-**Decisiones y motivos**
-
-| Decisión | Motivo |
+| Component | Reason |
 |---|---|
-| pywebview + WebView2 | Reutiliza la UI existente; WebView2 viene con Windows 11 (no hay que distribuir Chromium). Comunicación por `js_api`: **no se abre ningún puerto**, nada accesible desde la red. |
-| PyMuPDF | Es el mismo MuPDF que ya se usa, con la API completa (quads por carácter, `search_for`, redacciones con todas las opciones, rasterizado). Licencia AGPL, compatible con el proyecto. |
-| pikepdf (qpdf) | Acceso de bajo nivel a todos los objetos: borrar estructuras y escanear flujos descomprimidos en la verificación. |
-| PP-OCRv5 det/rec (ONNX) | Localiza líneas (también manuscritas) con cajas precisas y lee texto impreso rápido; ~20 MB. |
-| VLM para manuscritos | Único tipo de modelo local que lee letra manuscrita en español de forma útil. Candidatos a evaluar en la fase 4 (4-bit, caben en 8 GB): **Qwen3-VL 4B/8B**, **Qwen2.5-VL 3B/7B**, **PaddleOCR-VL**, y cualquier modelo OCR más reciente que salga en 2026. Se elige midiendo con documentos reales, no por reputación. |
-| GLiNER-PII | Modelo de IA específico para datos personales, multilingüe, con tipos configurables sin reentrenar; mucho más preciso que spaCy y rápido en GPU. |
-| LLM local revisor | Detecta lo que ni reglas ni NER ven: identificadores indirectos, datos de salud, relaciones familiares. Candidato: Qwen3 8B instruct (4-bit, ~5 GB). Sus hallazgos se localizan con `search_for` en el texto; nunca decide coordenadas. |
-| llama.cpp Vulkan | Un solo runtime para VLM y LLM, sin CUDA ni Python pesado (sin PyTorch). Se ejecuta como proceso hijo `llama-server` escuchando solo en `127.0.0.1`, puerto aleatorio y clave aleatoria por sesión; se cierra con la app. Es el único socket local y no es accesible desde la red. |
-| DirectML | Acelera los modelos ONNX en la RTX 2070 sin instalar CUDA/cuDNN. |
-| YuNet | Detecta caras pequeñas (fotos de carnet dentro de un A4) mucho mejor que BlazeFace short-range. |
-| PyInstaller (onedir) + Inno Setup | Instalador único, por usuario (`%LOCALAPPDATA%\Programs\Anonimato`), acceso directo en el menú Inicio, desinstalador. Modelos ligeros incluidos; el paquete avanzado se instala aparte (ver abajo). Ningún documento sale nunca del equipo. |
+| pywebview + WebView2 | Reuses the local HTML interface without shipping Chromium; no application port is exposed. |
+| PyMuPDF | Provides exact character quads, rendering, redaction, and PDF text operations. |
+| pikepdf / qpdf | Provides low-level access for structural cleanup and inspection of decoded streams. |
+| PP-OCRv5 | Finds precise text-line boxes and reads printed text quickly. |
+| Qwen3-VL | Reads Spanish handwriting and performs contextual review with one optional local model. |
+| GLiNER-PII | Multilingual, configurable personal-data detection without retraining. |
+| llama.cpp with Vulkan or Metal | Runs quantized advanced models locally without CUDA or PyTorch. |
+| DirectML | Accelerates ONNX models on the reference Windows GPU without a CUDA installation. |
+| YuNet | Detects small faces, including ID photos embedded in a page. |
+| PyInstaller and Inno Setup | Produce a per-user Windows installer and uninstaller. |
 
-**Tamaño e instalación:** los modelos de IA ocupan 5–9 GB (VLM + LLM en 4-bit). Para que la instalación siga siendo fácil:
-- `AnonimatoSetup.exe` (~250 MB) instala la app con los modelos ligeros (OCR impreso, GLiNER, caras): funciona desde el primer momento.
-- En el primer arranque, un asistente ofrece descargar el **paquete de IA avanzada** (manuscritos + revisor LLM) con barra de progreso, comprobación SHA-256 y reanudación. Es la **única** conexión que hace la app, nunca envía documentos, y se puede hacer también desde un archivo descargado aparte (instalación sin conexión).
-- Ajustes: "Calidad máxima (GPU)" / "Rápido (CPU)"; se detecta la GPU y la VRAM automáticamente.
+The base installer includes the lighter models. The optional advanced package downloads official model files with resumption and SHA-256 verification, or imports an offline ZIP. The original 250 MB installer estimate was revised to about 710 MB because the measured GLiNER fp16 model is about 550 MB and is needed for detection quality.
 
-**Estructura del repositorio**
+## Implementation phases
 
-```
-app/
-  main.py              arranque de la ventana
-  api.py               puente JS ↔ Python (procesar, alternar filas, exportar)
-  engine/
-    document.py        abrir, bake, extraer caracteres con quads, render
-    rules.py           reglas portadas de detectors.js + mejoras
-    pii_model.py       GLiNER-PII
-    llm_review.py      revisor LLM (llama.cpp)
-    ocr/
-      detect.py        cajas de línea + clasificador impreso/manuscrito
-      printed.py       PP-OCRv5 rec
-      handwriting.py   VLM por recorte de línea (llama.cpp)
-    models.py          carga/descarga por turnos, VRAM, hashes, descarga del paquete avanzado
-    faces.py           YuNet con mosaicos
-    propagate.py       búsqueda global de valores y variantes
-    redact.py          redacción y reemplazo por tokens
-    sanitize.py        limpieza estructural (pikepdf)
-    rasterize.py       modo máxima seguridad
-    verify.py          verificación de ausencia (bloquea la exportación)
-    logs.py            CSV/JSON
-ui/                    index.html, css, js (adaptados a la API Python)
-models/                ocr/, ner/, faces/  (con SHA-256 en THIRD_PARTY.md)
-tests/
-  fixtures/generate.py corpus adversarial
-  test_rules.py  test_leaks.py  test_verify.py  test_e2e.py
-packaging/
-  anonimato.spec  installer.iss  build.ps1
-legacy-web/            versión actual, congelada hasta alcanzar paridad; luego se elimina
-```
+### 0. Skeleton and adversarial corpus
 
----
+Pin Python 3.12 and dependencies with uv, create the desktop shell, and generate one PDF per leak path with canary values (`Juan García Pérez`, `12345678Z`). The corpus covers Info and XMP metadata, bookmarks and names, accessibility tags and ActualText, invisible/off-page/hidden-layer text, white text, annotations and forms, shared XObjects, vector and raster text, thumbnails and PieceInfo, JPEG EXIF/XMP, incremental revisions, attachments and JavaScript, proportional fonts, rotated pages, filenames, scans with small ID photos, and later extensions. Port and extend the rule detector with matching tests.
 
-## 2. Fases
+### 1. Destructive redaction and cleanup
 
-### Fase 0 · Esqueleto y banco de pruebas adversarial
-- Entorno con `uv` (Python 3.12 fijado), `pyproject.toml` con dependencias bloqueadas.
-- `tests/fixtures/generate.py`: un PDF por vía de fuga, todos con el mismo dato canario (`Juan García Pérez`, `12345678Z`):
-  1. Info dict completo, incluidas fechas y claves personalizadas.
-  2. XMP en catálogo, página, imagen y fuente.
-  3. Marcadores, `/PageLabels`, destinos con nombre, `/Names`.
-  4. PDF etiquetado: `StructTreeRoot` con `/Alt`, `/ActualText`, `/T`, `/E`.
-  5. `BDC /Span <</ActualText …>>` en el flujo de contenido.
-  6. Texto invisible (modo 3, capa OCR de escáner).
-  7. Texto fuera del CropBox.
-  8. Texto en capa OCG oculta.
-  9. Blanco sobre blanco y texto de 0,5 pt.
-  10. Anotaciones FreeText, Stamp, Text/Popup con `/Contents`, Ink.
-  11. AcroForm con valores y `/TU`.
-  12. Form XObject compartido entre páginas.
-  13. Texto convertido a trazados; dato rasterizado en imagen.
-  14. Miniaturas `/Thumb`.
-  15. `/PieceInfo`, `/Alternates`.
-  16. JPEG con EXIF/XMP/miniatura en segmentos APP.
-  17. Actualización incremental con el dato solo en la revisión anterior.
-  18. Adjuntos, JavaScript, `OpenAction`.
-  19. Fuente proporcional extrema (recorte parcial de caracteres).
-  20. Página rotada 90° con CropBox desplazada.
-  21. Nombre de archivo con el dato.
-  22. Escaneo con foto de carnet pequeña.
-- Mover la versión actual a `legacy-web/` (sigue funcionando mientras tanto).
-- Portar `detectors.js` tal cual a `rules.py` y sus tests a `test_rules.py`, para tener un flujo completo desde el principio (las mejoras de reglas llegan en la fase 4).
-- **Hecho cuando:** `pytest` genera el corpus, las reglas portadas pasan los mismos tests que en JS y la ventana vacía arranca con `python -m app`.
+Bake annotations and widgets before detection, extract exact character quads, redact text/images/vector graphics, and insert replacement tokens as real page text. Remove metadata, catalog and page structures, ActualText and related tags, JPEG APP segments, content outside the CropBox, and orphaned objects. Save a full non-incremental rewrite with a fresh PDF ID. Use a neutral output filename by default. Faces receive opaque coverage; the old pixelation option was removed.
 
-### Fase 1 · Motor de borrado y limpieza estructural
-- `document.py`: abrir con PyMuPDF → `bake()` de anotaciones y widgets **antes** de detectar (así su texto se detecta como cualquier otro) → extraer caracteres con `rawdict` (quad exacto por carácter, incluido texto invisible y fuera del CropBox usando la MediaBox).
-- `redact.py`: rectángulo = unión de quads exactos; `apply_redactions(images=PDF_REDACT_IMAGE_PIXELS, graphics=…, text=…)`; tokens insertados como texto real de página; clonar Form XObjects compartidos si hace falta (fixture 12).
-- `sanitize.py` (pikepdf) antes de guardar:
-  - Trailer `/Info` vacío.
-  - Catálogo sin `Metadata, Outlines, PageLabels, Names, Dests, OpenAction, AA, AcroForm, StructTreeRoot, MarkInfo, Threads, PieceInfo, SpiderInfo, Collection, Perms, DSS, Legal, OCProperties`.
-  - Páginas sin `Thumb, Metadata, PieceInfo, B, AA, StructParents, Annots`; `MediaBox := CropBox` y contenido recortado.
-  - Recursos sin `Metadata, PieceInfo, Alternates, OPI` (recursivo).
-  - `BDC` sin `/ActualText`, `/Alt`, `/E`.
-  - JPEG recodificados sin segmentos APP.
-  - Guardado completo (`garbage=4`, `clean`, `deflate`, nuevo `/ID`, sin incremental).
-- Nombre de salida neutro por defecto (`documento-1_anonimizado.pdf`); opcional: nombre original con lo detectado sustituido.
-- Rostros: solo cobertura opaca (se elimina "Pixelar").
-- **Hecho cuando:** fixtures 1–5, 10, 11, 14–18, 20 y 21 pasan el escáner de fugas.
+### 2. Mandatory verification
 
-### Fase 2 · Verificación obligatoria (bloquea la exportación)
-`verify.py` sobre **los mismos bytes** que se van a guardar; si falla, no se escribe el archivo y la UI muestra dónde está la fuga.
-1. Texto completo de PyMuPDF (incluido invisible / fuera de caja) + `search_for` de cada valor.
-2. Recorrido de todos los objetos con pikepdf: flujos descomprimidos y cadenas, buscando cada valor y sus variantes (sin tildes, sin separadores, mayúsculas, UTF‑16BE, hex, escapes octales, y texto decodificado vía `ToUnicode` para fuentes subset).
-3. Afirmaciones estructurales (ninguna de las claves eliminadas en la fase 1 existe).
-4. Render de cada página → OCR completo + OCR ampliado de las zonas tachadas (con el VLM en zonas manuscritas si el paquete avanzado está instalado); coincidencia difusa (distancia de edición ≤ 2) con cada original.
-5. YuNet sobre el render de salida: cero rostros en zonas marcadas y aviso si aparecen nuevos.
-6. Segunda pasada de reglas + GLiNER sobre el texto/OCR de salida → "posibles datos residuales" para revisar.
-- Hasta que exista el OCR de la fase 4, los pasos 4–6 usan la extracción de texto y las reglas portadas; se refuerzan automáticamente cuando llegan los modelos.
-- **Hecho cuando:** ningún fixture con fuga puede exportarse (aunque la detección o el borrado fallen).
+Verify the same bytes that would be written. Check page text, all decoded PDF objects and streams, forbidden structures, rendered-page OCR, enlarged OCR around redacted zones, faces, and residual rule/AI findings. Search original values and variants across encodings and typography. If verification fails, do not save; show the page and location of the remaining trace.
 
-### Fase 3 · Modo máxima seguridad
-- Tras redactar: rasterizar cada página a 300 ppp y reconstruir el PDF solo con imágenes; capa de texto opcional generada por OCR **sobre el resultado ya anonimizado**.
-- Opción "tamaño uniforme de token" para no revelar la longitud del dato.
-- Activado por defecto al elegir "Voy a compartir este documento fuera".
-- **Hecho cuando:** los 22 fixtures pasan en este modo, incluidos 6–9, 12, 13 y 19.
+### 3. Maximum-security output
 
-### Fase 4 · Detección con IA
+After redaction, rasterize each page and rebuild the PDF from images. Optionally add searchable OCR text derived from the anonymized output. Allow replacement-token widths to be uniform so the original length is not revealed. Enable this mode when the user selects the external-sharing option.
 
-**4.0 Conjunto de evaluación (antes de elegir modelos).** Reunir 30–50 páginas reales representativas (impresos, escaneos malos, formularios rellenados a mano, firmas, notas al margen), anotar a mano los datos personales y medir cada opción: *recall* (lo que no se escapa, prioritario), precisión y segundos por página en la RTX 2070. Los modelos se eligen con estos números. Se comprueba también la **licencia** de cada modelo (algunos tamaños de Qwen-VL no son Apache 2.0) y que funcione en llama.cpp Vulkan / ONNX DirectML. Script: `tests/benchmark.py`, reproducible, resultados en `docs/benchmark.md`. El conjunto real **no** se guarda en el repositorio.
+### 4. Detection quality
 
-- **OCR impreso** (`ocr/printed.py`): PP-OCRv5 en DirectML; páginas escaneadas y regiones de imagen (ampliadas si son pequeñas); detección de orientación; palabras de baja confianza se detectan igualmente con confianza reducida; ventanas de dos líneas.
-- **OCR manuscrito** (`ocr/handwriting.py`):
-  - El clasificador marca cada línea como impresa o manuscrita; las manuscritas (y las impresas de baja confianza) van al VLM recortadas con margen.
-  - Instrucción al VLM: transcribir literalmente, sin corregir ni completar, y marcar `[ilegible]`.
-  - La posición de cada palabra dentro de la línea se reparte por la caja del detector (o por sub-cajas si el detector las da); para manuscritos, el tachado cubre siempre la **línea completa** del dato.
-  - Líneas ilegibles en contexto personal → tachado completo propuesto.
-  - Firmas: detector de región de firma (trazos sin texto legible junto a "Firma/Fdo.") → tachado propuesto.
-- **IA de datos personales** (`pii_model.py`): GLiNER-PII sobre texto nativo + OCR, con tipos: persona, dirección, teléfono, email, documento de identidad, cuenta bancaria, fecha de nacimiento, matrícula, organización (opcional), dato de salud. Fusión con reglas: la regla validada fija el tipo y da confianza alta; GLiNER amplía cobertura.
-- **Revisor LLM** (`llm_review.py`, paquete avanzado): segunda pasada por página con el texto ya pseudonimizado alrededor; pide "lista literal de fragmentos que identifiquen a una persona y no estén ya marcados". Cada fragmento se busca en el texto; si no aparece literal, se descarta (evita alucinaciones). Los hallazgos entran con confianza media, para revisión.
-- Todo configurable: "sin IA avanzada" sigue funcionando con reglas + GLiNER + OCR impreso.
-- **Reglas** (`rules.py`), portadas y corregidas:
-  - Direcciones abreviadas (`C/`, `Avda.`, `Pza.`, `Ctra.`…) + CP + piso/puerta; sin tachar la etiqueta.
-  - Teléfonos 3-2-2-2, `(+34)`, `0034`, internacionales con etiqueta.
-  - NSS con dígito de control; 12 dígitos sin validar solo con contexto.
-  - Pasaporte, IBAN extranjero, BIC, CCC, IP, nº colegiado, historia clínica, expediente (con contexto).
-  - Clave canónica de tokens (`12345678Z` = `12.345.678-Z`).
-  - Diccionarios INE ampliados (incl. gallego, catalán, euskera) como apoyo al NER.
-- **Propagación** (`propagate.py`): todo valor detectado se busca en todo el documento y en el OCR con sus variantes (sin tildes, solo apellidos, iniciales + apellido).
-- **Rostros** (`faces.py`): YuNet sobre render completo y sobre cada imagen, en mosaicos con solape y varias escalas; NMS; margen amplio.
-- **Hecho cuando:** los casos fallidos de la revisión pasan, fixtures 13 y 22 detectados, y en el conjunto de evaluación se alcanza un *recall* objetivo por categoría (propuesta: ≥ 98 % en identificadores, ≥ 95 % en nombres impresos, medir y fijar objetivo realista para manuscritos tras la primera ronda).
+Measure recall, precision, and time per page on printed pages, poor scans, handwriting, signatures, and marginal notes. Keep private evaluation documents outside the repository. PP-OCRv5 detects text lines; low-confidence or handwritten lines go to Qwen3-VL for literal transcription. GLiNER-PII analyzes native and OCR text. Validated rules take precedence for IDs and accounts; a contextual local model proposes only literal fragments found on the page. Search detected values and variants throughout the document. YuNet scans full pages and overlapping image tiles at multiple scales.
 
-### Fase 5 · Interfaz
-- Adaptar `ui/` al puente Python: seleccionar archivos o **carpetas** con diálogos nativos, cola con progreso por documento (procesado en segundo plano, UI siempre fluida), vista previa renderizada desde los bytes finales, tabla editable, ocultación manual, resultado de la verificación visible ("0 coincidencias en N objetos / M páginas").
-- Sin vista previa del original en la columna anonimizada mientras carga.
-- Registros CSV/JSON: sin originales ni coordenadas por defecto; advertencia explícita si se incluyen.
-- Nada se escribe en disco salvo lo que el usuario exporta: temporales en memoria; si hacen falta ficheros temporales, en una carpeta propia que se borra al cerrar (y al arrancar, por si hubo un cierre brusco). Los registros de la app (logs) nunca contienen valores detectados ni texto de documentos.
-- Estadísticas que se actualizan al marcar/desmarcar; atajos de teclado para revisar rápido (siguiente hallazgo, aceptar, descartar).
-- Entrada también de imágenes (JPG, PNG, TIFF multipágina, fotos de móvil con corrección de perspectiva), convertidas a PDF internamente: los documentos manuscritos suelen llegar así.
-- Exportación por lotes a una carpeta de destino, con informe de verificación por archivo.
-- **Hecho cuando:** los e2e (pywebview en modo test o motor sin UI) cubren el flujo completo.
+The baseline must remain useful without the advanced package: validated rules, GLiNER, and printed OCR remain available. Initial targets were at least 98% recall for identifiers and 95% for printed names; handwriting targets must be set from measured data.
 
-### Fase 6 · Empaquetado e instalación fácil
-- `packaging/build.ps1`: `uv sync` → PyInstaller onedir (con modelos ligeros y `llama-server` Vulkan) → Inno Setup → `AnonimatoSetup-x.y.z.exe`.
-- Paquete de IA avanzada: manifiesto firmado (URL + SHA-256 + licencia de cada GGUF), descarga desde el origen oficial de cada modelo (Hugging Face) con reanudación, o importación desde un `.zip` para equipos sin conexión.
-- Instalación por usuario, sin admin; acceso directo; desinstalador limpio; comprobación de WebView2 (con instalador de arranque incluido por si falta).
-- Arranque sin consola; si DirectML falla, CPU automáticamente.
-- Opcional: firma de código (evita el aviso de SmartScreen); si no, documentar "Más información → Ejecutar de todas formas".
-- THIRD_PARTY.md con versiones, licencias y SHA-256 de cada modelo; comprobación de hashes al arrancar.
-- **Hecho cuando:** en una cuenta limpia de Windows, instalar → abrir → anonimizar → desinstalar funciona sin tocar nada más.
+### 5. Interface
 
-### Fase 7 · Retirada de la versión web
-- Cuando haya paridad: eliminar `legacy-web/`, `vendor/`, `node_modules`, `package.json`, `start.ps1`.
-- `git init`, `.gitignore` (`.venv/`, `build/`, `dist/`, `tmp/`, `opencode.json`), README nuevo.
+Provide native file and folder pickers, drag and drop, a document queue with background progress, actual-output previews, editable findings, manual redactions, verification results, keyboard shortcuts, and batch export. Support JPG, PNG, multipage TIFF, and mobile photos with perspective correction. Keep logs free of document text and detected values. CSV/JSON exports omit original values and coordinates by default and warn before including them. The sidebar presents the essential choices first and folds detailed detection and output settings away until needed.
 
----
+### 6. Packaging
 
-## 3. Orden y criterio global
+Build a PyInstaller directory and Inno Setup installer. Install per user without administrator rights; provide a Start-menu shortcut and clean uninstall. Check WebView2, verify bundled and downloaded model hashes, and fall back to CPU if DirectML fails. Code signing remains optional; without a certificate, Windows may show SmartScreen on first launch.
 
-| # | Entrega | Resultado visible |
-|---|---|---|
-| 0 | Esqueleto + corpus | La app abre; los tests muestran las fugas actuales. |
-| 1 | Borrado + limpieza | PDFs sin metadatos, estructuras ocultas ni anotaciones. |
-| 2 | Verificación | Ningún PDF con fugas puede salir de la app. |
-| 3 | Máxima seguridad | Garantía total sobre todo lo no visible. |
-| 4 | Detección | Mejor OCR, NER, caras y reglas; métricas reales. |
-| 5 | Interfaz | Uso diario cómodo, carpetas, procesado en segundo plano. |
-| 6 | Instalador | `AnonimatoSetup.exe` de un clic. |
-| 7 | Limpieza | Un solo proyecto, versionado en git. |
+### 7. Remove the old web version
 
-## 4. Hallazgos de la revisión inicial y dónde se resuelven
+Remove the obsolete web app after desktop feature parity, keep generated artifacts out of Git, and document the current project structure.
 
-| Hallazgo en la versión web | Fase |
+## Current implementation record (2026-09-26)
+
+| Phase | Status and evidence |
 |---|---|
-| XMP y fechas sobreviven (confirmado) | 1 |
-| Opción "Pixelar" sin efecto en el PDF | 1 |
-| Texto fuera del CropBox no se tacha | 1 (+3) |
-| Cajas estimadas por nº de caracteres en fuentes proporcionales | 1 (quads exactos) |
-| Anotaciones FreeText/Stamp/Ink nunca analizadas y luego integradas | 1 (bake antes de detectar) |
-| Nombre del archivo de salida conserva el nombre original | 1 |
-| Line art parcialmente cubierto no se borra | 3 |
-| Direcciones abreviadas, teléfonos 3-2-2-2, NSS sin validar | 4 |
-| Tokens distintos para el mismo DNI con distinto formato | 4 |
-| BlazeFace pierde caras pequeñas | 4 |
-| OCR descarta palabras de baja confianza y no cruza líneas | 4 |
-| Vista previa muestra el original mientras carga; estadísticas no se actualizan | 5 |
-| Código muerto, pdf-lib sin uso, LICENSE sobrescrito, README incoherente, sin git | 7 |
+| 0 | Complete: adversarial fixtures and expanded rules in `tests/fixtures/generate.py` and `app/engine/rules.py`. |
+| 1 | Complete: exact redaction, annotation baking, CropBox cleanup, XMP/Info/ActualText removal, JPEG/JPX handling, neutral filenames. |
+| 2 | Complete: structural, text, encoded-stream, OCR, face, and residual checks in `verify.py`; failed exports are blocked. |
+| 3 | Complete: page rasterization, optional output OCR layer, and uniform token widths. |
+| 4 | Complete: PP-OCRv5, orientation and small-image rereading, GLiNER fp16, Qwen3-VL, YuNet, signatures, and propagation. See `docs/benchmark.md` and `docs/deteccion.md`. |
+| 5 | Complete: file/folder/image input, review, shortcuts, manual redaction, batch output, privacy-preserving logs, and a simplified settings sidebar. See `tools/ui_smoke.py`. |
+| 6 | Complete: Windows installer and installed-program `--selftest` tested with silent install and uninstall. |
+| 7 | Complete: legacy web project removed. |
 
-## 5. Decisiones pendientes y riesgos
+The model benchmark selected Qwen3-VL-8B as the standard advanced package (13.7% character error on the tested handwritten census names versus 23.7% for 4B). Qwen3-VL-4B is selected on GPUs with less than 7 GB free. PaddleOCR-VL was faster but could not perform contextual review. A VLM threshold of 0.985 captures almost all uncertain handwriting in the measured set. GLiNER uses fp16 because the published int8 variant failed detection in testing. The OCR line recognizer runs on CPU because DirectML was slower for its changing input sizes.
 
-- **Necesito de ti:** 30–50 páginas reales representativas para la fase 4.0 (se quedan en tu equipo, fuera del repositorio).
-- **Modelos concretos** (VLM, LLM, GLiNER): se deciden con el benchmark, no antes.
-- **Firma de código:** sin certificado, Windows muestra un aviso la primera vez. Un certificado cuesta dinero al año; opcional.
-- **Riesgo – velocidad:** manuscritos con VLM ≈ 10–40 s/página (estimación, a medir). Mitigación: solo se envían al VLM las líneas manuscritas o dudosas.
-- **Riesgo – manuscritos ilegibles:** ningún modelo los leerá todos. Mitigación: regla de tachado ante la duda.
-- **Riesgo – soporte en llama.cpp/Vulkan** de un VLM concreto. Mitigación: el benchmark solo considera modelos que funcionen; alternativa ONNX si hiciera falta.
-- **Riesgo – PDF hostiles** (el motor abre archivos no confiables). Mitigación: procesado en un proceso hijo con límites de memoria/tiempo, que se reinicia si falla.
+The evaluation used public IAM and French census data plus synthetic documents with fictitious personal data. The recorded 80-document native/scanned evaluation reported 100% recall in every measured category, 99.8% precision without advanced AI, and 99.5% with it. These results do not establish performance on every real-world document. Add representative private documents to `eval/own` and `eval/docs` for local measurement.
 
-**Límite honesto:** la garantía de "ni rastro" es absoluta sobre lo marcado (fases 1–2) y sobre todo lo no visible (fase 3). Lo que ninguna detección encuentre ni el usuario marque seguirá visible; la revisión humana página a página sigue siendo obligatoria y la UI la facilita, no la sustituye.
+## Second review and remaining work
 
----
+- Hostile PDFs run in separate workers. Windows Job Objects limit memory (including `llama-server`); hangs and crashes trigger recovery. The window never opens a PDF directly. `tests/test_worker.py` covers crashes, hangs, memory, damaged files, and passwords.
+- Integrity verification covers base, advanced, and lightweight models plus the llama.cpp runtime. Processing and export wait for checks and are blocked on altered files. A size/time cache avoids unnecessary rehashing. The UI reports integrity failures.
+- Optional model failures are reported in UI status and document notes; GLiNER retries on CPU after GPU failure. Analysis waits for GPU warmup, and detector access is locked to avoid concurrent DirectML use.
+- Verification rereads covered handwriting with AI when available and uses GLiNER on output text and OCR. Remaining traces carry page and box coordinates, appear in red, and show progress while saving.
+- Further test coverage includes cancellation, passwords, digital signatures, uniform token lengths, advanced-model downloads, JPEG 2000, and residual leak localization.
 
-## 6. Estado de la implementación (2026-09-25)
-
-| Fase | Estado | Evidencia |
-|---|---|---|
-| 0 · Esqueleto y corpus adversarial | Hecho | `tests/fixtures/generate.py`: 23 PDF (22 vías de fuga + formulario manuscrito). Reglas portadas y ampliadas en `app/engine/rules.py`. |
-| 1 · Borrado y limpieza estructural | Hecho | `redact.py`, `sanitize.py`: quads exactos por carácter, bake previo, contenido fuera del CropBox, XMP/Info/estructuras, `/ActualText`, JPEG APPn, JPX recodificado, nombre neutro. Opción «Pixelar» eliminada. |
-| 2 · Verificación obligatoria | Hecho | `verify.py`: estructura, objetos y flujos en varias codificaciones, texto (con y sin ActualText, capas ocultas), OCR de página y de zonas, rostros, detección residual. `test_verifier_blocks_a_leaky_pdf`. |
-| 3 · Máxima seguridad | Hecho | `rasterize.py` + capa OCR del resultado; tokens de longitud uniforme. `test_max_security_mode`. |
-| 4 · Detección con IA | Hecho | PP-OCRv5 (det servidor en GPU, rec en CPU), orientación, re-lectura de imágenes pequeñas, GLiNER-PII fp16, Qwen3-VL (manuscritos + revisión contextual), YuNet por mosaicos, firmas, propagación. `docs/benchmark.md` (4.0), `docs/deteccion.md`. |
-| 5 · Interfaz | Hecho | `app/ui`, `app/api.py`: archivos, carpetas, arrastrar, imágenes y fotos con corrección de perspectiva, revisión con cajas, atajos, zonas manuales, lote a carpeta con informe, registros sin originales por defecto. `tests/test_api.py`, `tools/ui_smoke.py`. |
-| 6 · Instalador | Hecho | `packaging/`: PyInstaller + Inno Setup → `dist/AnonimatoSetup-2.0.0.exe` (≈ 710 MB). Probado: instalación silenciosa sin administrador, `--selftest` del programa instalado (GPU, verificación, integridad) y desinstalación sin restos. |
-| 7 · Retirada de la versión web | Hecho | `legacy-web/` eliminado; repositorio git con `.gitignore`. |
-
-**Decisiones tomadas con datos (fase 4.0):**
-- OCR manuscrito: Qwen3-VL-8B como paquete avanzado estándar (mejor en nombres manuscritos reales: 13,7 % de error
-  frente a 23,7 % del 4B) y Qwen3-VL-4B como variante ligera elegida automáticamente en GPU con < 7 GB libres.
-  PaddleOCR-VL descartado: solo OCR, no sirve para la revisión contextual.
-- Umbral de envío al VLM: confianza < 0,985 (deja sin revisar un 0–2 % de líneas manuscritas mal leídas).
-- GLiNER en fp16: la versión int8 publicada no detecta nada; la cuantización propia de las incrustaciones la rompe.
-- Reconocedor de líneas en CPU: DirectML es más lento con este modelo y recompila con cada tamaño de entrada.
-
-**Desviaciones respecto al plan:**
-- Instalador base de ≈ 710 MB (no 250 MB): GLiNER fp16 ocupa 550 MB y es imprescindible para la calidad medida.
-- El conjunto de evaluación de la fase 4.0 usa datos públicos (IAM, censo francés) y documentos sintéticos con datos
-  ficticios; para medir con documentos propios basta con colocarlos en `eval/own` y `eval/docs` (fuera de git).
-- Sin firma de código (requiere un certificado de pago): Windows mostrará el aviso de SmartScreen la primera vez.
-- El «manifiesto firmado» se implementa como hashes SHA-256 fijados en el manifiesto que viaja dentro del
-  instalador y se comprueban en cada descarga, importación y arranque.
-
-**Resultados medidos:** 73 tests automáticos en verde (reglas, 23 PDF adversariales sin rastro según un escáner
-independiente, máxima seguridad, puente de la interfaz, IA avanzada, modelos). Detección sobre 80 documentos
-(nativos y escaneados): recall del 100 % en todas las categorías, con y sin IA avanzada; precisión del 99,8 % sin ella
-y del 99,5 % con ella.
-
-
-## 7. Revisión de objetivos y segunda ronda (2026-09-25)
-
-Huecos encontrados al revisar el plan y cómo se han cerrado:
-
-| Hueco | Solución | Evidencia |
-|---|---|---|
-| PDF hostiles en el proceso de la ventana (mitigación prevista en el plan, no hecha) | `engine/worker.py`: motor en procesos aparte (uno con modelos, otro ligero para vistas previas), límite de memoria con Job Object de Windows (incluye llama-server), vigilancia de inactividad y reinicio automático. La ventana nunca abre un PDF. | `tests/test_worker.py` (caída, bloqueo, memoria, PDF dañado, contraseña); `--selftest` comprueba la recuperación tras una caída |
-| Integridad parcial y silenciosa | `models.verify_all`: modelos base, avanzados y ligeros + 25 archivos del runtime de llama.cpp; caché por tamaño/fecha; el análisis y la exportación esperan a la comprobación y se niegan si algo está alterado; aviso en la interfaz | `tests/test_models.py`, banner de la interfaz |
-| Errores de modelos silenciosos | Avisos en la interfaz (`status.errors`) y notas del documento; GLiNER reintenta en CPU si la GPU falla | `test_status_reports_engine_state` |
-| Condición de carrera en GPU (precalentamiento y análisis simultáneos sobre la misma sesión DirectML) | Encontrada al aislar el motor: el análisis espera al precalentamiento; cerrojo en el detector | autocomprobación |
-| Verificación sin VLM ni GLiNER | Relectura por IA de zonas manuscritas tapadas; detección residual con GLiNER sobre texto y OCR, tolerante a tokens mal leídos | `test_residual_detection_uses_the_ai_model`, `test_advanced.py` |
-| Resto sin ubicación / sin progreso | Cada resto lleva página y caja; se marca en rojo sobre el resultado; progreso por página al guardar | `test_blocked_export_shows_where_the_leak_is` |
-| Tests que faltaban | Cancelar, contraseña, firma digital, longitud uniforme, descarga de la IA avanzada, JPEG 2000 (PDF 24), firma digital como vía de fuga (PDF 25) | `tests/test_api.py`, `tests/test_leaks.py` |
-
-Pendiente, fuera de mi alcance: evaluación con documentos reales del usuario (`eval/own`, `eval/docs`) y firma de
-código del instalador (requiere certificado).
+Outstanding external inputs are representative user documents for private evaluation and a paid certificate if signed Windows installers are required.

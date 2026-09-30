@@ -79,7 +79,7 @@ def _clean_image(stream: pikepdf.Stream) -> None:
         try:
             image = Image.open(io.BytesIO(stream.read_raw_bytes()))
             image.load()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
         if image.mode not in ("RGB", "L"):
             image = image.convert("RGB")
@@ -97,7 +97,7 @@ def _clean_marked_content(stream: pikepdf.Stream) -> None:
     """Remove alternate/actual texts from BDC property dictionaries inside a content stream."""
     try:
         instructions = pikepdf.parse_content_stream(stream)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
     changed = False
     rebuilt = []
@@ -187,7 +187,7 @@ def sanitize(data: bytes) -> bytes:
                 if key in obj:
                     try:
                         del obj[key]
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
             if isinstance(obj, pikepdf.Stream) and obj.get("/Subtype") == pikepdf.Name.Image:
                 _clean_image(obj)

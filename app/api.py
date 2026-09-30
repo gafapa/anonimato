@@ -7,10 +7,11 @@ files written are the ones the user saves.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .engine import document, llm_server, logs, models, pipeline, rules
@@ -32,6 +33,7 @@ class Doc:
     preview_key: str = ""
     preview_bytes: bytes | None = None
     report: dict | None = None
+    revision: int = 0
 
 
 @dataclass
@@ -46,7 +48,23 @@ class State:
 
 
 def _options(raw: dict) -> Options:
-    categories = set(raw.get("categories") or (set(rules.SELECTABLE) - rules.DEFAULT_OFF))
+    if not isinstance(raw, dict):
+        raise ValueError("Opciones de procesamiento no válidas")
+    selected = raw.get("categories")
+    if selected is None:
+        categories = set(rules.SELECTABLE) - rules.DEFAULT_OFF
+    else:
+        if not isinstance(selected, (list, set, tuple)) or any(
+            not isinstance(key, str) or key not in rules.CATEGORIES for key in selected
+        ):
+            raise ValueError("Categorías no válidas")
+        categories = set(selected)
+    mode = raw.get("mode", "label")
+    if mode not in ("label", "blank"):
+        raise ValueError("Modo de salida no válido")
+    dpi = raw.get("dpi", 200)
+    if isinstance(dpi, bool) or not isinstance(dpi, (int, float)) or not 50 <= dpi <= 1200 or int(dpi) != dpi:
+        raise ValueError("La resolución debe ser un entero entre 50 y 1200 ppp")
     categories |= {"manual"}
     return Options(
         categories=categories,
@@ -57,11 +75,11 @@ def _options(raw: dict) -> Options:
         faces=bool(raw.get("faces", True)),
         signatures=bool(raw.get("signatures", True)),
         propagate=bool(raw.get("propagate", True)),
-        mode=raw.get("mode", "label"),
+        mode=mode,
         max_security=bool(raw.get("maxSecurity", False)),
         ocr_text_layer=bool(raw.get("textLayer", True)),
         uniform_tokens=bool(raw.get("uniform", False)),
-        dpi=int(raw.get("dpi", 200)),
+        dpi=int(dpi),
     )
 
 
@@ -113,8 +131,14 @@ class Api:
         return status
 
     def status(self) -> dict:
-        variant = llm_server.installed_variant() or llm_server.recommended_variant()
         services = self._engine_status()
+        variant = llm_server.installed_variant()
+        if variant is None:
+            try:
+                variant = "advanced_lite" if "integrity" in services.get("errors", {}) else llm_server.recommended_variant()
+            except (RuntimeError, OSError, ValueError) as error:
+                services = {**services, "errors": {**services.get("errors", {}), "integrity": str(error)}}
+                variant = "advanced_lite"
         return {
             "version": VERSION,
             "services": services,
@@ -134,8 +158,19 @@ class Api:
         suffix = path.suffix.lower()
         if suffix != ".pdf" and suffix not in document.IMAGE_SUFFIXES:
             return None
-        data = path.read_bytes()
         with self._lock:
+            size = path.stat().st_size
+            queued = sum(doc.size for doc in self._state.docs.values())
+            if size > document.LIMITS["max_bytes"]:
+                raise document.DocumentError(f"El archivo supera {document.LIMITS['max_bytes'] >> 20} MB")
+            if queued + size > document.LIMITS["max_queue_bytes"]:
+                raise document.DocumentError("La cola supera el límite de memoria; quita documentos antes de añadir más")
+            # Bound the read as well: the file may grow after stat(). Reserve no unbounded input buffer.
+            available = min(document.LIMITS["max_bytes"], document.LIMITS["max_queue_bytes"] - queued)
+            with path.open("rb") as handle:
+                data = handle.read(available + 1)
+            if len(data) > available:
+                raise document.DocumentError("El archivo supera el límite de memoria de entrada")
             self._state.counter += 1
             doc = Doc(id=f"d{self._state.counter}", name=path.name, size=len(data), data=data)
             self._state.docs[doc.id] = doc
@@ -203,14 +238,20 @@ class Api:
         """Decrypt a password-protected PDF (in the isolated process); the output is never encrypted."""
         doc = self._state.docs[doc_id]
         try:
-            doc.data = self._light.call("unlock", doc.data, password)
+            unlocked = self._light.call("unlock", doc.data, password)
         except EngineError as error:
             return {"ok": False, "message": str(error)}
-        doc.status, doc.error, doc.size = "pending", "", len(doc.data)
+        with self._lock:
+            queued = sum(item.size for item in self._state.docs.values() if item.id != doc_id)
+            if len(unlocked) > document.LIMITS["max_bytes"] or queued + len(unlocked) > document.LIMITS["max_queue_bytes"]:
+                return {"ok": False, "message": "El documento descifrado supera el límite de memoria de entrada"}
+            doc.data = unlocked
+            doc.status, doc.error, doc.size = "pending", "", len(doc.data)
         return {"ok": True}
 
     # ------------------------------------------------------------ processing
     def process(self, raw_options: dict, only: list[str] | None = None) -> bool:
+        options = _options(raw_options)
         if self.status().get("blocked"):
             self._state.progress = {"message": "Modelos alterados: reinstala la aplicación", "percent": 0}
             return False
@@ -220,10 +261,13 @@ class Api:
             self._state.busy = True
             self._state.cancel = False
             self._state.progress = {"message": "Preparando…", "percent": 0}
-        self._engine.cancel.clear()
-        options = _options(raw_options)
-        targets = only or [i for i in self._state.order if self._state.docs[i].status != "locked"]
-        threading.Thread(target=self._run, args=(targets, options), daemon=True).start()
+        try:
+            self._engine.cancel.clear()
+            targets = list(only) if only is not None else [i for i in self._state.order if self._state.docs[i].status != "locked"]
+            threading.Thread(target=self._run, args=(targets, options), daemon=True).start()
+        except Exception:
+            self._end()
+            raise
         return True
 
     def cancel(self) -> None:
@@ -240,6 +284,7 @@ class Api:
                 if self._state.cancel:
                     break
                 doc.status, doc.error = "processing", ""
+                doc.analysis = None
                 doc.preview_bytes, doc.preview_key, doc.report = None, "", None
 
                 def progress(event: dict, position=position, doc=doc) -> None:
@@ -311,20 +356,25 @@ class Api:
         }
 
     def set_enabled(self, doc_id: str, finding_ids: list[str], enabled: bool) -> int:
-        _, analysis = self._analysis(doc_id)
-        wanted = set(finding_ids)
-        count = 0
-        for f in analysis.findings:
-            if f.id in wanted:
-                f.enabled = bool(enabled)
-                count += 1
-        return count
+        with self._lock:
+            _, analysis = self._analysis(doc_id)
+            wanted = set(finding_ids)
+            count = 0
+            for f in analysis.findings:
+                if f.id in wanted:
+                    f.enabled = bool(enabled)
+                    count += 1
+            if count:
+                self.invalidate_report(doc_id)
+            return count
 
     def add_manual(self, doc_id: str, page: int, view_rect: list[float]) -> dict:
-        _, analysis = self._analysis(doc_id)
-        info = analysis.pages[page]
-        shown = (view_rect[0] * info.width, view_rect[1] * info.height, view_rect[2] * info.width, view_rect[3] * info.height)
-        finding = pipeline.add_manual(analysis, page, _transform(_invert(info.matrix), shown))
+        with self._lock:
+            _, analysis = self._analysis(doc_id)
+            info = analysis.pages[page]
+            shown = (view_rect[0] * info.width, view_rect[1] * info.height, view_rect[2] * info.width, view_rect[3] * info.height)
+            finding = pipeline.add_manual(analysis, page, _transform(_invert(info.matrix), shown))
+            self.invalidate_report(doc_id)
         data = finding.to_json()
         data["label"] = rules.CATEGORIES["manual"]["label"]
         data["view"] = self._view_rects(analysis, page, finding.rects)
@@ -332,10 +382,19 @@ class Api:
         return data
 
     def remove_manual(self, doc_id: str, finding_id: str) -> bool:
-        _, analysis = self._analysis(doc_id)
-        before = len(analysis.findings)
-        analysis.findings = [f for f in analysis.findings if not (f.id == finding_id and f.type == "manual")]
-        return len(analysis.findings) < before
+        with self._lock:
+            _, analysis = self._analysis(doc_id)
+            before = len(analysis.findings)
+            analysis.findings = [f for f in analysis.findings if not (f.id == finding_id and f.type == "manual")]
+            if len(analysis.findings) < before:
+                self.invalidate_report(doc_id)
+            return len(analysis.findings) < before
+
+    def invalidate_report(self, doc_id: str) -> None:
+        with self._lock:
+            doc = self._state.docs[doc_id]
+            doc.report = None
+            doc.revision += 1
 
     # ------------------------------------------------------------ previews
     def _state_key(self, analysis: pipeline.Analysis, options: Options) -> str:
@@ -365,8 +424,12 @@ class Api:
             self._state.progress = {"message": f"{doc.name}: {event.get('message', '')}",
                                     "percent": round(100 * (share[0] + fraction) / max(1, share[1]), 1)}
 
-        result = self._engine.call("export", doc.analysis, options, index, keep_name, progress=progress)
-        doc.report = self._report_view(doc.analysis, result.report.to_json())
+        with self._lock:
+            revision = doc.revision
+            snapshot = replace(doc.analysis, findings=copy.deepcopy(doc.analysis.findings), sources={})
+        result = self._engine.call("export", snapshot, options, index, keep_name, progress=progress)
+        with self._lock:
+            doc.report = self._report_view(snapshot, result.report.to_json()) if doc.revision == revision else None
         return result
 
     def _begin(self) -> bool:
@@ -403,7 +466,11 @@ class Api:
             if not target:
                 return {"ok": True, "saved": False, "report": doc.report}
             path = Path(target if isinstance(target, str) else target[0])
-            path.write_bytes(result.data)
+            from .engine.files import atomic_write
+            try:
+                atomic_write(path, result.data)
+            except OSError as error:
+                return {"ok": False, "message": f"No se pudo guardar el PDF: {error}", "report": doc.report}
             return {"ok": True, "saved": True, "path": str(path), "report": doc.report}
         finally:
             self._end()
@@ -435,15 +502,24 @@ class Api:
                     continue
                 entry.update(ok=result.report.ok, verificacion=doc.report)
                 if result.report.ok:
-                    path = root / result.filename
-                    counter = 2
-                    while path.exists():
-                        path = root / result.filename.replace("_anonimizado.pdf", f"_anonimizado_{counter}.pdf")
-                        counter += 1
-                    path.write_bytes(result.data)
-                    entry["archivo"] = path.name
+                    from .engine.files import atomic_write
+                    counter = 1
+                    try:
+                        while True:
+                            name = result.filename if counter == 1 else result.filename.replace(
+                                "_anonimizado.pdf", f"_anonimizado_{counter}.pdf")
+                            path = root / name
+                            try:
+                                atomic_write(path, result.data, overwrite=False)
+                                break
+                            except FileExistsError:
+                                counter += 1
+                        entry["archivo"] = path.name
+                    except OSError as error:
+                        entry.update(ok=False, error=f"No se pudo guardar el PDF: {error}")
                 results.append(entry)
-            (root / "informe_verificacion.json").write_text(json.dumps(
+            from .engine.files import atomic_write
+            atomic_write(root / "informe_verificacion.json", json.dumps(
                 {"generado": time.strftime("%Y-%m-%d %H:%M:%S"), "documentos": results}, ensure_ascii=False, indent=2),
                 encoding="utf-8")
             return {"ok": all(r["ok"] for r in results), "saved": sum(1 for r in results if r["ok"]),
@@ -465,7 +541,8 @@ class Api:
         if not target:
             return {"saved": False}
         path = Path(target if isinstance(target, str) else target[0])
-        path.write_text(content, encoding="utf-8")
+        from .engine.files import atomic_write
+        atomic_write(path, content, encoding="utf-8")
         return {"saved": True, "path": str(path)}
 
     # ------------------------------------------------------------ advanced models
@@ -493,7 +570,7 @@ class Api:
             self._engine.call("reload_models")
             self._status_cache = None
             self._state.install = {"running": False, "done": True, "percent": 100, "message": "IA avanzada instalada"}
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             self._state.install = {"running": False, "error": str(error), "message": f"Error: {error}"}
 
     def import_advanced(self) -> dict:
@@ -506,5 +583,5 @@ class Api:
             self._engine.call("reload_models")
             self._status_cache = None
             return {"ok": True}
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             return {"ok": False, "message": str(error)}

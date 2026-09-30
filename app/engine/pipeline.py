@@ -5,7 +5,7 @@ import time
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import pymupdf
@@ -108,7 +108,7 @@ def detect_text(text: str, categories: set[str], pii=None, notes: list[str] | No
     if pii is not None and text.strip():
         try:
             matches += [m for m in pii.detect(text) if _useful_ai(m)]
-        except Exception as error:  # noqa: BLE001 - rules still apply, but the user is told
+        except Exception as error:  # rules still apply, but the user is told
             message = f"IA de datos personales con error ({error}); en este texto solo se han aplicado las reglas."
             if notes is not None and message not in notes:
                 notes.append(message)
@@ -180,7 +180,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                                for p in working_doc])
     try:
         analysis.signed = document.is_signed(pdf_bytes)
-    except Exception:  # noqa: BLE001
+    except Exception:
         analysis.signed = False
     if analysis.signed:
         analysis.notes.append("El PDF original tiene firma digital: el documento anonimizado no conservará una firma "
@@ -249,7 +249,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                     continue
                 image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
                 for line in ocr.read(image, detect_orientation=False):
-                    def to_page(r, clip=clip, zoom=zoom):
+                    def to_page(r, clip=clip, zoom=zoom, page=page):
                         rect = pymupdf.Rect(clip.x0 + r[0] / zoom, clip.y0 + r[1] / zoom,
                                             clip.x0 + r[2] / zoom, clip.y0 + r[3] / zoom) * page.derotation_matrix
                         return (rect.x0, rect.y0, rect.x1, rect.y1)
@@ -271,7 +271,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                 try:
                     alternatives[position] = reader.read(crop) or line.text
                     line.engine = "vlm"
-                except Exception as error:  # noqa: BLE001
+                except Exception as error:
                     analysis.notes.append(f"Lectura de manuscritos no disponible: {error}")
                     reader = None
                     break
@@ -311,8 +311,8 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                         doubtful = "[ilegible]" in reading or disagreement > 0.4
                     else:
                         doubtful = line.confidence < 0.9
-                    row_text = " ".join(l.text for l in lines if abs((l.rect[1] + l.rect[3]) / 2 - (line.rect[1] + line.rect[3]) / 2)
-                                        < (line.rect[3] - line.rect[1]) * 0.6 and l.rect[0] < line.rect[0])
+                    row_text = " ".join(other.text for other in lines if abs((other.rect[1] + other.rect[3]) / 2 - (line.rect[1] + line.rect[3]) / 2)
+                                        < (line.rect[3] - line.rect[1]) * 0.6 and other.rect[0] < line.rect[0])
                     labelled = bool(PERSONAL_LABELS.search(row_text)) or bool(PERSONAL_LABELS.search(
                         _native_left_of(native, line.rect)))
                     if labelled and doubtful:
@@ -323,7 +323,7 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                 add(index, "face", None, [rendered.to_page(box)], 0.9, "face")
         if options.signatures and "signature" in categories:
             labels_px, text_px = [], []
-            for source_name, source_text in page_sources:
+            for _, source_text in page_sources:
                 for match in signatures.LABEL.finditer(source_text.text):
                     for rect in source_text.rects_for(match.start(), match.end()):
                         labels_px.append(rendered.from_page(rect))
@@ -356,7 +356,7 @@ def _native_left_of(native: PageText, rect: Rect) -> str:
     cy = (rect[1] + rect[3]) / 2
     h = rect[3] - rect[1]
     out = []
-    for ch, box in zip(native.text, native.boxes):
+    for ch, box in zip(native.text, native.boxes, strict=True):
         if box is not None and box[2] <= rect[0] + 2 and abs((box[1] + box[3]) / 2 - cy) < h * 0.7:
             out.append(ch)
     return "".join(out)
@@ -375,11 +375,14 @@ def _propagate(analysis: Analysis, add) -> None:
             continue
         for page, sources in analysis.sources.items():
             for _, source in sources:
-                for start, end, confidence in propagate.search(source, patterns):
+                # Longest mentions first, so "X. Etxeberria Goikoetxea" is covered whole (initial included)
+                # before its shorter variant "Etxeberria Goikoetxea" is considered.
+                matches = sorted(propagate.search(source, patterns), key=lambda m: m[0] - m[1])
+                for start, end, confidence in matches:
                     rects = source.rects_for(start, end)
                     if not rects:
                         continue
-                    covered = [r for r in rects if any(p == page and _coverage(r, [e]) > 0.6 for p, e in existing)]
+                    covered = [r for r in rects if any(p == page and _coverage(r, [e]) > 0.95 for p, e in existing)]
                     if len(covered) == len(rects):
                         continue
                     add(page, kind, source.text[start:end].strip(), rects, confidence, "propagation",
@@ -406,7 +409,7 @@ def _llm_review(analysis: Analysis, llm, categories: set[str], add, progress, ca
                     known.append((match.start(), match.end(), CATEGORIES[finding.type]["token"]))
             try:
                 extra = llm_review.review(llm, source.text, known)
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 analysis.notes.append(f"Revisión con IA no disponible: {error}")
                 return
             for match in extra:
@@ -449,10 +452,12 @@ def assign_tokens(findings: list[Finding]) -> None:
                 finding.key = finding.type + "|" + canonical(finding.type, finding.value)
         else:
             finding.key = finding.key or finding.id
-    # Partial mentions of a detected full name share its token.
+    # Partial mentions of a detected full name share its token. A single word ("Sr. Goikoetxea") only when it
+    # belongs to exactly one person in the document: two people sharing a surname keep separate tokens.
     for finding in sorted(names, key=lambda f: -len(f.value.split())):
         words = {w for w in canonical("name", finding.value).split() if w not in rules.PARTICLES}
-        parent = next((key for full, key in full_names if words and words < full and len(words) >= 2), None)
+        parents = list(dict.fromkeys(key for full, key in full_names if words and words < full))
+        parent = parents[0] if parents and (len(words) >= 2 or len(parents) == 1) else None
         if parent and finding.source != "propagation":
             finding.key = parent
         else:
@@ -478,6 +483,10 @@ def safe_filename(original: str, findings: list[Finding], index: int, keep_name:
     stem = original.rsplit(".", 1)[0] if "." in original else original
     if not keep_name:
         return f"documento-{index}_anonimizado.pdf"
+    # Identifiers that contain dots or dashes (e-mails, URLs, IBANs…) are replaced before the separators
+    # are turned into spaces, which would otherwise break them apart and hide them from the rules.
+    for match in reversed(rules.detect_all(stem)):
+        stem = stem[:match.start] + CATEGORIES[match.type]["token"] + stem[match.end:]
     readable = re.sub(r"[_\-.]+", " ", stem)
     for finding in findings:
         if finding.value:
@@ -515,7 +524,7 @@ def residual_detector(categories: set[str], services=None):
             if pii is not None and text.strip():
                 try:
                     matches += [m for m in pii.detect(text) if _useful_ai(m) and m.confidence >= 0.8]
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
             seen = set()
             for match in matches:

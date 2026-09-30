@@ -40,14 +40,12 @@ class OcrEngine:
 
     def warm_up(self) -> None:
         """Compile the GPU graphs for the usual shapes (runs in the background at start-up)."""
+        if not self.detector.on_gpu:
+            return
         import numpy as _np
         for h, w in ((2048, 1536), (1536, 2048), (2048, 2048), (1536, 1280), (1280, 1536), (1024, 1024)):
             with self.detector._run_lock:
                 self.detector.session.run(None, {self.detector.input: _np.zeros((1, 3, h, w), dtype=_np.float32)})
-
-    def read_line(self, rgb: np.ndarray) -> str:
-        """Recognise a single-line crop directly (no detection)."""
-        return self.recognizer.recognize([rgb])[0][0]
 
     def read(self, rgb: np.ndarray, detect_orientation: bool = True) -> list[OcrLine]:
         height, width = rgb.shape[:2]
@@ -65,10 +63,10 @@ class OcrEngine:
             vertical.append(is_vertical)
         results = self.recognizer.recognize(crops) if crops else []
         lines = []
-        for quad, crop, inverse, is_vertical, (text, confidence, spans) in zip(quads, crops, inverses, vertical, results):
+        for quad, crop, inverse, is_vertical, (text, confidence, spans) in zip(quads, crops, inverses, vertical, results, strict=True):
             if not text.strip() or (confidence < 0.5 and len(text.strip()) <= 2):
                 continue
-            ch, cw = crop.shape[:2]
+            ch = crop.shape[0]
             char_rects = []
             for x0, x1 in spans:
                 corners = np.array([[x0, 0], [x1, 0], [x1, ch], [x0, ch]], dtype=np.float32)

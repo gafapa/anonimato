@@ -1,26 +1,22 @@
-# Componentes de terceros
+# Third-party components
 
-Todos los componentes se ejecutan localmente. Los modelos se descargan solo desde su origen oficial
-y se comprueban con SHA-256 fijados en `models/manifest.json` (también al arrancar la aplicación).
+All components run locally. Models are downloaded only from their official sources and checked against the SHA-256 hashes in `models/manifest.json`, including at application startup.
 
-| Componente | Uso | Licencia | Origen |
+| Component | Use | License | Source |
 |---|---|---|---|
-| PyMuPDF / MuPDF | lectura, extracción, tachado destructivo, renderizado | AGPL-3.0 | pypi `pymupdf` |
-| pikepdf / qpdf | limpieza estructural y verificación objeto a objeto | MPL-2.0 / Apache-2.0 | pypi `pikepdf` |
-| pywebview + WebView2 | ventana nativa | BSD-3 / Microsoft | pypi `pywebview` |
-| ONNX Runtime (DirectML) | inferencia en GPU sin CUDA | MIT | pypi `onnxruntime-directml` |
-| OpenCV | detección de rostros (YuNet), imagen | Apache-2.0 | pypi `opencv-python-headless` |
-| tokenizers, regex, rapidfuzz, NumPy, Pillow, PyYAML | utilidades | Apache-2.0 / Apache-2.0 / MIT / BSD / HPND / MIT | pypi |
-| llama.cpp (build Vulkan b11166) | motor de la IA avanzada | MIT | github.com/ggml-org/llama.cpp |
-| PP-OCRv5 server det, PP-OCRv5 mobile det, latin PP-OCRv5 mobile rec, PP-LCNet doc orientation | OCR | Apache-2.0 | huggingface.co/PaddlePaddle |
-| GLiNER multi PII v1 (ONNX fp16) | IA de datos personales | Apache-2.0 | huggingface.co/onnx-community/gliner_multi_pii-v1 (base: urchade/gliner_multi_pii-v1) |
-| YuNet 2023mar | rostros | MIT | github.com/opencv/opencv_zoo |
-| Qwen3-VL-8B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | manuscritos y revisión contextual (paquete avanzado, GPU ≥ 7 GB libres) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF |
-| Qwen3-VL-4B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | paquete avanzado ligero (GPU más pequeñas) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF |
+| PyMuPDF / MuPDF | PDF reading, text extraction, destructive redaction, rendering | AGPL-3.0 | PyPI `pymupdf` |
+| pikepdf / qpdf | Structural cleanup and object-level verification | MPL-2.0 / Apache-2.0 | PyPI `pikepdf` |
+| pywebview + WebView2 | Native application window | BSD-3 / Microsoft | PyPI `pywebview` |
+| ONNX Runtime (DirectML) | GPU inference without CUDA | MIT | PyPI `onnxruntime-directml` |
+| OpenCV | Face detection (YuNet) and image processing | Apache-2.0 | PyPI `opencv-python-headless` |
+| tokenizers, regex, rapidfuzz, NumPy, Pillow, PyYAML | Utilities | Apache-2.0 / Apache-2.0 / MIT / BSD / HPND / MIT | PyPI |
+| llama.cpp (Vulkan build b11166) | Advanced AI runtime | MIT | github.com/ggml-org/llama.cpp |
+| PP-OCRv5 server det, PP-OCRv5 mobile det, Latin PP-OCRv5 mobile rec, PP-LCNet document orientation | OCR | Apache-2.0 | huggingface.co/PaddlePaddle |
+| GLiNER multi PII v1 (ONNX fp16) | Personal-data detection | Apache-2.0 | huggingface.co/onnx-community/gliner_multi_pii-v1 (base: urchade/gliner_multi_pii-v1) |
+| YuNet 2023mar | Face detection | MIT | github.com/opencv/opencv_zoo |
+| Qwen3-VL-8B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | Handwriting and contextual review (advanced package, GPU with at least 7 GB free) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF |
+| Qwen3-VL-4B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | Smaller advanced package for lower-memory GPUs | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF |
 
-Modelo evaluado y no incluido (ver `docs/benchmark.md`): PaddleOCR-VL 1.6 (Apache-2.0): el más rápido, pero solo
-hace OCR (no sirve para la revisión contextual) y lee peor los nombres manuscritos que Qwen3-VL-8B.
+Evaluated but not included (see [docs/benchmark.md](docs/benchmark.md)): PaddleOCR-VL 1.6 (Apache-2.0). It is the fastest option tested, but only performs OCR and reads handwritten names less accurately than Qwen3-VL-8B; it cannot perform contextual review.
 
-Datos de evaluación (no se distribuyen): Teklia/IAM-line (MIT en Hugging Face; datos IAM con licencia de
-investigación), agomberto/FrenchCensus-handwritten-texts (MIT). Imágenes de prueba de caras:
-OpenCV `samples/data` (lena.jpg), solo para tests.
+Evaluation data is not distributed: Teklia/IAM-line (MIT on Hugging Face; IAM data has a research license) and agomberto/FrenchCensus-handwritten-texts (MIT). The OpenCV `samples/data/lena.jpg` face image is used only in tests.

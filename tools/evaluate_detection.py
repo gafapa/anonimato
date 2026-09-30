@@ -249,12 +249,12 @@ def main() -> None:
     own = ROOT / "eval" / "docs"
     if own.exists():
         for pdf in sorted(own.glob("*.pdf")):
-            corpus.append(("propio", pdf.name, pdf.read_bytes(), json.loads(pdf.with_suffix(".json").read_text("utf-8"))))
+            corpus.append(("own", pdf.name, pdf.read_bytes(), json.loads(pdf.with_suffix(".json").read_text("utf-8"))))
     for index in range(args.docs):
         data, truth = document(rng, index)
-        corpus.append(("nativo", f"sint-{index}", data, truth))
+        corpus.append(("native", f"synthetic-{index}", data, truth))
         if args.scanned:
-            corpus.append(("escaneado", f"sint-{index}", scanned(data, rng), truth))
+            corpus.append(("scanned", f"synthetic-{index}", scanned(data, rng), truth))
     stats: dict[tuple[str, str], list[int]] = {}
     precision_hits = precision_total = 0
     misses = []
@@ -280,20 +280,29 @@ def main() -> None:
             if not hit:
                 false_positives.append(f"{kind} {name}: {finding.type} «{finding.value}» ({finding.source})")
     seconds = time.time() - started
-    lines = ["# Evaluación de la detección", "",
-             f"Generado: {time.strftime('%Y-%m-%d %H:%M')} · {len(corpus)} documentos · {seconds:.0f} s · "
-             f"IA avanzada: {'sí' if args.advanced else 'no'}", "",
-             "Recall = valores reales completamente cubiertos por un hallazgo. Objetivos del plan: ≥ 98 % en",
-             "identificadores y ≥ 95 % en nombres impresos.", "",
-             "| Conjunto | Categoría | Recall | Valores |", "|---|---|---|---|"]
+    lines = ["# Detection evaluation", "",
+             f"Generated: {time.strftime('%Y-%m-%d %H:%M')} · {len(corpus)} documents · {seconds:.0f} s · "
+             f"advanced AI: {'yes' if args.advanced else 'no'}", "",
+             "Recall = ground-truth values fully covered by a finding. Targets: at least 98% for",
+             "identifiers and 95% for printed names.", "",
+             "| Dataset | Category | Recall | Values |", "|---|---|---|---|"]
+    category_labels = {
+        "name": "Names", "dni": "DNI / NIF", "nie": "NIE", "cif": "CIF",
+        "passport": "Passport", "nss": "Social Security number", "email": "Email",
+        "phone": "Phone", "url": "URL", "ip": "IP address", "plate": "License plate",
+        "date": "Date of birth", "address": "Address", "iban": "IBAN / account",
+        "bic": "BIC / SWIFT", "card": "Payment card", "id_other": "Other identifiers",
+        "health": "Health data", "org": "Organizations", "other": "Other personal data",
+        "handwriting": "Handwriting", "signature": "Signature", "face": "Face",
+    }
     for (kind, category), (hit, total) in sorted(stats.items()):
-        lines.append(f"| {kind} | {rules.CATEGORIES[category]['label']} | {100 * hit / total:.1f} % | {total} |")
-    lines += ["", f"Precisión global: {100 * precision_hits / max(1, precision_total):.1f} % "
-                  f"({precision_hits}/{precision_total} hallazgos con valor).", ""]
+        lines.append(f"| {kind} | {category_labels.get(category, category)} | {100 * hit / total:.1f} % | {total} |")
+    lines += ["", f"Overall precision: {100 * precision_hits / max(1, precision_total):.1f} % "
+                  f"({precision_hits}/{precision_total} findings with values).", ""]
     if misses:
-        lines += ["## Valores no cubiertos", ""] + [f"- {m}" for m in misses[:80]] + [""]
+        lines += ["## Uncovered values", ""] + [f"- {m}" for m in misses[:80]] + [""]
     if false_positives:
-        lines += ["## Hallazgos sin correspondencia (posibles falsos positivos)", ""] + [f"- {m}" for m in false_positives[:80]]
+        lines += ["## Unmatched findings (possible false positives)", ""] + [f"- {m}" for m in false_positives[:80]]
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "docs" / "deteccion.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))

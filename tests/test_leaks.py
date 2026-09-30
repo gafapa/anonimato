@@ -6,6 +6,7 @@ canary data.
 """
 import io
 import re
+import sys
 import unicodedata
 
 import pikepdf
@@ -18,10 +19,13 @@ from app.engine.types import Options
 from tests.fixtures.generate import CANARIES, DNI, NAME, build_all
 
 FIXTURES = build_all()
+COMBINING_MARKS = dict.fromkeys(codepoint for codepoint in range(sys.maxunicode + 1)
+                               if unicodedata.category(chr(codepoint)) == "Mn")
 
 
 def _plain(text: str) -> str:
-    text = "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    # Native translation avoids a Python object per character when checking large decoded image streams.
+    text = unicodedata.normalize("NFD", text).translate(COMBINING_MARKS)
     return re.sub(r"\s+", " ", text).casefold()
 
 
@@ -40,7 +44,7 @@ def independent_scan(data: bytes) -> list[str]:
         if isinstance(obj, pikepdf.Stream):
             try:
                 blobs.append(obj.read_bytes())
-            except Exception:  # noqa: BLE001
+            except Exception:
                 blobs.append(obj.read_raw_bytes())
             blobs.append(bytes(repr(obj.stream_dict), "utf-8", "ignore"))
         for blob in blobs:
@@ -158,3 +162,45 @@ def test_residual_detection_uses_the_ai_model(services):
         finding.enabled = False
     result = pipeline.export(analysis, options, services)
     assert any("nombre" in warning.lower() for warning in result.report.warnings), result.report.warnings
+
+
+def _image_page(image) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(pymupdf.Rect(72, 100, 522, 175), stream=buffer.getvalue())
+    return doc.tobytes()
+
+
+def test_zoomed_ocr_catches_a_half_covered_value(services):
+    """The value survives only as pixels next to a misaligned box: the text checks cannot see it,
+    the OCR checks must."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    from app.engine import verify
+    from app.engine.system import font
+    from app.engine.types import Finding
+    image = Image.new("RGB", (1200, 200), "white")
+    ImageDraw.Draw(image).text((30, 60), f"DNI {DNI}", fill="black", font=ImageFont.truetype(font("sans"), 80))
+    data = _image_page(image)
+    shifted = Finding("f", 0, "dni", DNI, [(200, 120, 330, 150)], 1.0, "ocr")  # box misaligned to the right
+    report = verify.verify(data, [shifted], services)
+    checks = {leak.check for leak in report.leaks}
+    assert not report.ok and {"ocr", "ocr-zona"} <= checks, report.to_json()
+    assert all(leak.page == 0 and leak.rects for leak in report.leaks if leak.check.startswith("ocr"))
+
+
+def test_face_left_visible_is_detected(services):
+    from PIL import Image
+
+    from app.engine import verify
+    from app.engine.types import Finding
+    from tests.fixtures.generate import ASSETS
+    portrait = Image.open(ASSETS / "lena.jpg").convert("RGB").resize((300, 300))
+    canvas = Image.new("RGB", (1200, 300), "white")
+    canvas.paste(portrait, (450, 0))
+    data = _image_page(canvas)
+    face = Finding("f", 0, "face", None, [(72, 100, 522, 175)], 0.9, "face")
+    report = verify.verify(data, [face], services)
+    assert any(leak.check == "rostros" and leak.page == 0 for leak in report.leaks), report.to_json()

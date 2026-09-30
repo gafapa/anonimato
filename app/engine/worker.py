@@ -19,7 +19,7 @@ import threading
 import time
 import traceback
 from ctypes import wintypes
-from typing import Callable
+from collections.abc import Callable
 
 
 class EngineError(RuntimeError):
@@ -137,7 +137,8 @@ def _handlers():
     def reload_models(ctx):
         if ctx.services is not None:
             ctx.services.reset_advanced()
-            ctx.services.check_integrity(force=True)
+            if not ctx.services.check_integrity(force=True):
+                raise RuntimeError(ctx.services.errors["integrity"])
         return True
 
     def ping(ctx):
@@ -198,7 +199,7 @@ def serve(conn, cancel, use_gpu: bool, with_models: bool, memory_limit_mb: int =
         except MemoryError:
             conn.send(("error", {"kind": "MemoryError", "message":
                                  "El documento necesita más memoria de la permitida para procesarse con seguridad"}))
-        except BaseException as error:  # noqa: BLE001 - reported to the parent
+        except BaseException as error:  # reported to the parent
             name = type(error).__name__
             if name == "Cancelled":
                 conn.send(("cancelled", None))

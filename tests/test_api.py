@@ -1,7 +1,6 @@
 """The window bridge end to end, with a fake window (file dialogs) and CPU inference."""
 import json
 import time
-from pathlib import Path
 
 import pymupdf
 import pytest
@@ -227,7 +226,7 @@ def test_blocked_export_shows_where_the_leak_is(api):
     """Verifying the unredacted working copy must locate the leak on the page."""
     from app.engine import verify
     doc_id = api.documents()[0]["id"]
-    doc, analysis = api._analysis(doc_id)
+    _, analysis = api._analysis(doc_id)
     finding = next(f for f in analysis.findings if f.type == "dni")
     report = verify.verify(analysis.working, [finding]).to_json()
     view = api._report_view(analysis, report)

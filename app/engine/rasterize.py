@@ -7,18 +7,18 @@ from __future__ import annotations
 
 import io
 
-import numpy as np
 import pymupdf
 from PIL import Image
+
+from . import document
 
 
 def rasterize(data: bytes, dpi: int = 300, ocr=None) -> bytes:
     source = pymupdf.open("pdf", data)
     output = pymupdf.open()
-    scale = dpi / 72
     for page in source:
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False, colorspace=pymupdf.csRGB, annots=False)
-        image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+        rendered = document.render(page, dpi)
+        scale, image = rendered.scale, rendered.image
         buffer = io.BytesIO()
         Image.fromarray(image).save(buffer, "JPEG", quality=92, subsampling=0, optimize=True)
         target = output.new_page(width=page.rect.width, height=page.rect.height)

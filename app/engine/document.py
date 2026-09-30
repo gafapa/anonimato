@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -10,7 +11,8 @@ from PIL import Image, ImageOps
 
 from .types import PageText, Rect
 
-LIMITS = {"max_bytes": 300 * 1024 * 1024, "max_pages": 1000, "max_page_pixels": 60_000_000}
+LIMITS = {"max_bytes": 300 * 1024 * 1024, "max_queue_bytes": 512 * 1024 * 1024,
+          "max_pages": 1000, "max_page_pixels": 60_000_000}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 # Real glyphs, not /ActualText replacements (which can hide the visible text from extraction).
 TEXT_FLAGS = (pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_PRESERVE_LIGATURES | pymupdf.TEXT_ACCURATE_BBOXES
@@ -34,7 +36,12 @@ def unlock(data: bytes, password: str) -> bytes:
     try:
         if doc.needs_pass and not doc.authenticate(password):
             raise DocumentError("Contraseña incorrecta")
-        return doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_NONE, garbage=1)
+        if doc.page_count > LIMITS["max_pages"]:
+            raise DocumentError(f"El documento supera {LIMITS['max_pages']} páginas")
+        unlocked = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_NONE, garbage=1)
+        if len(unlocked) > LIMITS["max_bytes"]:
+            raise DocumentError("El documento descifrado supera el límite de memoria de entrada")
+        return unlocked
     finally:
         doc.close()
 
@@ -98,25 +105,40 @@ def correct_perspective(image: Image.Image) -> Image.Image:
 def images_to_pdf(data: bytes, suffix: str) -> bytes:
     """Convert a (possibly multi-page) image into a PDF, one page per frame, at its real size."""
     try:
-        image = Image.open(io.BytesIO(data))
-    except Exception as error:  # noqa: BLE001
+        image = Image.open(io.BytesIO(data), formats=["JPEG", "PNG", "TIFF", "BMP", "WEBP"])
+    except Exception as error:
         raise DocumentError("La imagen no se puede leer") from error
-    out = pymupdf.open()
+    with image, pymupdf.open() as out:
+        return _image_frames_to_pdf(image, out, suffix)
+
+
+def _image_frames_to_pdf(image: Image.Image, out: pymupdf.Document, suffix: str) -> bytes:
     frame = 0
+    encoded_bytes = 0
     while True:
         try:
             image.seek(frame)
         except EOFError:
             break
+        if frame >= LIMITS["max_pages"]:
+            raise DocumentError(f"El documento supera {LIMITS['max_pages']} páginas")
+        if image.width * image.height > LIMITS["max_page_pixels"]:
+            raise DocumentError("La imagen supera el límite de píxeles por página")
         page_image = correct_perspective(ImageOps.exif_transpose(image.convert("RGB")))
-        dpi = image.info.get("dpi", (200, 200))[0] or 200
-        dpi = dpi if 50 <= dpi <= 1200 else 200
+        try:
+            dpi = float(image.info.get("dpi", (200, 200))[0] or 200)  # TIFF gives IFDRational values
+        except (TypeError, ValueError, ZeroDivisionError):
+            dpi = 200.0
+        dpi = dpi if 50 <= dpi <= 1200 else 200.0
         if suffix in (".jpg", ".jpeg"):
             buffer = io.BytesIO()
             page_image.save(buffer, "JPEG", quality=95)  # re-encode: drops EXIF/GPS metadata
         else:
             buffer = io.BytesIO()
             page_image.save(buffer, "PNG")
+        encoded_bytes += buffer.tell()
+        if encoded_bytes > LIMITS["max_bytes"]:
+            raise DocumentError("Las imágenes convertidas superan el límite de memoria de entrada")
         width, height = page_image.size[0] * 72 / dpi, page_image.size[1] * 72 / dpi
         page = out.new_page(width=width, height=height)
         page.insert_image(page.rect, stream=buffer.getvalue())
@@ -137,7 +159,7 @@ def load_bytes(data: bytes, filename: str) -> bytes:
         raise DocumentError("El archivo no es un PDF ni una imagen compatible")
     try:
         doc = pymupdf.open("pdf", data)
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         raise DocumentError("El PDF está dañado o no se puede abrir") from error
     try:
         if doc.needs_pass:
@@ -164,7 +186,7 @@ def prepare_working_copy(data: bytes) -> pymupdf.Document:
     doc = open_pdf(data)
     try:
         doc.bake(annots=True, widgets=True)
-    except Exception:  # noqa: BLE001 - some damaged annotations cannot be baked; they are removed later
+    except Exception:  # some damaged annotations cannot be baked; they are removed later
         pass
     return pymupdf.open("pdf", doc.tobytes(garbage=1))
 
@@ -223,10 +245,16 @@ class Render:
 
 
 def render(page: pymupdf.Page, dpi: int) -> Render:
+    if not 50 <= dpi <= 1200:
+        raise DocumentError("La resolución debe estar entre 50 y 1200 ppp")
     scale = dpi / 72
     width, height = page.rect.width * scale, page.rect.height * scale
     if width * height > LIMITS["max_page_pixels"]:
         scale = (LIMITS["max_page_pixels"] / (page.rect.width * page.rect.height)) ** 0.5
+    while math.ceil(page.rect.width * scale) * math.ceil(page.rect.height * scale) > LIMITS["max_page_pixels"]:
+        # MuPDF rounds pixel dimensions up; the rounded allocation must obey the same limit.
+        pixels = math.ceil(page.rect.width * scale) * math.ceil(page.rect.height * scale)
+        scale *= (LIMITS["max_page_pixels"] / pixels) ** 0.5 * 0.999
     pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False, colorspace=pymupdf.csRGB, annots=False)
     image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3).copy()
     return Render(image, scale, page.derotation_matrix)
@@ -258,5 +286,5 @@ def image_area_ratio(page: pymupdf.Page) -> float:
 def has_vector_graphics(page: pymupdf.Page) -> bool:
     try:
         return len(page.get_drawings()) > 20
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False

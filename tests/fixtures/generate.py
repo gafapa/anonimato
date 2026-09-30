@@ -72,7 +72,7 @@ def _xmp(value: str) -> bytes:
     return (f'<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
             f'<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description '
             f'xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>{value}</dc:creator></rdf:Description>'
-            f'</rdf:RDF></x:xmpmeta><?xpacket end="w"?>').encode("utf-8")
+            f'</rdf:RDF></x:xmpmeta><?xpacket end="w"?>').encode()
 
 
 def _metadata_stream(pdf: pikepdf.Pdf, value: str) -> pikepdf.Stream:
@@ -184,7 +184,14 @@ def f08_hidden_layer():
     doc = _base()
     ocg = doc.add_ocg("Privado", on=False)
     doc[0].insert_text((72, 450), f"Oculto: {NAME} {DNI}", fontsize=12, oc=ocg)
-    return _bytes(doc)
+    pdf = _pike(_bytes(doc))
+    # Layer configurations are named too, and can carry personal data.
+    props = pdf.Root.OCProperties
+    props.D.Name = pikepdf.String(f"Vista de {NAME}")
+    props.D.Creator = pikepdf.String(DNI)
+    props.Configs = pikepdf.Array([pikepdf.Dictionary(Name=pikepdf.String(f"Revisión {NAME}"),
+                                                      Creator=pikepdf.String(DNI), ON=pikepdf.Array(props.OCGs))])
+    return _pike_bytes(pdf)
 
 
 def f09_white_tiny():
@@ -279,11 +286,11 @@ def f15_pieceinfo():
     doc[0].insert_image(fitz.Rect(72, 300, 300, 350), stream=_jpeg_with_text("imagen"))
     pdf = _pike(_bytes(doc))
     private = pikepdf.Dictionary(Illustrator=pikepdf.Dictionary(
-        LastModified=pikepdf.String("D:2024"), Private=pdf.make_indirect(pikepdf.Stream(pdf, f"{NAME} {DNI}".encode("utf-8")))))
+        LastModified=pikepdf.String("D:2024"), Private=pdf.make_indirect(pikepdf.Stream(pdf, f"{NAME} {DNI}".encode()))))
     pdf.Root.PieceInfo = private
     pdf.pages[0].obj.PieceInfo = private
     for _, xobj in pdf.pages[0].Resources.XObject.items():
-        alt_img = pikepdf.Stream(pdf, f"{NAME}".encode("utf-8"))
+        alt_img = pikepdf.Stream(pdf, f"{NAME}".encode())
         xobj.Alternates = pikepdf.Array([pikepdf.Dictionary(Image=pdf.make_indirect(alt_img))])
         xobj.OPI = pikepdf.Dictionary({"/1.3": pikepdf.Dictionary(F=pikepdf.String(DNI))})
     pdf.Root.SpiderInfo = pikepdf.Dictionary(V=pikepdf.String(NAME))
@@ -321,7 +328,7 @@ def f17_incremental():
 
 def f18_attachments_js():
     doc = _base()
-    doc.embfile_add(f"{NAME}.txt", f"{NAME} {DNI}".encode("utf-8"), filename=f"{NAME}.txt", desc=DNI)
+    doc.embfile_add(f"{NAME}.txt", f"{NAME} {DNI}".encode(), filename=f"{NAME}.txt", desc=DNI)
     pdf = _pike(_bytes(doc))
     js = pikepdf.Dictionary(S=pikepdf.Name.JavaScript, JS=pikepdf.String(f"app.alert('{NAME} {DNI}');"))
     pdf.Root.OpenAction = js
@@ -398,7 +405,7 @@ def f24_jpx():
     ImageDraw.Draw(image).text((20, 30), f"{NAME} {DNI}", fill="black", font=ImageFont.truetype(system_font("sans"), 46))
     buffer = io.BytesIO()
     image.save(buffer, "JPEG2000", irreversible=False)
-    payload = f"<meta><autor>{NAME}</autor><dni>{DNI}</dni></meta>".encode("utf-8")
+    payload = f"<meta><autor>{NAME}</autor><dni>{DNI}</dni></meta>".encode()
     jp2 = buffer.getvalue() + (len(payload) + 8).to_bytes(4, "big") + b"xml " + payload
     doc = _base()
     doc[0].insert_image(fitz.Rect(72, 300, 522, 360), stream=jp2)
@@ -414,16 +421,41 @@ def f25_signed():
     widget.rect = fitz.Rect(72, 400, 300, 450)
     doc[0].add_widget(widget)
     pdf = _pike(_bytes(doc))
-    certificate = b"0\x82\x03\x10" + f"CN={NAME}, SERIALNUMBER=IDCES-{DNI}, C=ES".encode("utf-8") + bytes(64)
+    certificate = b"0\x82\x03\x10" + f"CN={NAME}, SERIALNUMBER=IDCES-{DNI}, C=ES".encode() + bytes(64)
     signature = pikepdf.Dictionary(
         Type=pikepdf.Name.Sig, Filter=pikepdf.Name("/Adobe.PPKLite"), SubFilter=pikepdf.Name("/adbe.pkcs7.detached"),
         Name=pikepdf.String(NAME), ContactInfo=pikepdf.String(f"{DNI} · 612 345 678"), Reason=pikepdf.String(f"Firmado por {NAME}"),
         Location=pikepdf.String("Madrid"), M=pikepdf.String("D:20240101000000"),
         Contents=pikepdf.String(certificate), ByteRange=pikepdf.Array([0, 0, 0, 0]))
-    for field in pdf.Root.AcroForm.Fields:
-        if field.get("/FT") == pikepdf.Name.Sig:
-            field.V = pdf.make_indirect(signature)
+    for form_field in pdf.Root.AcroForm.Fields:
+        if form_field.get("/FT") == pikepdf.Name.Sig:
+            form_field.V = pdf.make_indirect(signature)
     pdf.Root.AcroForm.SigFlags = 3
+    return _pike_bytes(pdf)
+
+
+def f26_jpx_metadata_only():
+    """JPEG 2000 image without visible personal data (so it is not redacted) but with XML boxes that name the person."""
+    image = Image.new("RGB", (400, 120), (230, 240, 250))
+    ImageDraw.Draw(image).rectangle((20, 20, 380, 100), outline="navy", width=4)
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG2000", irreversible=False)
+    payload = f"<meta><autor>{NAME}</autor><dni>{DNI}</dni></meta>".encode()
+    jp2 = buffer.getvalue() + (len(payload) + 8).to_bytes(4, "big") + b"xml " + payload
+    doc = _base()
+    doc[0].insert_image(fitz.Rect(72, 300, 372, 390), stream=jp2)
+    return _bytes(doc)
+
+
+def f27_actualtext_by_reference():
+    """Marked content whose alternate text lives in the page resources (/Properties) instead of inline."""
+    pdf = _pike(_bytes(_base()))
+    page = pdf.pages[0]
+    properties = pikepdf.Dictionary(MC0=pikepdf.Dictionary(ActualText=pikepdf.String(NAME), Alt=pikepdf.String(DNI),
+                                                           E=pikepdf.String(NAME)))
+    page.Resources.Properties = properties
+    page.contents_add(pikepdf.Stream(pdf, b"/Span /MC0 BDC\n"), prepend=True)
+    page.contents_add(pikepdf.Stream(pdf, b"\nEMC\n"))
     return _pike_bytes(pdf)
 
 
@@ -454,6 +486,8 @@ def build_all() -> list[Fixture]:
         Fixture(23, "handwritten", f23_handwritten(), needs_ocr=True),
         Fixture(24, "jpeg2000", f24_jpx(), needs_ocr=True),
         Fixture(25, "digital_signature", f25_signed()),
+        Fixture(26, "jpx_metadata", f26_jpx_metadata_only()),
+        Fixture(27, "actualtext_reference", f27_actualtext_by_reference()),
     ]
 
 

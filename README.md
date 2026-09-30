@@ -1,100 +1,82 @@
 # Anonimato
 
-Aplicación de escritorio para Windows que elimina datos personales, rostros y firmas de documentos PDF,
-fotos y escaneos **sin que quede rastro**, ni visible ni recuperable. Todo se procesa en el equipo; no hay
-servidor ni se envía ningún documento a ninguna parte.
+Anonimato is a desktop application that removes personal data, faces, and signatures from PDFs, photos, and scans. It runs on the local computer: documents are not sent to a server. The application removes marked content from both the visible page and recoverable document structures, then verifies the output before saving it.
 
-## Instalación
+## Installation
 
-1. Ejecuta `AnonimatoSetup-2.1.0.exe` (≈ 710 MB). No pide permisos de administrador ni necesita Python ni CUDA.
-2. Abre **Anonimato** desde el menú Inicio.
-3. (Opcional) En la barra lateral pulsa **Descargar IA avanzada** para leer texto manuscrito y hacer una revisión
-   contextual: Qwen3-VL-8B (≈ 5,5 GB) si la tarjeta gráfica tiene ≥ 7 GB libres, o Qwen3-VL-4B (≈ 2,8 GB) si no. Es la única conexión que realiza la aplicación: descarga modelos desde su origen
-   oficial y comprueba su SHA-256. En equipos sin Internet usa **Importar paquete sin conexión (.zip)**.
+1. Run `AnonimatoSetup-2.1.0.exe` (about 710 MB). Administrator rights, Python, and CUDA are not required.
+2. Open **Anonimato** from the Start menu.
+3. Optionally, open **IA avanzada** in the sidebar and choose **Descargar IA avanzada** to enable handwriting recognition and contextual review. The application selects Qwen3-VL-8B (about 5.5 GB) when at least 7 GB of GPU memory is free, or Qwen3-VL-4B (about 2.8 GB) otherwise. Model download is the application's only network connection. It retrieves models from their official source and checks their SHA-256 hashes. On an offline computer, use **Importar paquete sin conexión (.zip)**.
 
-Sin certificado de firma de código, Windows puede mostrar «Windows protegió su PC» la primera vez:
-pulsa **Más información → Ejecutar de todas formas**.
+Without a code-signing certificate, Windows may show a SmartScreen warning on first launch. Choose **More info → Run anyway**.
 
-## Uso
+## Usage
 
-1. Añade archivos o carpetas (PDF, JPG, PNG, TIFF…) o suéltalos en la ventana.
-2. Elige qué anonimizar y pulsa **Analizar documentos**.
-3. Revisa cada página: a la izquierda el original con los hallazgos marcados, en el centro el resultado real,
-   a la derecha la lista (atajos: ← → páginas, J/K hallazgos, Espacio incluir/excluir, M ocultar zona).
-4. **Guardar PDF verificado**: el archivo solo se escribe si la verificación final no encuentra ningún resto.
-5. Si vas a compartir el documento fuera, activa **Voy a compartir este documento fuera** (máxima seguridad).
+1. Add files or folders containing PDF, JPG, PNG, TIFF, or other supported images. You can also drop files into the window.
+2. Review the detection summary. Open **Ajustar detección** to change categories or detection methods, then select **Analizar documentos**.
+3. Review every page: the marked original appears on the left, the actual output preview in the center, and the findings list on the right. Use ←/→ for pages, J/K for findings, Space to include or exclude a finding, and M to draw a manual redaction.
+4. Select **Guardar PDF verificado**. The file is written only if final verification finds no remaining trace of the marked data.
+5. If the document will be shared outside your organization, enable **Voy a compartir este documento fuera** before saving. This selects the maximum-security output mode.
 
-## Cómo garantiza que no queda rastro
+## How removal and verification work
 
-- **Detección en capas:** reglas con validación (DNI/NIE/CIF, IBAN y CCC, tarjetas, NSS, teléfonos,
-  direcciones, pasaportes, IP…), IA de datos personales (GLiNER-PII), OCR (PP-OCRv5), lectura de manuscritos
-  y revisión contextual con un modelo local (Qwen3-VL), rostros (YuNet) y firmas. Cada dato encontrado se
-  busca después en todo el documento con sus variantes.
-- **Borrado destructivo:** MuPDF elimina el texto, los píxeles de imagen y el dibujo vectorial bajo cada zona;
-  se elimina también todo lo que queda fuera de la zona visible de la página.
-- **Limpieza estructural:** metadatos (Info y XMP en cualquier objeto), marcadores, etiquetas de accesibilidad
-  y textos alternativos, miniaturas, adjuntos, JavaScript, formularios, anotaciones, datos privados de
-  aplicaciones, EXIF/XMP dentro de JPEG, revisiones anteriores y objetos huérfanos.
-- **Modo máxima seguridad:** cada página se convierte en imagen tras tachar; opcionalmente se añade una capa de
-  texto buscable generada por OCR sobre el resultado ya anonimizado.
-- **Verificación obligatoria:** sobre los mismos bytes que se guardan: estructura, todos los objetos y flujos
-  (varias codificaciones), texto de cada página (incluido invisible, fuera de caja y capas ocultas), OCR de la
-  página renderizada y OCR ampliado de cada zona tachada (con relectura por IA de las zonas manuscritas), rostros,
-  y detección residual con reglas e IA. Si algo falla, no se guarda nada y el resto se marca en rojo sobre la página.
-- **Aislamiento:** cada documento se analiza en un proceso separado con límite de memoria y vigilancia de bloqueos.
-  Un PDF dañado o malicioso no puede cerrar ni colgar la aplicación; el motor se reinicia solo.
-- **Integridad:** los modelos y el motor de IA se comprueban con SHA-256 al arrancar; si algo está alterado, el
-  procesamiento se bloquea y se avisa.
-- **PDF con contraseña** (se pide al abrirlos; la salida nunca va cifrada) y **PDF con firma digital** (se avisa de
-  que la firma no puede conservarse y se eliminan los datos del firmante).
-- **Nombre del archivo:** por defecto `documento-N_anonimizado.pdf`.
-- **Registros:** CSV/JSON sin valores originales ni coordenadas salvo que se pidan expresamente.
+- **Layered detection:** validated rules for DNI/NIE/CIF, IBAN/CCC, cards, Social Security numbers, phone numbers, addresses, passports, and IP addresses; GLiNER-PII; PP-OCRv5; optional local handwriting and contextual review with Qwen3-VL; YuNet face detection; and signature detection. Found values and their variants are searched throughout the document.
+- **Destructive redaction:** MuPDF removes text, image pixels, and vector drawing beneath each redaction. Content outside the visible page area is also removed.
+- **Structural cleanup:** removes Info and XMP metadata, bookmarks, accessibility tags and alternative text, thumbnails, attachments, JavaScript, forms, annotations, application-private data, embedded JPEG EXIF/XMP, earlier revisions, and orphaned objects.
+- **Maximum-security mode:** rasterizes every page after redaction. An optional searchable text layer is generated by OCR from the anonymized result.
+- **Mandatory verification:** checks the exact bytes that would be saved: document structures, objects and encoded streams, page text (including invisible, off-page, and hidden-layer text), rendered-page OCR, enlarged OCR of redacted areas, handwritten areas when the advanced model is available, faces, and residual rule and AI detection. Failed verification blocks saving and marks the remaining content in red on the page.
+- **Process isolation:** each document is analyzed in a separate process with memory limits and hang detection. A damaged or malicious PDF cannot terminate the main window; the engine restarts if needed.
+- **Integrity checks:** installed model files and the AI runtime are hashed against the pinned SHA-256 manifest at startup. Disk metadata and writable caches are not trusted. Failed checks block processing; runtime files are also checked before launching the local AI executable.
+- **Protected and signed PDFs:** a password is requested when needed; output is never encrypted. A digital signature cannot survive modification, so the user is warned and signer data is removed.
+- **Safe output names and logs:** the default filename is `documento-N_anonimizado.pdf`. CSV/JSON logs omit original values and coordinates unless explicitly requested.
 
-**Límite honesto:** la garantía es completa sobre lo que se marca y sobre todo lo no visible (modo máxima
-seguridad). Lo que ni la detección ni la persona que revisa marcan sigue visible: la revisión página a página
-sigue siendo obligatoria.
+**Limit:** removal is complete for marked content and, in maximum-security mode, for non-visible content. Data missed by both detection and the person reviewing the pages can remain visible. Review every page before sharing.
 
-## Plataformas
+Export requires working OCR for pixel verification and a working face detector when faces are selected. A missing required verifier blocks saving. Input is limited to 300 MB per file, 512 MB of queued originals, 1,000 pages, and 60 million pixels per image frame or rendered page. Verification reports are invalidated when findings or output settings change. Outputs are published atomically after verification.
 
-Windows es la plataforma principal (instalador probado de principio a fin). macOS y Linux usan el mismo código con
-las piezas nativas de cada sistema; sus paquetes se compilan y prueban en GitHub Actions (`.github/workflows/build.yml`).
+## Platforms
+
+Windows is the primary platform; its installer has been tested end to end. macOS and Linux use the same application code with platform-specific dependencies. Their packages are built and tested in [the build workflow](.github/workflows/build.yml).
 
 | | Windows 10/11 x64 | macOS 12+ (Apple Silicon) | Linux x86-64 |
 |---|---|---|---|
-| Paquete | `AnonimatoSetup-x.y.z.exe` (Inno Setup, sin administrador) | `.dmg` con `Anonimato.app` | `.AppImage` |
-| Aceleración de modelos | DirectML (cualquier GPU) | CoreML | CUDA/ROCm si se instala `onnxruntime-gpu`; si no, CPU |
-| IA avanzada (llama.cpp) | Vulkan | Metal | Vulkan |
-| Límite de memoria del motor aislado | Job Object (motor y llama-server) | vigilante de bloqueos (macOS no aplica límites de memoria por proceso) | `RLIMIT_AS` en el proceso ligero |
-| Firma | opcional (aviso SmartScreen) | recomendable: sin firma y notarización hay que abrirla con clic derecho → Abrir | no necesaria |
+| Package | `AnonimatoSetup-x.y.z.exe` (Inno Setup, no administrator rights) | `.dmg` containing `Anonimato.app` | `.AppImage` |
+| Model acceleration | DirectML | CoreML | CUDA/ROCm with `onnxruntime-gpu`, otherwise CPU |
+| Advanced AI (`llama.cpp`) | Vulkan | Metal | Vulkan |
+| Isolated engine memory limit | Job Object for the engine and `llama-server` | Hang detection; macOS does not apply per-process memory limits here | `RLIMIT_AS` for the lightweight process |
+| Code signing | Optional; SmartScreen may warn | Recommended; unsigned apps may require right-click → Open | Not required |
 
-Compilación local: `packaging/build.ps1` (Windows), `bash packaging/build_macos.sh` (macOS; firma y notarización si
-se definen `MACOS_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`), `bash packaging/build_linux.sh` (Linux).
+Build locally with `packaging/build.ps1` on Windows, `packaging/build_macos.sh` on macOS, or `packaging/build_linux.sh` on Linux. macOS signing and notarization use `MACOS_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_PASSWORD` when provided.
 
-## Desarrollo
+## Development
 
-Requisitos: [uv](https://docs.astral.sh/uv/) y Python 3.12 (uv lo instala), en Windows, macOS o Linux.
+Install [uv](https://docs.astral.sh/uv/). The project uses Python 3.12, which uv can install on Windows, macOS, or Linux.
 
 ```powershell
 uv sync
-uv run python tools/fetch_models.py base runtime          # modelos base + llama.cpp (Vulkan)
-uv run python tools/fetch_models.py advanced              # IA avanzada (opcional)
-uv run python -m tests.fixtures.generate                  # corpus adversarial en tests/fixtures/out
-uv run pytest                                             # reglas, fugas, verificación
-uv run python -m app                                      # abrir la aplicación
+uv run python tools/fetch_models.py base runtime          # Base models and llama.cpp (Vulkan)
+uv run python tools/fetch_models.py advanced              # Optional advanced AI
+uv run python -m tests.fixtures.generate                  # Adversarial corpus in tests/fixtures/out
+uv run pytest                                             # Rules, leak paths, verification, engine, and UI
+uv run ruff check app tools tests                         # Static analysis
+uv run coverage run -m pytest && uv run coverage combine && uv run coverage report
+uv run python -m app                                      # Open the application
 ```
 
-- Comparativa de OCR manuscrito: `uv run python tools/benchmark_handwriting.py` → `docs/benchmark.md`.
-- Evaluación de la detección (recall/precisión por categoría): `uv run python tools/evaluate_detection.py --scanned`
-  → `docs/deteccion.md`. Añade tus documentos anotados en `eval/docs/*.pdf` + `*.json` (no se versionan).
-- Prueba de la interfaz real: `uv run python tools/ui_smoke.py`. Autocomprobación del ejecutable:
-  `Anonimato.exe --selftest=informe.json`.
-  Añade tus propias líneas en `eval/own/*.png` + `eval/own/labels.json` (no se versionan).
-- Paquete de IA sin conexión: `uv run python tools/make_offline_pack.py`.
-- Instalador: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.1.0.exe` (requiere Inno Setup 6).
+- Handwriting OCR benchmark: `uv run python tools/benchmark_handwriting.py` → [docs/benchmark.md](docs/benchmark.md).
+- Detection evaluation by category: `uv run python tools/evaluate_detection.py --scanned` → [docs/deteccion.md](docs/deteccion.md). Add annotated documents to `eval/docs/*.pdf` with matching `*.json` files; these files are not committed.
+- Real-window UI smoke test: `uv run python tools/ui_smoke.py`. Installed executable self-test: `Anonimato.exe --selftest=report.json`. Own handwriting examples go in `eval/own/*.png` with `eval/own/labels.json`; they are not committed.
+- Offline advanced-AI package: `uv run python tools/make_offline_pack.py`.
+- Windows installer: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.1.0.exe` (requires Inno Setup 6).
 
-Estructura: `app/engine` (motor), `app/ui` (interfaz), `app/api.py` (puente), `models/manifest.json`
-(modelos con SHA-256), `tests/` (corpus adversarial y tests), `packaging/` (PyInstaller + Inno Setup).
+[docs/pruebas.md](docs/pruebas.md) maps features to tests. The main directories are `app/engine` (processing), `app/ui` (interface), `app/api.py` (JavaScript–Python bridge), `models/manifest.json` (model hashes), `tests/` (adversarial fixtures and tests), and `packaging/` (PyInstaller and installers).
 
-## Licencia
+### Security maintenance
 
-GNU Affero General Public License v3.0 o posterior (`AGPL-3.0-or-later`). Ver `LICENSE` y `THIRD_PARTY.md`.
+Run `uv run pytest tests/test_security.py` for the security regression tests. CI audits installed Python dependencies with `pip-audit`; this does not replace auditing native libraries and bundled AI binaries. Linux packaging verifies AppImage tooling against `packaging/build-tools.json`, including cached downloads. If the upstream continuous release changes, the build deliberately stops until the new binary and its hash are reviewed. Windows packaging verifies the WebView2 bootstrapper's Microsoft Authenticode signature and stops on failed build commands.
+
+Keep dependency upgrades within the resolver's compatibility constraints. In particular, the current `tokenizers` requires `huggingface-hub<2.0`, and `sympy` requires `mpmath<1.4`; upgrading those dependencies beyond their supported range requires upgrading their consumers first.
+
+## License
+
+GNU Affero General Public License v3.0 or later (`AGPL-3.0-or-later`). See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -12,6 +12,8 @@ tests/fixtures/out/
 eval/
 *.egg-info/
 .pytest_cache/
+.coverage*
+htmlcov/
 models/base/
 models/candidates/
 runtime/

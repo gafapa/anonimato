@@ -35,7 +35,7 @@ def _text_like_drawings(page: pymupdf.Page, rect: pymupdf.Rect) -> bool:
     """Vector paths that look like glyph outlines (not page backgrounds) inside the area."""
     try:
         drawings = page.get_drawings()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     for drawing in drawings:
         area = pymupdf.Rect(drawing["rect"])
@@ -127,7 +127,7 @@ def render_output(data: bytes) -> bytes:
     doc = pymupdf.open("pdf", data)
     try:
         doc.subset_fonts()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     out = doc.tobytes(garbage=4, clean=True, deflate=True, deflate_images=True, deflate_fonts=True,
                       no_new_id=False, pretty=False, preserve_metadata=False)

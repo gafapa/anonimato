@@ -9,7 +9,7 @@ from app.engine.worker import EngineCrashed, EngineError, EngineProcess, EngineT
 
 @pytest.fixture
 def light():
-    engine = EngineProcess(with_models=False, use_gpu=False, memory_limit_mb=2048, stall_seconds=5)
+    engine = EngineProcess(with_models=False, use_gpu=False, memory_limit_mb=2048, stall_seconds=30)
     yield engine
     engine.stop()
 
@@ -31,8 +31,9 @@ def test_crash_is_contained_and_recovered(light):
 
 
 def test_hang_is_stopped_by_the_watchdog(light):
+    light.call("ping")  # Separate cold imports from the deliberately short watchdog deadline.
     with pytest.raises(EngineTimeout):
-        light.call("_test_hang", 60)
+        light.call("_test_hang", 60, stall_seconds=2)
     assert light.call("ping") > 0
 
 
@@ -63,7 +64,7 @@ def test_wrong_password(light):
 
 def test_gpu_hang_falls_back_to_cpu(monkeypatch):
     """If the engine stalls during an analysis on the GPU, it restarts on the CPU and retries."""
-    engine = EngineProcess(with_models=False, use_gpu=True, stall_seconds=3)
+    engine = EngineProcess(with_models=False, use_gpu=True, stall_seconds=30)
     engine.with_models = True  # behave like the model engine for the fallback logic
     calls = []
     original = engine._call

@@ -33,10 +33,8 @@ EOF
 chmod +x "$APPDIR/AppRun"
 
 TOOL="build/appimagetool-x86_64.AppImage"
-if [ ! -x "$TOOL" ]; then
-  curl -sSL -o "$TOOL" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-  chmod +x "$TOOL"
-fi
+uv run python tools/fetch_build_tool.py appimagetool "$TOOL"
+chmod +x "$TOOL"
 OUT="dist/Anonimato-${VERSION}-linux-x86_64.AppImage"
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUT"
 

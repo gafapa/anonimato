@@ -51,12 +51,34 @@ def selftest(report_path: str) -> int:
             "crash_recovery": recovered,
             "seconds": round(time.time() - started, 1),
         }
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         result = {"ok": False, "error": repr(error)}
     finally:
         engine.stop()
     Path(report_path).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if result.get("ok") else 1
+
+
+def dropped_paths(event: dict) -> list[str]:
+    """Full paths of the files dropped on the window (pywebview adds them to the DOM event)."""
+    files = (event or {}).get("dataTransfer", {}).get("files", []) or []
+    return [f["pywebviewFullPath"] for f in files if isinstance(f, dict) and f.get("pywebviewFullPath")]
+
+
+def handle_drop(api, window, event: dict) -> int:
+    import json
+
+    from .engine.document import DocumentError
+    paths = dropped_paths(event)
+    try:
+        added = api.add_paths(paths) if paths else []
+    except (DocumentError, OSError) as error:
+        window.evaluate_js("window.app && window.app.notifyError(" + json.dumps(str(error)) + ")")
+        window.evaluate_js("window.app && window.app.refreshDocuments()")
+        return 0
+    if added:
+        window.evaluate_js("window.app && window.app.refreshDocuments()")
+    return len(added)
 
 
 def main() -> None:
@@ -76,11 +98,7 @@ def main() -> None:
     api.attach(window)
 
     def on_drop(event) -> None:
-        files = event.get("dataTransfer", {}).get("files", [])
-        paths = [f.get("pywebviewFullPath") for f in files if f.get("pywebviewFullPath")]
-        if paths:
-            api.add_paths(paths)
-            window.evaluate_js("window.app && window.app.refreshDocuments()")
+        handle_drop(api, window, event)
 
     def on_loaded() -> None:
         window.dom.document.events.dragover += DOMEventHandler(lambda e: None, True, True)

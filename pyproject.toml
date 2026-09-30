@@ -1,22 +1,22 @@
 [project]
 name = "anonimato"
 version = "2.1.0"
-description = "Anonimización local de PDF e imágenes, sin rastro"
+description = "Local PDF and image anonymization with verified removal"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "pymupdf>=1.26",
-  "pikepdf>=9",
-  "pywebview>=5; sys_platform != 'linux'",
-  "pywebview[qt]>=5; sys_platform == 'linux'",
+  "pymupdf>=1.28.2",
+  "pikepdf>=10.16.0",
+  "pywebview>=6.2.1; sys_platform != 'linux'",
+  "pywebview[qt]>=6.2.1; sys_platform == 'linux'",
   "numpy>=2",
-  "pillow>=11",
+  "pillow>=12.3.0",
   "opencv-python-headless>=4.10",
   "onnxruntime-directml>=1.20; sys_platform == 'win32'",
   "onnxruntime>=1.20; sys_platform != 'win32'",
   "tokenizers>=0.20",
   "rapidfuzz>=3",
-  "regex>=2026.9.10",
+  "regex>=2026.9.29",
   "pyyaml>=6.0.3",
 ]
 
@@ -24,11 +24,42 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pyinstaller>=6",
-    "onnx>=1.23.0",
+    "onnx>=1.23.1",
     "pyarrow>=25.0.1",
+    "coverage[toml]>=7.16.2",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+parallel = true
+concurrency = ["multiprocessing", "thread"]
+patch = ["subprocess", "_exit"]
+omit = ["app/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "PL", "RUF"]
+# Complexity/style rules that do not point at defects in this code base; PLW0603 (module-level GPU state),
+# SIM115 (the diagnostic log stays open for the life of the engine process) and B905 (numpy index pairs)
+# are intentional.
+ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR0917", "PLR2004", "PLC0415", "RUF001", "RUF002", "RUF003",
+          "RUF005", "RUF015", "RUF046", "SIM102", "SIM105", "SIM115", "PLR1714", "PLW0603", "B905", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["B007"]

@@ -138,7 +138,7 @@ def run_engine(name: str, samples: list[tuple[Image.Image, str]]) -> list[tuple[
             try:
                 text = server.chat([{"role": "user", "content": [image_part(np.asarray(image)), {"type": "text", "text": prompt}]}],
                                    max_tokens=160)
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 text = f"<error {error}>"
             readings.append((norm(text), time.time() - started))
     finally:
@@ -152,13 +152,13 @@ def main() -> None:
     parser.add_argument("--models", default="ppocr,qwen3vl-4b,qwen3vl-8b,paddleocr-vl")
     args = parser.parse_args()
     sets = {
-        "IAM (inglés)": fetch_rows("iam", args.n),
-        "Censo francés (nombres)": fetch_rows("census", args.n),
-        "Sintético español con datos personales": synthetic(args.n),
+        "IAM (English)": fetch_rows("iam", args.n),
+        "French census (names)": fetch_rows("census", args.n),
+        "Synthetic Spanish personal data": synthetic(args.n),
     }
     mine = own()
     if mine:
-        sets["Tus documentos"] = mine
+        sets["Your documents"] = mine
     engines = [m for m in args.models.split(",") if m == "ppocr" or models.model(CANDIDATES[m][0]).path.exists()]
     results: dict[str, dict[str, dict]] = {}
     for engine in engines:
@@ -166,7 +166,7 @@ def main() -> None:
         for set_name, samples in sets.items():
             readings = run_engine(engine, samples)
             cers, exact, kept, seconds = [], 0, [], []
-            census = set_name.startswith("Censo")
+            census = set_name.startswith("French census")
             for (image, truth), (reading, secs) in zip(samples, readings):
                 truth_n, reading_n = norm(truth), norm(reading)
                 if census:
@@ -180,7 +180,7 @@ def main() -> None:
                     cers.append(Levenshtein.distance(truth_n, reading_n) / max(1, len(truth_n)))
                 exact += truth_n == reading_n
                 seconds.append(secs)
-                flag = pii_kept(truth_n, reading_n, census_names(truth) if set_name.startswith("Censo") else None)
+                flag = pii_kept(truth_n, reading_n, census_names(truth) if census else None)
                 if flag is not None:
                     kept.append(flag)
             results.setdefault(set_name, {})[engine] = {
@@ -188,13 +188,13 @@ def main() -> None:
                 "pii": (sum(kept) / len(kept)) if kept else None, "seconds": float(np.median(seconds)),
             }
             print(f"   {set_name}: {results[set_name][engine]}", flush=True)
-    lines = ["# Comparativa de OCR manuscrito", "",
-             f"Generado: {time.strftime('%Y-%m-%d %H:%M')} · equipo: RTX 2070 8 GB (Vulkan) · {args.n} líneas por conjunto.", "",
-             "CER = error por carácter (menor es mejor; en el censo, solo sobre los nombres). Exactas = líneas idénticas.",
-             "Datos personales = líneas cuyos datos personales siguen detectándose tras la transcripción (en el censo:",
-             "nombres y apellidos leídos con ≤ 15 % de error). Tiempo = mediana por línea.", ""]
+    lines = ["# Handwriting OCR benchmark", "",
+             f"Generated: {time.strftime('%Y-%m-%d %H:%M')} · hardware: RTX 2070 8 GB (Vulkan) · {args.n} lines per dataset.", "",
+             "CER = character error rate (lower is better; census CER covers names only). Exact = identical lines.",
+             "Personal data = lines where personal data remains detectable after transcription (for the census:",
+             "first and last names read with at most 15% error). Time = median per line.", ""]
     for set_name, per_engine in results.items():
-        lines += [f"## {set_name}", "", "| Motor | CER | Exactas | Datos personales | s/línea |", "|---|---|---|---|---|"]
+        lines += [f"## {set_name}", "", "| Engine | CER | Exact | Personal data | s/line |", "|---|---|---|---|---|"]
         for engine, r in per_engine.items():
             pii = "—" if r["pii"] is None else f"{r['pii'] * 100:.0f} %"
             lines.append(f"| {engine} | {r['cer'] * 100:.1f} % | {r['exact'] * 100:.0f} % | {pii} | {r['seconds']:.2f} |")

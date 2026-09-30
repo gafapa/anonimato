@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import csv
+import copy
 import io
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from .rules import CATEGORIES
 from .types import Finding
@@ -12,7 +13,8 @@ from .types import Finding
 
 def _cell(value) -> str:
     text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+    first = text.lstrip(" \t\r\n")[:1]
+    return "'" + text if first in ("=", "+", "-", "@") or text[:1] in ("\t", "\r", "\n") else text
 
 
 def build_csv(findings: list[Finding], include_originals: bool = False, include_coords: bool = False) -> str:
@@ -44,9 +46,14 @@ def build_json(findings: list[Finding], pages: int, report: dict | None, include
         entry = mapping.setdefault(f.token, {"tipo": CATEGORIES[f.type]["label"], "reemplazo": f.token, "ocurrencias": 0})
         entry["ocurrencias"] += 1
         if include_originals and f.value:
-            entry.setdefault("originales", sorted({f.value} | set(entry.get("originales", []))))
+            entry["originales"] = sorted({f.value} | set(entry.get("originales", [])))
+    report = copy.deepcopy(report)
+    if report and not include_coords:
+        for leak in report.get("leaks", []):
+            leak.pop("rects", None)
+            leak.pop("view", None)
     data = {
-        "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "paginas": pages,
         "resumen": {"sustituciones": len(enabled), "valoresUnicos": len(mapping),
                     "rostros": sum(1 for f in enabled if f.type == "face")},

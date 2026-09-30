@@ -347,26 +347,7 @@ def find_addresses(text: str) -> list[Match]:
 
 
 # ---------------------------------------------------------------- names
-NAME_STOPS = {no_accents(w) for w in (
-    "director directora gerente jefe jefa presidente presidenta secretario secretaria administrativo administrativa "
-    "tecnico tecnica responsable delegado delegada titular cliente representante administracion ventas personal "
-    "operaciones contabilidad departamento area unidad servicio centro division coordinador coordinadora coordinacion "
-    "municipio provincia localidad ciudad poblacion empresa sociedad corporacion general operador analista asesor "
-    "asesora abogado abogada medico medica enfermero enfermera maestro maestra profesor profesora investigador "
-    "investigadora estudiante alumno alumna becario becaria practicante consultor consultora ingeniero ingeniera "
-    "arquitecto arquitecta adjunto adjunta auxiliar dni nif nie cif nss telefono correo email matricula fecha "
-    "direccion domicilio iban cuenta calle avenida plaza juzgado tribunal ayuntamiento concello consejeria "
-    "conselleria ministerio universidad colegio instituto hospital banco seguridad social agencia tributaria "
-    "sr sra don dona doña firma firmado fdo nombre apellidos apellido expediente referencia asunto "
-    "estimado estimada estimados querido querida señor señora señores usuario usuaria cliente clientes atentamente "
-    "saludos cordiales distinguido distinguida interesado interesada destinatario remitente "
-    "paciente pacientes solicitante firmante beneficiario beneficiaria menor tutor tutora padre madre hijo hija "
-    "testigo conyuge demandante demandado demandada denunciante denunciado arrendador arrendadora arrendatario "
-    "arrendataria comprador compradora vendedor vendedora trabajador trabajadora empleado empleada propietario "
-    "propietaria heredero heredera causante compareciente contacto "
-    "lunes martes miercoles jueves viernes sabado domingo enero febrero marzo abril mayo junio julio agosto "
-    "septiembre octubre noviembre diciembre madrid barcelona"
-).split()}
+NAME_STOPS = {no_accents(w) for w in ["director", "directora", "gerente", "jefe", "jefa", "presidente", "presidenta", "secretario", "secretaria", "administrativo", "administrativa", "tecnico", "tecnica", "responsable", "delegado", "delegada", "titular", "cliente", "representante", "administracion", "ventas", "personal", "operaciones", "contabilidad", "departamento", "area", "unidad", "servicio", "centro", "division", "coordinador", "coordinadora", "coordinacion", "municipio", "provincia", "localidad", "ciudad", "poblacion", "empresa", "sociedad", "corporacion", "general", "operador", "analista", "asesor", "asesora", "abogado", "abogada", "medico", "medica", "enfermero", "enfermera", "maestro", "maestra", "profesor", "profesora", "investigador", "investigadora", "estudiante", "alumno", "alumna", "becario", "becaria", "practicante", "consultor", "consultora", "ingeniero", "ingeniera", "arquitecto", "arquitecta", "adjunto", "adjunta", "auxiliar", "dni", "nif", "nie", "cif", "nss", "telefono", "correo", "email", "matricula", "fecha", "direccion", "domicilio", "iban", "cuenta", "calle", "avenida", "plaza", "juzgado", "tribunal", "ayuntamiento", "concello", "consejeria", "conselleria", "ministerio", "universidad", "colegio", "instituto", "hospital", "banco", "seguridad", "social", "agencia", "tributaria", "sr", "sra", "don", "dona", "doña", "firma", "firmado", "fdo", "nombre", "apellidos", "apellido", "expediente", "referencia", "asunto", "estimado", "estimada", "estimados", "querido", "querida", "señor", "señora", "señores", "usuario", "usuaria", "cliente", "clientes", "atentamente", "saludos", "cordiales", "distinguido", "distinguida", "interesado", "interesada", "destinatario", "remitente", "paciente", "pacientes", "solicitante", "firmante", "beneficiario", "beneficiaria", "menor", "tutor", "tutora", "padre", "madre", "hijo", "hija", "testigo", "conyuge", "demandante", "demandado", "demandada", "denunciante", "denunciado", "arrendador", "arrendadora", "arrendatario", "arrendataria", "comprador", "compradora", "vendedor", "vendedora", "trabajador", "trabajadora", "empleado", "empleada", "propietario", "propietaria", "heredero", "heredera", "causante", "compareciente", "contacto", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre", "madrid", "barcelona"]}
 
 NAME_TOKEN = re.compile(r"[\p{L}][\p{L}'’\-‐]*\.?")
 
@@ -481,7 +462,8 @@ def find_names(text: str) -> list[Match]:
             if no_accents(word.lower()) not in NAME_STOPS and preceding and preceding[-1] not in ".:;!?\n":
                 found = (found[0] - len(before.group(0)), found[1], word + " " + found[2])
                 known = [word] + known
-        if len(known) >= 2 and any(no_accents(t.lower()) in names_data.FIRST_NAMES for t in known) or len(known) >= 3:
+        has_given_name = any(no_accents(t.lower()) in names_data.FIRST_NAMES for t in known)
+        if (len(known) >= 2 and has_given_name) or len(known) >= 3:
             out.append(Match(found[0], found[1], "name", found[2], 0.7, prio=450))
             pos = max(pos, found[1])
     return out

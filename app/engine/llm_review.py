@@ -58,7 +58,7 @@ def review(server: LlamaServer, text: str, known: list[tuple[int, int, str]], ch
         try:
             answer = server.chat([{"role": "user", "content": PROMPT + piece}], max_tokens=700, json_mode=True)
             items = json.loads(answer).get("datos", [])
-        except Exception:  # noqa: BLE001 - a failed review never blocks; verification still runs
+        except Exception:  # a failed review never blocks; verification still runs
             continue
         for item in items if isinstance(items, list) else []:
             fragment = str(item.get("texto", "")).strip() if isinstance(item, dict) else ""

@@ -21,6 +21,9 @@ def session(path: str, use_gpu: bool = True, cpu_basic: bool = False) -> ort.Inf
     global _gpu_ok
     use_gpu = _gpu_allowed(use_gpu)
     options = ort.SessionOptions()
+    # Several models coexist in each engine. Idle pools must not compete with inference or the UI.
+    options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    options.add_session_config_entry("session.inter_op.allow_spinning", "0")
     options.log_severity_level = 3
     options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     providers = ["CPUExecutionProvider"]
@@ -36,7 +39,7 @@ def session(path: str, use_gpu: bool = True, cpu_basic: bool = False) -> ort.Inf
             with _lock:
                 _gpu_ok = True
             return created
-        except Exception:  # noqa: BLE001 - driver problems: fall back to CPU for the rest of the session
+        except Exception:  # driver problems: fall back to CPU for the rest of the session
             with _lock:
                 _gpu_ok = False
     if cpu_basic:
@@ -51,6 +54,8 @@ def gpu_active() -> bool:
 
 def gpu_available(use_gpu: bool = True) -> bool:
     """GPU in use, or usable and not yet tried."""
+    if not _gpu_allowed(use_gpu):
+        return False
     if _gpu_ok is not None:
         return _gpu_ok
     return _gpu_allowed(use_gpu) and bool(onnx_gpu_providers(ort.get_available_providers()))

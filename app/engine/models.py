@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sys
 import tarfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 CHUNK = 1 << 20
 
@@ -104,7 +103,8 @@ def is_installed(item: ModelFile, verify: bool = False) -> bool:
 
 
 def group_installed(group: str) -> bool:
-    return all(is_installed(item) for item in load_manifest().get(group, []))
+    items = load_manifest().get(group, [])
+    return bool(items) and all(is_installed(item) for item in items)
 
 
 Progress = Callable[[str, int, int], None]
@@ -115,6 +115,8 @@ def download(item: ModelFile, progress: Progress | None = None) -> Path:
     target = item.path
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and (not item.sha256 or sha256_of(target) == item.sha256):
+        if item.unzip:
+            extract_runtime(target)
         return target
     partial = target.with_suffix(target.suffix + ".part")
     offset = partial.stat().st_size if partial.exists() else 0
@@ -200,51 +202,51 @@ def _runtime_files() -> dict[str, str]:
     return raw.get("runtime_files", {}).get(SYSTEM, {})
 
 
-def _integrity_cache_path() -> Path:
-    return user_data_dir() / "integrity.json"
-
-
 def verify_all(force: bool = False) -> list[str]:
-    """Names of files whose SHA-256 does not match the manifest (models and llama.cpp runtime)."""
+    """Hash installed models and runtime files on every check.
+
+    ``force`` is retained for callers; no writable on-disk cache is trusted.
+    Optional models may be absent, but a partially installed runtime is refused.
+    """
     targets: list[tuple[str, Path, str]] = []
     manifest = load_manifest()
     for group in INTEGRITY_GROUPS:
         for item in manifest.get(group, []):
             if item.sha256:
                 targets.append((item.id, item.path, item.sha256))
-    for name, digest in _runtime_files().items():
-        targets.append((f"runtime/{name}", runtime_dir() / name, digest))
+    bad = []
+    for label, path, expected in targets:
+        if path.exists() and sha256_of(path) != expected:
+            bad.append(label)
+    return bad + verify_runtime()
+
+
+def verify_runtime() -> list[str]:
+    """Check the executable and every pinned library before executing llama.cpp."""
+    runtime_files = _runtime_files()
     # llama.cpp loads every ggml backend library found next to it: an unexpected one is refused.
-    pinned = set(_runtime_files())
+    pinned = set(runtime_files)
     llama_dir = runtime_dir() / "llama"
     unexpected = []
+    if llama_dir.exists() and not pinned:
+        return ["runtime/llama (sin hashes de integridad)"]
     if pinned and llama_dir.exists():
         for path in llama_dir.iterdir():
             name = path.name.lower()
             is_backend = name.startswith(("ggml", "libggml")) and any(ext in name for ext in (".dll", ".so", ".dylib"))
             if is_backend and f"llama/{path.name}" not in pinned:
                 unexpected.append(f"runtime/llama/{path.name} (no esperado)")
-    try:
-        cache = {} if force else json.loads(_integrity_cache_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cache = {}
+    targets = []
+    if llama_dir.exists():
+        for name, digest in runtime_files.items():
+            path = runtime_dir() / name
+            if not path.is_file():
+                unexpected.append(f"runtime/{name} (no encontrado)")
+            else:
+                targets.append((f"runtime/{name}", path, digest))
     bad = []
     for label, path, expected in targets:
-        if not path.exists():
-            continue
-        stat = path.stat()
-        key = str(path)
-        entry = cache.get(key)
-        if entry and entry[0] == stat.st_size and entry[1] == stat.st_mtime_ns and entry[2] == expected:
-            continue
         actual = sha256_of(path)
         if actual != expected:
             bad.append(label)
-            cache.pop(key, None)
-        else:
-            cache[key] = [stat.st_size, stat.st_mtime_ns, expected]
-    try:
-        _integrity_cache_path().write_text(json.dumps(cache), encoding="utf-8")
-    except OSError:
-        pass
     return bad + unexpected

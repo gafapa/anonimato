@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.engine import models  # noqa: E402
+from app.engine import models
 
 
 def main() -> None:

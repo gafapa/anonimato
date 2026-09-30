@@ -5,6 +5,7 @@
   const state = {
     status: null, docs: [], activeId: null, details: null, page: 0, current: -1,
     manual: false, polling: false, previewTimer: null, previewSeq: 0, filter: '',
+    analysisSignature: null,
   };
   let api = null;
 
@@ -30,6 +31,35 @@
       uniform: $('optUniform').checked, keepName: $('optKeepName').checked, dpi: Number($('optDpi').value),
     };
   }
+  function detectionSignature() {
+    const selected = options();
+    return JSON.stringify({
+      categories: [...selected.categories].sort(), ocr: selected.ocr, ai: selected.ai,
+      handwriting: selected.handwriting, llmReview: selected.llmReview,
+      faces: selected.faces, signatures: selected.signatures,
+      propagate: selected.propagate, dpi: selected.dpi,
+    });
+  }
+  function renderSettingsSummary() {
+    if (!state.status) return;
+    const total = state.status.categories.length;
+    const selected = document.querySelectorAll('#catGrid input:checked').length;
+    const methods = [
+      $('optOcr').checked && 'OCR',
+      $('optAi').checked && 'IA de datos personales',
+      $('optFaces').checked && 'rostros',
+      $('optSignatures').checked && 'firmas',
+    ].filter(Boolean);
+    $('detectionSummary').textContent = `${selected} de ${total} categorías seleccionadas · ${methods.length ? methods.join(', ') : 'sin métodos adicionales'}`;
+    $('advancedSummary').textContent = state.status.advancedInstalled ? '· instalada' : '· opcional';
+    $('advancedDetails').hidden = state.status.advancedInstalled;
+    $('textLayerOption').hidden = !$('optMaxSecurity').checked;
+    const hasResults = state.docs.some((doc) => doc.status === 'ready');
+    $('btnRun').textContent = hasResults ? 'Volver a analizar documentos' : 'Analizar documentos';
+    $('settingsChangeNotice').hidden = !hasResults || !state.analysisSignature ||
+      state.analysisSignature === detectionSignature();
+    $('sidebar').classList.toggle('reviewing', hasResults);
+  }
   function activeDoc() { return state.docs.find((doc) => doc.id === state.activeId) || null; }
   function visibleFindings() {
     const all = state.details?.findings || [];
@@ -40,9 +70,15 @@
   function renderStatus() {
     const s = state.status;
     const host = $('engineStatus');
+    const advancedStatus = s.advancedInstalled
+      ? el('span', { className: 'pill ok', textContent: 'IA avanzada lista' })
+      : el('button', {
+        className: 'pill warn status-action', type: 'button', textContent: 'Instalar IA avanzada',
+        onclick: () => { $('advancedDetails').open = true; $('advancedDetails').scrollIntoView({ block: 'nearest' }); },
+      });
     host.replaceChildren(
       el('span', { className: 'pill ' + (s.services.gpu ? 'ok' : 'warn'), textContent: s.services.gpu ? 'GPU activa' : 'Modo CPU' }),
-      el('span', { className: 'pill ' + (s.advancedInstalled ? 'ok' : 'warn'), textContent: s.advancedInstalled ? 'IA avanzada lista' : 'IA avanzada no instalada' }),
+      advancedStatus,
       el('span', { className: 'pill ok', textContent: 'Sin conexión · local' }),
     );
     const errors = Object.entries(s.errors || {});
@@ -58,6 +94,7 @@
       label.classList.toggle('unavailable', !s.advancedInstalled);
       label.querySelector('input').disabled = !s.advancedInstalled;
     }
+    renderSettingsSummary();
     const box = $('advancedBox');
     if (s.advancedInstalled) {
       box.textContent = `IA avanzada instalada (${s.advancedLabel}): lectura de manuscritos y revisión contextual.`;
@@ -80,6 +117,7 @@
       input.dataset.cat = category.key;
       grid.append(el('label', { className: 'cat' }, [input, el('span', { textContent: category.label })]));
     }
+    renderSettingsSummary();
     const filter = $('typeFilter');
     for (const category of state.status.categories) {
       filter.append(el('option', { value: category.key, textContent: category.label }));
@@ -138,6 +176,7 @@
       queue.append(item);
     }
     $('btnRun').disabled = !state.docs.length || state.polling || $('btnRun').dataset.blocked === '1';
+    renderSettingsSummary();
   }
 
   async function refreshDocuments() {
@@ -145,6 +184,13 @@
     if (!state.activeId && state.docs.length) state.activeId = state.docs[0].id;
     renderQueue();
     await showActive();
+  }
+
+  async function addDocuments(picker) {
+    setError('');
+    try { await picker(); }
+    catch (error) { setError(error.message || String(error)); }
+    finally { await refreshDocuments(); }
   }
 
   async function selectDoc(id) {
@@ -180,8 +226,14 @@
   // ------------------------------------------------------------ processing & polling
   async function run() {
     setError('');
-    const started = await api.process(options(), null);
+    let started;
+    try { started = await api.process(options(), null); }
+    catch (error) { setError(error.message || String(error)); return; }
     if (!started) { setError('Ya hay un proceso en curso.'); return; }
+    state.analysisSignature = detectionSignature();
+    $('detectionDetails').open = false;
+    $('advancedDetails').open = false;
+    $('resultDetails').open = false;
     state.details = null;
     startPolling();
   }
@@ -486,6 +538,9 @@
     let result;
     try {
       result = await api.save_all(options());
+    } catch (error) {
+      setError(`Error al guardar: ${error.message || error}`);
+      return;
     } finally {
       clearInterval(ticker);
     }
@@ -498,13 +553,17 @@
     renderDetails();
   }
   async function saveLog(format) {
-    await api.save_log(state.details.id, format, $('optLogOriginals').checked, $('optLogCoords').checked);
+    try { await api.save_log(state.details.id, format, $('optLogOriginals').checked, $('optLogCoords').checked); }
+    catch (error) { setError(`Error al guardar: ${error.message || error}`); }
   }
 
   // ------------------------------------------------------------ wiring
   function wire() {
-    $('btnAddFiles').addEventListener('click', async () => { await api.pick_files(); await refreshDocuments(); });
-    $('btnAddFolder').addEventListener('click', async () => { await api.pick_folder(false); await refreshDocuments(); });
+    for (const input of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #optMaxSecurity')) {
+      input.addEventListener('change', renderSettingsSummary);
+    }
+    $('btnAddFiles').addEventListener('click', () => addDocuments(() => api.pick_files()));
+    $('btnAddFolder').addEventListener('click', () => addDocuments(() => api.pick_folder(false)));
     $('btnRun').addEventListener('click', run);
     $('btnCancel').addEventListener('click', () => api.cancel());
     $('btnPdf').addEventListener('click', savePdf);
@@ -512,15 +571,22 @@
     $('btnCsv').addEventListener('click', () => saveLog('csv'));
     $('btnJson').addEventListener('click', () => saveLog('json'));
     $('optLogOriginals').addEventListener('change', () => { $('logWarning').hidden = !$('optLogOriginals').checked; });
-    $('btnReset').addEventListener('click', async () => { if (await api.clear()) { state.activeId = null; state.details = null; await refreshDocuments(); } });
+    $('btnReset').addEventListener('click', async () => { if (await api.clear()) { state.activeId = null; state.details = null; state.analysisSignature = null; await refreshDocuments(); } });
     $('btnPrevPage').addEventListener('click', () => { state.page -= 1; renderPage(); });
     $('btnNextPage').addEventListener('click', () => { state.page += 1; renderPage(); });
     $('btnManual').addEventListener('click', () => setManual(!state.manual));
     $('btnAllOn').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), true));
     $('btnAllOff').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), false));
     $('typeFilter').addEventListener('change', (event) => { state.filter = event.target.value; state.current = -1; renderDetails(); });
-    for (const id of ['optMode', 'optMaxSecurity', 'optUniform']) {
-      $(id).addEventListener('change', () => { if (state.details) { state.details.report = null; renderReport(null); schedulePreview(); } });
+    for (const id of ['optMode', 'optMaxSecurity', 'optUniform', 'optTextLayer']) {
+      $(id).addEventListener('change', async () => {
+        if (state.details) {
+          state.details.report = null;
+          renderReport(null);
+          await api.invalidate_report(state.details.id);
+          schedulePreview();
+        }
+      });
     }
     installManual($('originalWrap'));
     installManual($('resultWrap'));
@@ -553,8 +619,16 @@
     renderStatus();
     wire();
     await refreshDocuments();
+    renderSettingsSummary();
   }
 
-  window.app = { refreshDocuments };
+  async function refreshStatus() {
+    state.status = await api.status();
+    renderStatus();
+    renderQueue();
+    renderSettingsSummary();
+  }
+
+  window.app = { refreshDocuments, refreshStatus, notifyError: setError };
   window.addEventListener('pywebviewready', init);
 })();

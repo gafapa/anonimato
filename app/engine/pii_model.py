@@ -81,7 +81,7 @@ class PiiModel:
         }
         try:
             logits = self.session.run(["logits"], feeds)[0][0]
-        except Exception:  # noqa: BLE001 - GPU lost: retry once on the CPU, then give up loudly
+        except Exception:  # GPU lost: retry once on the CPU, then give up loudly
             self.session = session(str(models.model("pii-model").path), False, cpu_basic=True)
             logits = self.session.run(["logits"], feeds)[0][0]
         probs = 1 / (1 + np.exp(-logits))  # (n, max_width, classes)

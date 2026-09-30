@@ -31,7 +31,7 @@ class Services:
                 try:
                     current = factory()
                     setattr(self, f"_{name}", current)
-                except Exception as error:  # noqa: BLE001
+                except Exception as error:
                     self.errors[name] = str(error)
             return current
 
@@ -51,12 +51,13 @@ class Services:
         """Load models and compile GPU graphs in the background so the first document is fast."""
         def run() -> None:
             try:
-                self.check_integrity()
+                if not self.check_integrity():
+                    return
                 engine = self.ocr()
                 if engine is not None:
                     try:
                         engine.warm_up()
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
                 self.pii()
                 self.faces()
@@ -68,11 +69,13 @@ class Services:
     def check_integrity(self, force: bool = False) -> bool:
         """SHA-256 of every model and runtime file against the pinned manifest.
 
-        Hashes are cached by (size, modification time) so unchanged multi-GB files are not re-read
-        at every start; any change triggers a full re-hash.
+        A failed or incomplete check blocks processing. Disk metadata is not proof of integrity.
         """
         try:
             bad = models.verify_all(force=force)
+        except Exception as error:
+            self.errors["integrity"] = f"No se pudo comprobar la integridad: {error}"
+            return False
         finally:
             self._integrity_checked.set()
         if bad:
@@ -95,8 +98,7 @@ class Services:
             if waited >= timeout:
                 raise WarmupTimeout("La tarjeta gráfica no responde al preparar los modelos")
         if not self._integrity_checked.is_set():
-            if not self._integrity_checked.wait(900):
-                self.check_integrity()
+            self.check_integrity()
         if "integrity" in self.errors:
             raise RuntimeError(self.errors["integrity"] + ". Reinstala la aplicación o la IA avanzada.")
 

@@ -1,40 +1,40 @@
-# Evaluación de la detección
+# Detection evaluation
 
-Generado: 2026-09-25 02:40 · 80 documentos · 149 s · IA avanzada: no
+Generated: 2026-09-26 17:19 · 80 documents · 195 s · advanced AI: no
 
-Recall = valores reales completamente cubiertos por un hallazgo. Objetivos del plan: ≥ 98 % en
-identificadores y ≥ 95 % en nombres impresos.
+Recall = ground-truth values fully covered by a finding. Targets: at least 98% for
+identifiers and 95% for printed names.
 
-| Conjunto | Categoría | Recall | Valores |
+| Dataset | Category | Recall | Values |
 |---|---|---|---|
-| escaneado | Dirección | 100.0 % | 14 |
-| escaneado | Tarjeta bancaria | 100.0 % | 6 |
-| escaneado | Fecha nacimiento | 100.0 % | 7 |
-| escaneado | DNI / NIF | 100.0 % | 26 |
-| escaneado | Email | 100.0 % | 13 |
-| escaneado | Datos de salud | 100.0 % | 7 |
-| escaneado | IBAN / cuenta | 100.0 % | 14 |
-| escaneado | Nombres | 100.0 % | 71 |
-| escaneado | NIE | 100.0 % | 13 |
-| escaneado | N.º Seg. Social | 100.0 % | 7 |
-| escaneado | Teléfono | 100.0 % | 21 |
-| escaneado | Matrícula | 100.0 % | 7 |
-| nativo | Dirección | 100.0 % | 14 |
-| nativo | Tarjeta bancaria | 100.0 % | 6 |
-| nativo | Fecha nacimiento | 100.0 % | 7 |
-| nativo | DNI / NIF | 100.0 % | 26 |
-| nativo | Email | 100.0 % | 13 |
-| nativo | Datos de salud | 100.0 % | 7 |
-| nativo | IBAN / cuenta | 100.0 % | 14 |
-| nativo | Nombres | 100.0 % | 71 |
-| nativo | NIE | 100.0 % | 13 |
-| nativo | N.º Seg. Social | 100.0 % | 7 |
-| nativo | Teléfono | 100.0 % | 21 |
-| nativo | Matrícula | 100.0 % | 7 |
+| scanned | Address | 100.0 % | 14 |
+| scanned | Payment card | 100.0 % | 6 |
+| scanned | Date of birth | 100.0 % | 7 |
+| scanned | DNI / NIF | 100.0 % | 26 |
+| scanned | Email | 100.0 % | 13 |
+| scanned | Health data | 100.0 % | 7 |
+| scanned | IBAN / account | 100.0 % | 14 |
+| scanned | Names | 100.0 % | 71 |
+| scanned | NIE | 100.0 % | 13 |
+| scanned | Social Security number | 100.0 % | 7 |
+| scanned | Phone | 100.0 % | 21 |
+| scanned | License plate | 100.0 % | 7 |
+| native | Address | 100.0 % | 14 |
+| native | Payment card | 100.0 % | 6 |
+| native | Date of birth | 100.0 % | 7 |
+| native | DNI / NIF | 100.0 % | 26 |
+| native | Email | 100.0 % | 13 |
+| native | Health data | 100.0 % | 7 |
+| native | IBAN / account | 100.0 % | 14 |
+| native | Names | 100.0 % | 71 |
+| native | NIE | 100.0 % | 13 |
+| native | Social Security number | 100.0 % | 7 |
+| native | Phone | 100.0 % | 21 |
+| native | License plate | 100.0 % | 7 |
 
-Precisión global: 99.8 % (411/412 hallazgos con valor).
+Overall precision: 99.8 % (411/412 findings with values).
 
-## Hallazgos sin correspondencia (posibles falsos positivos)
+## Unmatched findings (possible false positives)
 
-- escaneado sint-36: address «Avenida de Madrid
+- scanned synthetic-36: address «Avenida de Madrid
 95, 7ºD, 36201 Vig0» (ocr)

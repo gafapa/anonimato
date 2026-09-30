@@ -21,7 +21,7 @@
 
   <div id="engineErrors" class="engine-errors" role="alert" hidden></div>
   <main class="workspace">
-    <aside class="sidebar" aria-label="Documentos y opciones">
+    <aside class="sidebar" id="sidebar" aria-label="Documentos y opciones">
       <section class="sidebar-section">
         <h2>Documentos</h2>
         <div id="dropzone" class="dropzone" aria-label="Zona para soltar archivos">
@@ -40,39 +40,54 @@
 
       <section class="sidebar-section">
         <h2>Qué anonimizar</h2>
-        <div class="grid-cats" id="catGrid"></div>
+        <p class="section-summary" id="detectionSummary" role="status" aria-live="polite"></p>
+        <details class="settings-disclosure" id="detectionDetails">
+          <summary>Ajustar detección</summary>
+          <div class="settings-content">
+            <h3>Categorías de datos</h3>
+            <div class="grid-cats" id="catGrid"></div>
+            <h3>Métodos de detección</h3>
+            <div class="opts">
+              <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
+              <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
+              <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
+              <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
+              <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
+              <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
+              <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
+            </div>
+            <label class="field analysis-resolution"><span>Resolución de análisis</span>
+              <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+          </div>
+        </details>
+        <details class="settings-disclosure advanced-disclosure" id="advancedDetails">
+          <summary>IA avanzada <span id="advancedSummary"></span></summary>
+          <div class="advanced-box" id="advancedBox"></div>
+        </details>
+        <p class="settings-change-notice" id="settingsChangeNotice" role="status" hidden>Has cambiado la detección. Vuelve a analizar para aplicar estos ajustes.</p>
       </section>
 
-      <section class="sidebar-section opts">
-        <h2>Detección</h2>
-        <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
-        <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
-        <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
-        <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
-        <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
-        <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
-        <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
-        <div class="advanced-box" id="advancedBox"></div>
-      </section>
-
-      <section class="sidebar-section opts">
-        <h2>Resultado</h2>
-        <label class="toggle strong"><input type="checkbox" id="optMaxSecurity" /><span><strong>Voy a compartir este documento fuera</strong> · máxima seguridad</span>
-          <small>Convierte cada página en imagen tras tachar: no sobrevive nada que no se vea. Pesa más.</small></label>
-        <label class="toggle"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en máxima seguridad</span>
-          <small>Se genera por OCR sobre el resultado ya anonimizado.</small></label>
-        <label class="field"><span>Estilo de los cambios</span>
-          <select id="optMode"><option value="label" selected>Sustituir por [NOMBRE 1]</option><option value="blank">Borrar sin reemplazo visible</option></select></label>
-        <label class="toggle"><input type="checkbox" id="optUniform" /><span>Ocultar la longitud de los datos</span></label>
-        <label class="toggle"><input type="checkbox" id="optKeepName" /><span>Conservar el nombre del archivo</span>
-          <small>Se sustituyen los datos detectados. Por defecto: documento-1_anonimizado.pdf</small></label>
-        <label class="field"><span>Resolución de análisis</span>
-          <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+      <section class="sidebar-section result-settings">
+        <h2>Protección del resultado</h2>
+        <label class="toggle strong"><input type="checkbox" id="optMaxSecurity" /><span><strong>Voy a compartir este documento fuera</strong></span>
+          <small>Máxima seguridad: convierte cada página en imagen tras tachar. El PDF pesará más.</small></label>
+        <details class="settings-disclosure" id="resultDetails">
+          <summary>Más opciones de salida</summary>
+          <div class="settings-content opts">
+            <label class="toggle" id="textLayerOption"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en máxima seguridad</span>
+              <small>Se genera por OCR sobre el resultado ya anonimizado.</small></label>
+            <label class="field"><span>Estilo de los cambios</span>
+              <select id="optMode"><option value="label" selected>Sustituir por [NOMBRE 1]</option><option value="blank">Borrar sin reemplazo visible</option></select></label>
+            <label class="toggle"><input type="checkbox" id="optUniform" /><span>Ocultar la longitud de los datos</span></label>
+            <label class="toggle"><input type="checkbox" id="optKeepName" /><span>Conservar el nombre del archivo</span>
+              <small>Por defecto: documento-1_anonimizado.pdf</small></label>
+          </div>
+        </details>
       </section>
 
       <div class="sidebar-actions">
-        <p class="warning"><strong>Revisión obligatoria:</strong> comprueba cada página antes de compartir.</p>
         <button id="btnRun" class="btn primary" disabled>Analizar documentos</button>
+        <p class="action-hint">Revisa cada página antes de compartir.</p>
         <button id="btnCancel" class="btn ghost small wide" hidden>Cancelar</button>
         <p id="errMsg" class="err" role="alert" hidden></p>
         <section class="progress-card" id="progressCard" hidden aria-label="Progreso">

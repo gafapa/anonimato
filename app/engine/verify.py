@@ -30,6 +30,10 @@ FORBIDDEN_ANY = ["/Metadata", "/PieceInfo", "/Alternates", "/OPI", "/JS", "/Java
                  "/EmbeddedFiles", "/Thumb", "/ActualText"]
 
 
+class VerificationUnavailable(RuntimeError):
+    """A required verification service could not complete its check."""
+
+
 @dataclass
 class Leak:
     check: str
@@ -58,8 +62,8 @@ class Report:
         return {
             "ok": self.ok, "objects": self.objects, "pages": self.pages, "values": self.values,
             "checks": self.checks, "warnings": self.warnings,
-            "leaks": [{"check": l.check, "where": l.where, "value": _mask(l.value), "detail": l.detail,
-                       "page": l.page, "rects": [list(r) for r in l.rects]} for l in self.leaks],
+            "leaks": [{"check": leak.check, "where": leak.where, "value": _mask(leak.value), "detail": leak.detail,
+                       "page": leak.page, "rects": [list(r) for r in leak.rects]} for leak in self.leaks],
         }
 
 
@@ -83,13 +87,16 @@ class Target:
     id_form: str
 
     @classmethod
-    def build(cls, kind: str, value: str) -> "Target":
+    def build(cls, kind: str, value: str) -> Target:
         return cls(kind, value, norm_text(value).strip(), norm_id(value))
 
     def found_in(self, haystack: str) -> bool:
-        if len(self.id_form) < 4:
+        if not self.id_form:
             return False
         if self.kind in ID_TYPES:
+            if len(self.id_form) < 4:
+                pattern = r"[\W_]*".join(re.escape(character) for character in self.id_form)
+                return re.search(r"(?<!\w)" + pattern + r"(?!\w)", norm_text(haystack)) is not None
             return self.id_form in norm_id(haystack)
         text = norm_text(re.sub(r"[^\w\s]", " ", haystack))
         needle = norm_text(re.sub(r"[^\w\s]", " ", self.value)).strip()
@@ -109,7 +116,7 @@ def protected_targets(findings: list[Finding]) -> list[Target]:
             continue
         for item in items:
             target = Target.build(item.type, item.value)
-            if target.id_form not in seen and len(target.id_form) >= 4:
+            if target.id_form not in seen and target.id_form:
                 seen.add(target.id_form)
                 targets.append(target)
     return targets
@@ -160,15 +167,26 @@ def _check_structure(pdf: pikepdf.Pdf, report: Report) -> None:
 
 def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> None:
     content_ids = set()
+    font_ids = set()
+    for obj in pdf.objects:
+        if isinstance(obj, pikepdf.Dictionary):
+            for key in ("/FontFile", "/FontFile2", "/FontFile3"):
+                stream = obj.get(key)
+                if isinstance(stream, pikepdf.Stream):
+                    font_ids.add(stream.objgen)
     for page in pdf.pages:
         contents = page.obj.get("/Contents")
         items = contents if isinstance(contents, pikepdf.Array) else [contents] if contents is not None else []
         for item in items:
             content_ids.add(item.objgen)
 
-    def check(texts: list[str], where: str) -> None:
+    def check(texts: list[str], where: str, binary: bool = False) -> None:
         joined = "\n".join(texts)
         for target in targets:
+            # Short strings occur by chance in binary fonts and image samples. PDF strings,
+            # parsed text operands and page text still check all target lengths.
+            if binary and len(target.id_form) < 4:
+                continue
             if target.found_in(joined):
                 report.add(Leak("objetos", where, target.value, "copia del dato dentro del archivo"))
 
@@ -197,14 +215,15 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
         if isinstance(obj, pikepdf.Stream):
             try:
                 data = obj.read_bytes()
-            except Exception:  # noqa: BLE001 - images with lossy filters cannot be decoded here
+            except Exception:  # images with lossy filters cannot be decoded here
                 try:
                     data = obj.read_raw_bytes()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
             if obj.get("/Subtype") == pikepdf.Name.Image and len(data) > 4_000_000:
                 continue
-            check(_decode_variants(data), where)
+            binary = obj.get("/Subtype") == pikepdf.Name.Image or obj.objgen in font_ids
+            check(_decode_variants(data), where, binary=binary)
             is_content = obj.objgen in content_ids or obj.get("/Subtype") == pikepdf.Name.Form
             if is_content:
                 try:
@@ -219,7 +238,7 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
                                 strings.extend(t for item in operand if isinstance(item, pikepdf.String)
                                                for t in _string_text(item))
                     check(["".join(strings), " ".join(strings)], where + " (contenido)")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
     report.objects = count
 
@@ -273,7 +292,7 @@ def fuzzy_found(target: Target, text: str) -> bool:
     needle = target.id_form if target.kind in ID_TYPES else target.text_form
     hay = norm_id(text) if target.kind in ID_TYPES else norm_text(text)
     if len(needle) < 5:
-        return needle in hay
+        return target.found_in(text)
     if needle in hay:
         return True
     if len(hay) < len(needle) - 2:
@@ -287,15 +306,27 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
     """Rendered pages: OCR, zoomed OCR of every redacted area, handwriting re-read and faces.
 
     Returns the OCR text of each page (reused by the residual detection)."""
-    doc = document.open_pdf(data)
     ocr = services.ocr() if services else None
     faces = services.faces() if services else None
+    if ocr is None:
+        raise VerificationUnavailable("No se puede verificar el resultado: OCR no disponible")
+    if faces is None and any(f.enabled and f.type == "face" for f in findings):
+        raise VerificationUnavailable("No se puede verificar el resultado: detector de rostros no disponible")
     reader = None
     if services is not None and services.advanced_available():
         llm = services.llm()
         if llm is not None:
             from .ocr.handwriting import HandwritingReader
             reader = HandwritingReader(llm)
+        elif any(f.enabled and f.source == "handwriting" and f.value for f in findings):
+            raise VerificationUnavailable("No se puede verificar el resultado: lector de manuscritos no disponible")
+    with document.open_pdf(data) as doc:
+        return _scan_pixel_pages(doc, findings, targets, ocr, faces, reader, report, progress)
+
+
+def _scan_pixel_pages(doc, findings, targets, ocr, faces, reader, report, progress) -> dict[int, str]:
+    handwriting_checked = False
+    faces_checked = False
     protected = {target.id_form for target in targets}
     texts: dict[int, str] = {}
     for index, page in enumerate(doc):
@@ -331,12 +362,15 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
                     if pix.height < 12 or pix.width < 12:
                         continue  # too small to be legible as pixels (its text was already checked above)
                     image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
-                    readings = [ocr.read_line(image)]
+                    # Full OCR (line detection + recognition): recognising the padded crop directly as a
+                    # single line misreads it.
+                    readings = [" ".join(line.text for line in ocr.read(image, detect_orientation=False))]
                     if reader is not None and finding.source == "handwriting":
                         try:
                             readings.append(reader.read(image))
-                        except Exception:  # noqa: BLE001 - the printed-text check above still applies
-                            pass
+                            handwriting_checked = True
+                        except Exception as error:
+                            raise VerificationUnavailable("No se pudo verificar el texto manuscrito") from error
                     if any(fuzzy_found(target, reading) for reading in readings):
                         report.add(Leak("ocr-zona", f"página {index + 1}", finding.value,
                                         "legible dentro o junto a la zona tachada", page=index,
@@ -344,13 +378,18 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
         if faces is not None:
             face_findings = [f for f in findings if f.page == index and f.enabled and f.type == "face"]
             if face_findings:
+                faces_checked = True
                 for box in faces.detect(rendered.image):
                     rect = pymupdf.Rect(rendered.to_page(box))
                     for finding in face_findings:
                         if any(rect.intersects(pymupdf.Rect(r)) for r in finding.rects):
                             report.add(Leak("rostros", f"página {index + 1}", "rostro", "rostro reconocible",
                                             page=index, rects=[tuple(rect)]))
-    doc.close()
+    report.checks.append("OCR de la página renderizada")
+    if handwriting_checked:
+        report.checks.append("relectura de manuscritos con IA")
+    if faces_checked:
+        report.checks.append("rostros")
     return texts
 
 
@@ -369,17 +408,12 @@ def verify(data: bytes, findings: list[Finding], services=None, residual=None, p
     ocr_texts: dict[int, str] = {}
     if services is not None:
         ocr_texts = _scan_pixels(data, findings, targets, services, report, progress)
-        report.checks.append("OCR de la página renderizada")
-        if services.advanced_available():
-            report.checks.append("relectura de manuscritos con IA")
-        if services.faces() is not None:
-            report.checks.append("rostros")
     if residual is not None:
         try:
             for message in residual(data, ocr_texts):
                 report.warnings.append(message)
             report.checks.append("detección residual")
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             report.warnings.append(f"Detección residual no disponible: {error}")
     # Deduplicate identical leaks.
     unique = {}

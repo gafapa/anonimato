@@ -51,12 +51,18 @@ def test_offline_import_verifies_checksums(tmp_path, fake_manifest):
     assert not models.group_installed("advanced")
 
 
-def test_unexpected_backend_library_is_refused():
-    llama = models.runtime_dir() / "llama"
+def test_unexpected_backend_library_is_refused(tmp_path, monkeypatch):
+    llama = tmp_path / "llama"
+    llama.mkdir()
+    monkeypatch.setattr(models, "runtime_dir", lambda: tmp_path)
+    trusted = llama / "llama-server"
+    trusted.write_bytes(b"trusted")
+    monkeypatch.setattr(models, "_runtime_files", lambda: {
+        "llama/llama-server": hashlib.sha256(b"trusted").hexdigest()})
     intruder = llama / "ggml-intruso.dll"
     intruder.write_bytes(b"MZ")
     try:
-        assert any("ggml-intruso" in item for item in models.verify_all())
+        assert any("ggml-intruso" in item for item in models.verify_runtime())
     finally:
         intruder.unlink()
-    assert models.verify_all() == []
+    assert models.verify_runtime() == []

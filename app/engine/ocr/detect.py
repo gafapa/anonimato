@@ -9,17 +9,31 @@ import numpy as np
 from .. import models
 from ..onnx_runtime import session
 
+SMALL_INPUT = 1400
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 class LineDetector:
-    def __init__(self, use_gpu: bool = True, max_side: int = 2048):
-        from ..onnx_runtime import gpu_active
-        self.session = session(str(models.model("ocr-det").path), use_gpu)
-        if not gpu_active():
-            # Without a GPU the server model takes ~40 s per page: use the light model.
+    def __init__(self, use_gpu: bool = True, max_side: int = 2048, light: bool = False):
+        from ..onnx_runtime import gpu_available
+        from ..system import onnx_gpu_providers
+        self._small: LineDetector | None = None
+        if light:  # CPU mobile model for small crops (no per-shape GPU compilation)
             self.session = session(str(models.model("ocr-det-mobile").path), False)
+            self.input = self.session.get_inputs()[0].name
+            self.max_side = min(max_side, 1600)
+            self._run_lock = threading.Lock()
+            self.on_gpu = False
+            return
+        want_gpu = use_gpu and gpu_available(use_gpu)
+        model_id = "ocr-det" if want_gpu else "ocr-det-mobile"
+        self.session = session(str(models.model(model_id).path), want_gpu)
+        self.on_gpu = bool(onnx_gpu_providers(self.session.get_providers()))
+        if not self.on_gpu:
+            # Without a GPU the server model takes ~40 s per page: use the light model.
+            if want_gpu:
+                self.session = session(str(models.model("ocr-det-mobile").path), False)
             max_side = min(max_side, 1600)
         self.input = self.session.get_inputs()[0].name
         self.max_side = max_side
@@ -46,14 +60,21 @@ class LineDetector:
 
     def detect(self, rgb: np.ndarray) -> list[np.ndarray]:
         """Return quadrilaterals (4x2 float arrays, pixel coords), reading order."""
+        if self.on_gpu and max(rgb.shape[:2]) <= SMALL_INPUT:
+            # Small crops (zoomed verification zones, small images) have ever-changing sizes: on the GPU each
+            # new size costs a graph compilation, on the CPU the light model reads them in a fraction of a second.
+            if self._small is None:
+                self._small = LineDetector(light=True)
+            return self._small.detect(rgb)
         tensor, sx, sy = self._prepare(rgb)
         try:
             with self._run_lock:  # DirectML sessions must not run concurrently
                 prob = self.session.run(None, {self.input: tensor})[0][0, 0]
-        except Exception:  # noqa: BLE001 - GPU lost or out of memory: continue on CPU
+        except Exception:  # GPU lost or out of memory: continue on CPU
             self.session = session(str(models.model("ocr-det-mobile").path), False)
             self.input = self.session.get_inputs()[0].name
             self.max_side = min(self.max_side, 1600)
+            self.on_gpu = False
             tensor, sx, sy = self._prepare(rgb)
             prob = self.session.run(None, {self.input: tensor})[0][0, 0]
         bitmap = (prob > 0.3).astype(np.uint8)

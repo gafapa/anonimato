@@ -23,9 +23,9 @@ def find(image: np.ndarray, labels: list[tuple[float, float, float, float]],
             (x1, y0 - 0.8 * lh, min(w, x1 + 22 * lh), y1 + 3.5 * lh),       # right of the label
             (x0 - 2 * lh, y1, min(w, x0 + 22 * lh), min(h, y1 + 7 * lh)),   # below the label
         ]
-        for rx0, ry0, rx1, ry1 in regions:
-            rx0, ry0 = int(max(0, rx0)), int(max(0, ry0))
-            rx1, ry1 = int(min(w, rx1)), int(min(h, ry1))
+        for region_box in regions:
+            rx0, ry0 = int(max(0, region_box[0])), int(max(0, region_box[1]))
+            rx1, ry1 = int(min(w, region_box[2])), int(min(h, region_box[3]))
             if rx1 - rx0 < 10 or ry1 - ry0 < 10:
                 continue
             region = ink[ry0:ry1, rx0:rx1]

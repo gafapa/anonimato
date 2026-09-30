@@ -20,6 +20,22 @@ body { min-width: 320px; }
 .sidebar-section { padding: 22px; }
 .sidebar-section + .sidebar-section { border-top: 1px solid var(--border); }
 .sidebar h2 { margin: 0 0 12px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.sidebar h3 { margin: 0 0 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.section-summary { margin: 0 0 10px; color: var(--text); font-size: 12px; line-height: 1.5; }
+.settings-disclosure { border-top: 1px solid var(--border); }
+.settings-disclosure summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 650; list-style: none; }
+.settings-disclosure summary::-webkit-details-marker { display: none; }
+.settings-disclosure summary::after { content: ''; width: 7px; height: 7px; margin-right: 3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .16s ease-out; }
+.settings-disclosure[open] summary::after { transform: rotate(225deg); }
+.settings-disclosure summary:focus-visible { outline: 3px solid var(--success); outline-offset: 2px; }
+.settings-disclosure summary span { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; }
+.settings-content { padding: 12px 0 16px; }
+.settings-content h3:not(:first-child) { margin-top: 20px; }
+.settings-content .opts { margin-top: 0; }
+.analysis-resolution { margin-top: 18px; }
+.result-settings > .toggle { margin-bottom: 15px; }
+.settings-change-notice { margin: 10px 0 0; color: var(--warning); font-size: 12px; }
+.action-hint { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
 .dropzone { border: 1px dashed #466080; border-radius: 12px; cursor: pointer; transition: border-color .16s ease-out, background .16s ease-out; }
 .dropzone.compact { min-height: 70px; padding: 12px; display: flex; align-items: center; gap: 12px; text-align: left; flex-wrap: wrap; }
 .dropzone:hover, .dropzone:focus-visible, .dropzone.drag { border-color: var(--accent); background: rgba(91, 145, 255, .07); outline: none; }
@@ -42,7 +58,7 @@ body { min-width: 320px; }
 .document-remove { min-width: 44px; min-height: 40px; padding: 0 4px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; }
 .document-remove:hover { color: #fff; background: rgba(255,255,255,.07); }
 .grid-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.cat { min-height: 40px; display: flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-raised); cursor: pointer; font-size: 12px; }
+.cat { min-height: 44px; display: flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-raised); cursor: pointer; font-size: 12px; }
 .cat:hover { border-color: #46668e; }
 .cat input, .toggle input, td input { accent-color: var(--accent); }
 .opts { display: grid; gap: 11px; margin-top: 16px; }
@@ -135,6 +151,7 @@ tr.off { opacity: .38; }
 }
 @media (max-width: 620px) {
   .sidebar-section { padding: 18px 16px; }
+  .grid-cats { grid-template-columns: 1fr; }
   .settings-section .opts { grid-template-columns: 1fr; }
   .results-head { align-items: flex-start; flex-direction: column; }
   .stats { justify-content: flex-start; }
@@ -151,7 +168,11 @@ tr.off { opacity: .38; }
 .pill { padding: 4px 10px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); border: 1px solid var(--border); }
 .pill.ok { color: var(--success); border-color: #2c6b5b; }
 .pill.warn { color: var(--warning); border-color: #806f2d; }
+.status-action { font: inherit; cursor: pointer; }
+.status-action:hover { background: var(--surface); }
 .dropzone { min-height: 70px; padding: 12px; display: flex; align-items: center; gap: 12px; cursor: default; }
+.sidebar.reviewing .dropzone { min-height: 52px; padding: 8px 10px; }
+.sidebar.reviewing .dz-icon, .sidebar.reviewing .dz-sub { display: none; }
 .button-row { display: flex; gap: 8px; margin-top: 10px; }
 .button-row .btn { flex: 1; }
 .btn.wide { width: 100%; margin-top: 8px; }

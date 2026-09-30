@@ -28,6 +28,15 @@ from . import models, system
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        return None
+
+
+# Neither system proxies nor HTTP redirects may send document content away from loopback.
+_LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -58,10 +67,13 @@ def available() -> bool:
 
 def pick_device(exe: str) -> tuple[str | None, int]:
     """Best discrete GPU (most free memory, not an integrated Intel GPU)."""
+    bad = models.verify_runtime()
+    if bad:
+        raise RuntimeError("Motor de IA alterado o incompleto: " + ", ".join(bad))
     try:
-        output = subprocess.run([exe, "--list-devices"], capture_output=True, text=True, timeout=60,
+        output = subprocess.run([exe, "--list-devices"], capture_output=True, text=True, timeout=60, check=False,
                                 creationflags=CREATE_NO_WINDOW, env=system.llama_env(Path(exe).parent)).stdout
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None, 0
     best, best_free = None, 0
     for line in output.splitlines():
@@ -89,7 +101,7 @@ class LlamaServer:
         atexit.register(self.stop)
 
     @classmethod
-    def default(cls) -> "LlamaServer":
+    def default(cls) -> LlamaServer:
         prefix = "vlm" if installed_variant() == "advanced" else "vlm-lite"
         return cls(str(models.model(prefix).path), str(models.model(f"{prefix}-mmproj").path))
 
@@ -121,7 +133,7 @@ class LlamaServer:
                 if self.process.poll() is not None:
                     raise RuntimeError("El motor de IA local no pudo arrancar")
                 try:
-                    with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=2) as response:
+                    with _LOCAL_HTTP.open(f"http://127.0.0.1:{self.port}/health", timeout=2) as response:
                         if response.status == 200:
                             self.last_used = time.time()
                             return
@@ -148,7 +160,7 @@ class LlamaServer:
         request = urllib.request.Request(
             f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
-        with urllib.request.urlopen(request, timeout=300) as response:
+        with _LOCAL_HTTP.open(request, timeout=300) as response:
             data = json.loads(response.read().decode("utf-8"))
         self.last_used = time.time()
         return data["choices"][0]["message"]["content"] or ""
