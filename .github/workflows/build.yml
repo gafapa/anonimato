@@ -22,7 +22,7 @@ jobs:
           - name: Windows
             os: windows-latest
           - name: macOS (Apple Silicon)
-            os: macos-14
+            os: macos-15
           - name: Linux
             os: ubuntu-24.04
     env:

@@ -38,7 +38,7 @@ Export requires working OCR for pixel verification and a working face detector w
 
 Windows is the primary platform; its installer has been tested end to end. macOS and Linux use the same application code with platform-specific dependencies. Their packages are built and tested in [the build workflow](.github/workflows/build.yml).
 
-| | Windows 10/11 x64 | macOS 12+ (Apple Silicon) | Linux x86-64 |
+| | Windows 10/11 x64 | macOS 15+ (Apple Silicon) | Linux x86-64 |
 |---|---|---|---|
 | Package | `AnonimatoSetup-x.y.z.exe` (Inno Setup, no administrator rights) | `.dmg` containing `Anonimato.app` | `.AppImage` |
 | Model acceleration | DirectML | CoreML | CUDA/ROCm with `onnxruntime-gpu`, otherwise CPU |

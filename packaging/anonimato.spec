@@ -62,7 +62,7 @@ if SYSTEM == "macos":
         info_plist={
             "CFBundleName": "Anonimato", "CFBundleDisplayName": "Anonimato",
             "CFBundleShortVersionString": "2.1.0", "CFBundleVersion": "2.1.0",
-            "LSMinimumSystemVersion": "12.0", "NSHighResolutionCapable": True,
+            "LSMinimumSystemVersion": "15.0", "NSHighResolutionCapable": True,
             "LSApplicationCategoryType": "public.app-category.productivity",
         },
     )
