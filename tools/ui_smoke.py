@@ -174,10 +174,17 @@ def scenario(window, api):
 
         # ---- locked PDF: password prompt, unlock and analysis
         has_unlock = js(window, "document.querySelectorAll('.unlock-row input').length") == 1
+        # The queue is rebuilt on every poll during an analysis; a password being typed must survive it.
+        js(window, "document.querySelector('.unlock-row input').value = 'abc'; window.app.refreshDocuments()")
+        time.sleep(1)
+        step("a password being typed survives queue refreshes",
+             js(window, "document.querySelector('.unlock-row input')?.value") == "abc")
         js(window, "const i = document.querySelector('.unlock-row input'); i.value = '1234';"
                    "document.querySelector('.unlock-row button').click();")
         wait_js(window, "document.querySelectorAll('.unlock-row').length === 0", 60)
         click(window, "btnRun")
+        step("the previous review is hidden while re-analysing",
+             wait_js(window, "document.getElementById('resultsCard').hidden", 10))
         wait_js(window, "!document.getElementById('btnCancel').hidden || document.querySelectorAll('.document-status.ready').length === 5", 30)
         wait_js(window, "document.querySelectorAll('.document-status.ready').length === 5", 900)
         step("password-protected PDF is unlocked and analyzed", has_unlock)
@@ -204,6 +211,9 @@ def scenario(window, api):
         key(window, " ")
         time.sleep(0.5)
         step("J and Space shortcuts", toggled and excluded(window) == 0)
+        js(window, "document.getElementById('btnAllOn').dispatchEvent(new KeyboardEvent('keydown', {key: ' ', bubbles: true}))")
+        time.sleep(0.5)
+        step("Space on a focused button is not taken by the shortcut", excluded(window) == 0)
         indicator = js(window, "document.getElementById('pageIndicator').textContent")
         key(window, "ArrowRight")
         wait_js(window, "document.getElementById('pageIndicator').textContent.includes('Página 2')", 30)

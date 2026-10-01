@@ -135,7 +135,9 @@
     renderSettingsSummary();
     const filter = $('typeFilter');
     for (const category of state.status.categories) {
-      filter.append(el('option', { value: category.key, textContent: category.label }));
+      const option = el('option', { value: category.key, textContent: category.label });
+      option.dataset.label = category.label;
+      filter.append(option);
     }
   }
 
@@ -153,6 +155,11 @@
   // ------------------------------------------------------------ documents
   function renderQueue() {
     const queue = $('documentQueue');
+    // The queue is rebuilt on every poll; keep a password being typed and its focus.
+    const drafts = new Map([...queue.querySelectorAll('.unlock-row input')].map((input) => [input.dataset.doc, input.value]));
+    const focused = document.activeElement?.closest?.('.unlock-row') ? document.activeElement : null;
+    const focusedDoc = focused?.dataset.doc;
+    const caret = focused?.selectionStart;
     queue.replaceChildren();
     for (const doc of state.docs) {
       const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos`
@@ -176,6 +183,8 @@
       if (doc.status === 'locked') {
         const input = el('input', { type: 'password', placeholder: 'Contraseña del PDF', className: 'password' });
         input.setAttribute('aria-label', `Contraseña de ${doc.name}`);
+        input.dataset.doc = doc.id;
+        input.value = drafts.get(String(doc.id)) || '';
         const unlock = el('button', { className: 'btn ghost small', type: 'button', textContent: 'Abrir' });
         const submit = async () => {
           const result = await api.unlock(doc.id, input.value);
@@ -189,6 +198,11 @@
         item.append(el('div', { className: 'unlock-row' }, [input, unlock]));
       }
       queue.append(item);
+      if (focusedDoc === String(doc.id)) {
+        const input = item.querySelector('.unlock-row input');
+        input.focus();
+        if (caret !== undefined && caret !== null) input.setSelectionRange(caret, caret);
+      }
     }
     $('btnRun').disabled = !state.docs.length || state.polling || $('btnRun').dataset.blocked === '1';
     renderSettingsSummary();
@@ -250,6 +264,11 @@
     $('advancedDetails').open = false;
     $('resultDetails').open = false;
     state.details = null;
+    setManual(false);
+    $('resultsCard').hidden = true;
+    $('emptyPreview').hidden = false;
+    $('emptyPreview').querySelector('h2').textContent = 'Analizando documentos…';
+    $('emptyPreview').querySelector('p').textContent = 'La revisión aparecerá aquí al terminar.';
     startPolling();
   }
 
@@ -306,12 +325,25 @@
     $('detectionNotice').hidden = !lowText && !d.notes.length;
     $('detectionNotice').textContent = lowText ? 'Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.' : '';
     $('notes').textContent = d.notes.join(' · ');
+    renderFilterOptions(findings);
     renderReport(d.report);
     renderTable();
     renderPage();
   }
 
-  function renderReport(report) {
+  function renderFilterOptions(findings) {
+    const counts = new Map();
+    for (const f of findings) counts.set(f.type, (counts.get(f.type) || 0) + 1);
+    const filter = $('typeFilter');
+    filter.options[0].textContent = `Todos los tipos (${findings.length})`;
+    for (const option of [...filter.options].slice(1)) {
+      const count = counts.get(option.value) || 0;
+      option.textContent = `${option.dataset.label} (${count})`;
+      option.hidden = count === 0 && option.value !== state.filter;
+    }
+  }
+
+  function renderReport(report, savedPath = null) {
     const card = $('verifyCard');
     if (!report) { card.hidden = true; return; }
     card.hidden = false;
@@ -321,14 +353,16 @@
         ? `Verificación superada: 0 restos en ${report.objects} objetos y ${report.pages} páginas (${report.values} valores comprobados).`
         : `Verificación fallida: ${report.leaks.length} resto(s). No se ha guardado el archivo.`,
     })];
+    if (report.ok && savedPath) children.push(el('p', { className: 'saved-path', textContent: `Guardado en ${savedPath}` }));
     if (!report.ok) {
       children.push(el('ul', {}, report.leaks.map((leak) => {
         const located = leak.page !== null && leak.page !== undefined && leak.view && leak.view.length;
         const text = `${leak.where}: ${leak.detail} (${leak.check}) «${leak.value}»`
           + (located ? ' · ver en la página' : leak.page === null ? ' · en la estructura del archivo' : '');
-        const item = el('li', { textContent: text, className: located ? 'leak-link' : '' });
-        if (located) item.addEventListener('click', () => { state.page = leak.page; renderPage(); });
-        return item;
+        if (!located) return el('li', { textContent: text });
+        const link = el('button', { type: 'button', className: 'leak-link', textContent: text });
+        link.addEventListener('click', () => { state.page = leak.page; renderPage(); });
+        return el('li', {}, [link]);
       })));
       children.push(el('p', { textContent: 'Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o activa «Voy a compartirlo fuera» y vuelve a guardar.' }));
     }
@@ -387,6 +421,7 @@
   }
 
   async function toggle(ids, enabled) {
+    if (!state.details) return;
     await api.set_enabled(state.details.id, ids, enabled);
     state.savedIds.delete(state.details.id);
     for (const f of state.details.findings) if (ids.includes(f.id)) f.enabled = enabled;
@@ -554,10 +589,14 @@
   }
 
   // ------------------------------------------------------------ export
+  function setSaving(on) {
+    state.saving = on;
+    for (const id of ['btnPdf', 'btnRailSave', 'btnAll', 'btnCsv', 'btnJson']) $(id).disabled = on;
+  }
   async function savePdf() {
+    if (!state.details || state.saving) return;
     setError('');
-    $('btnPdf').disabled = true;
-    $('btnRailSave').disabled = true;
+    setSaving(true);
     $('progressCard').hidden = false;
     $('progressText').textContent = 'Generando y verificando…';
     const ticker = setInterval(async () => {
@@ -570,7 +609,7 @@
     try {
       const result = await api.save_pdf(state.details.id, options());
       state.details.report = result.report || null;
-      renderReport(state.details.report);
+      renderReport(state.details.report, result.ok && result.saved ? result.path : null);
       drawLeaks();
       if (!result.ok) setError(result.message);
       else if (result.saved) {
@@ -582,13 +621,14 @@
       setError(`Error al guardar: ${error.message || error}`);
     } finally {
       clearInterval(ticker);
-      $('btnPdf').disabled = false;
-      $('btnRailSave').disabled = false;
+      setSaving(false);
       setTimeout(() => { if (!state.polling) $('progressCard').hidden = true; }, 2500);
     }
   }
   async function saveAll() {
+    if (!state.details || state.saving) return;
     setError('');
+    setSaving(true);
     $('progressCard').hidden = false;
     const ticker = setInterval(async () => {
       const info = await api.poll();
@@ -605,6 +645,7 @@
       return;
     } finally {
       clearInterval(ticker);
+      setSaving(false);
     }
     if (result.message) setError(result.message);
     else if (result.folder) {
@@ -615,6 +656,8 @@
     renderDetails();
   }
   async function saveLog(format) {
+    if (!state.details) return;
+    $('logMenu').open = false;
     try { await api.save_log(state.details.id, format, $('optLogOriginals').checked, $('optLogCoords').checked); }
     catch (error) { setError(`Error al guardar: ${error.message || error}`); }
   }
@@ -674,7 +717,10 @@
     document.addEventListener('keydown', (event) => {
       const target = event.target;
       if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const key = event.key.toLowerCase();
+      // Space and Enter keep their normal meaning on a focused button, link or menu.
+      if ((key === ' ' || key === 'enter') && target instanceof Element && target.closest('button, a, summary')) return;
       if (key === 'arrowleft' && state.page > 0) { state.page -= 1; renderPage(); }
       else if (key === 'arrowright' && state.page < state.details.pages.length - 1) { state.page += 1; renderPage(); }
       else if (key === 'j') focusFinding(state.current + 1);
@@ -684,8 +730,9 @@
         const f = visibleFindings()[state.current];
         if (f) toggle([f.id], !f.enabled);
       } else if (key === 'm') setManual(!state.manual);
-      else if (key === 'd' && !event.ctrlKey && !event.metaKey && !event.altKey) setPanel(!state.panelCollapsed);
+      else if (key === 'd') setPanel(!state.panelCollapsed);
       else if (key === 'escape' && $('logMenu').open) $('logMenu').open = false;
+      else if (key === 'escape' && state.manual) setManual(false);
       else return;
     });
   }

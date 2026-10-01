@@ -171,8 +171,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 .verify-card li { padding: 6px 10px; border-radius: 4px; background: var(--surface); }
 .verify-card p { margin: 8px 0 0; }
 .verify-card .warn-list li { color: var(--warning); background: #fff8e6; }
-.leak-link { cursor: pointer; }
-.leak-link:hover { outline: 1px solid var(--danger); }
+.verify-card li:has(.leak-link) { padding: 0; }
+.leak-link { width: 100%; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 4px; color: inherit; background: none; text-align: left; font: inherit; cursor: pointer; }
+.leak-link::after { content: " →"; color: var(--danger); }
+.leak-link:hover { box-shadow: inset 0 0 0 1px var(--danger); }
+.saved-path { overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; }
 .detection-notice { margin: 12px 0 0; padding: 8px 12px; border: 1px solid #d9b76a; border-radius: var(--radius); color: var(--warning); background: #fff8e6; font-size: 12.5px; }
 
 .comparison-grid { flex: 1 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; justify-items: center; padding-top: 16px; }
