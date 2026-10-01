@@ -279,8 +279,11 @@ def scenario(window, api):
         click(window, "optMaxSecurity")
         wait_js(window, "!!document.getElementById('resultImg').getAttribute('src')", 180)
         step("maximum-security preview", True)
+        same = "(() => { const o = document.getElementById('originalImg'), r = document.getElementById('resultImg');"                " return !!o.dataset.doc && o.dataset.doc === r.dataset.doc; })()"
+        step("original and result show the same document", wait_js(window, same, 60))
         shot(window, "4_handwritten")
         results["errors"] += js(window, "window.__errors") or []
+        results["finished"] = True
     except Exception as error:
         results["errors"].append(f"{type(error).__name__}: {error}")
         shot(window, "error")
@@ -298,6 +301,8 @@ def main():
     from app.engine.system import webview_gui
     webview.start(scenario, (window, api), gui=webview_gui(), private_mode=True)
     api.shutdown()
+    if not results.get("finished") and not results["errors"]:
+        results["errors"].append("The window closed before the scenario finished")
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(results, ensure_ascii=False, indent=2))
 

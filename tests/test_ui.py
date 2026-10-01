@@ -31,5 +31,5 @@ def test_every_interface_feature(tmp_path):
                 "remaining traces appear in red on the page", "save verified PDF",
                 "CSV and JSON logs omit original values", "save all PDFs to a folder", "maximum-security preview",
                 "settings are collapsed during review", "detection changes request reanalysis",
-                "restoring detection clears the warning"}
+                "restoring detection clears the warning", "original and result show the same document"}
     assert expected <= set(results["steps"]), expected - set(results["steps"])

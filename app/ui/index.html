@@ -10,12 +10,15 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo" aria-hidden="true"></span>
-      <div>
-        <h1>Anonimato</h1>
-        <p>Datos personales, rostros y firmas fuera de tus documentos. Todo se procesa en este equipo.</p>
-      </div>
+      <svg class="logo" width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect x="3.5" y="1.5" width="19" height="23" rx="2.5" stroke="currentColor" stroke-width="1.6"/><rect x="7" y="7" width="12" height="3.4" rx=".6" fill="currentColor"/><path d="M7 14h12M7 18h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <h1>Anonimato</h1>
     </div>
+    <ol class="steps" id="steps" aria-label="Pasos">
+      <li data-step="add"><span class="step-mark" aria-hidden="true">1</span>Añadir</li>
+      <li data-step="analyze"><span class="step-mark" aria-hidden="true">2</span>Analizar</li>
+      <li data-step="review"><span class="step-mark" aria-hidden="true">3</span>Revisar</li>
+      <li data-step="save"><span class="step-mark" aria-hidden="true">4</span>Guardar</li>
+    </ol>
     <div class="engine-status" id="engineStatus" aria-live="polite"></div>
   </header>
 
@@ -23,17 +26,20 @@
   <main class="workspace">
     <aside class="sidebar" id="sidebar" aria-label="Documentos y opciones">
       <section class="sidebar-section">
-        <h2>Documentos</h2>
+        <div class="section-head">
+          <h2>Documentos</h2>
+          <button class="link-button" id="btnReset" type="button">Vaciar lista</button>
+        </div>
         <div id="dropzone" class="dropzone" aria-label="Zona para soltar archivos">
-          <div class="dz-icon" aria-hidden="true"></div>
+          <svg class="dz-icon" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><path d="M11 14V3M6.5 7.5 11 3l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 14v3.5A1.5 1.5 0 0 0 4.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <div>
             <p class="dz-title">Suelta aquí PDF o imágenes</p>
             <p class="dz-sub">o usa los botones</p>
           </div>
         </div>
         <div class="button-row">
-          <button class="btn ghost small" id="btnAddFiles">Añadir archivos</button>
-          <button class="btn ghost small" id="btnAddFolder">Añadir carpeta</button>
+          <button class="btn ghost small" id="btnAddFiles" type="button">Añadir archivos</button>
+          <button class="btn ghost small" id="btnAddFolder" type="button">Añadir carpeta</button>
         </div>
         <div id="documentQueue" class="document-queue" aria-label="Lista de documentos"></div>
       </section>
@@ -68,11 +74,9 @@
       </section>
 
       <section class="sidebar-section result-settings">
-        <h2>Protección del resultado</h2>
-        <label class="toggle strong"><input type="checkbox" id="optMaxSecurity" /><span><strong>Voy a compartir este documento fuera</strong></span>
-          <small>Máxima seguridad: convierte cada página en imagen tras tachar. El PDF pesará más.</small></label>
+        <h2>Archivo de salida</h2>
         <details class="settings-disclosure" id="resultDetails">
-          <summary>Más opciones de salida</summary>
+          <summary>Opciones de salida</summary>
           <div class="settings-content opts">
             <label class="toggle" id="textLayerOption"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en máxima seguridad</span>
               <small>Se genera por OCR sobre el resultado ya anonimizado.</small></label>
@@ -86,9 +90,9 @@
       </section>
 
       <div class="sidebar-actions">
-        <button id="btnRun" class="btn primary" disabled>Analizar documentos</button>
-        <p class="action-hint">Revisa cada página antes de compartir.</p>
-        <button id="btnCancel" class="btn ghost small wide" hidden>Cancelar</button>
+        <button id="btnRun" class="btn primary" type="button" disabled>Analizar documentos</button>
+        <p class="action-hint">Después revisarás cada página antes de guardar.</p>
+        <button id="btnCancel" class="btn ghost small wide" type="button" hidden>Cancelar</button>
         <p id="errMsg" class="err" role="alert" hidden></p>
         <section class="progress-card" id="progressCard" hidden aria-label="Progreso">
           <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -104,64 +108,107 @@
         <p>PDF, fotos o escaneos. Nada sale de este equipo.</p>
       </div>
 
-      <div id="resultsCard" hidden>
-        <div class="results-head">
-          <div>
-            <p class="current-file" id="currentFileName"></p>
-            <h2>Revisión</h2>
+      <div id="resultsCard" class="review" hidden>
+        <div class="review-main">
+          <div class="results-head">
+            <div class="results-title">
+              <h2 id="currentFileName"></h2>
+              <p class="stats" id="statsHost"></p>
+            </div>
+            <div class="view-tools">
+              <div class="segmented" role="group" aria-label="Vista">
+                <button type="button" id="btnViewCompare" aria-pressed="true">Comparar</button>
+                <button type="button" id="btnViewResult" aria-pressed="false">Solo resultado</button>
+              </div>
+              <button class="btn ghost small" id="btnManual" type="button" aria-pressed="false" aria-keyshortcuts="M"><span id="btnManualLabel">Ocultar zona</span><kbd>M</kbd></button>
+            </div>
           </div>
-          <div class="stats" id="statsHost"></div>
+
+          <div id="verifyCard" class="verify-card" hidden></div>
+          <p id="detectionNotice" class="detection-notice" hidden></p>
+
+          <div class="comparison-grid" id="comparisonGrid">
+            <section class="document-column original-column">
+              <h3><span class="swatch mark" aria-hidden="true"></span>Original · hallazgos marcados</h3>
+              <figure class="page"><div class="page-image-wrap" id="originalWrap"><img id="originalImg" alt="Página original" /></div></figure>
+            </section>
+            <section class="document-column anonymized-column">
+              <h3><span class="swatch ink" aria-hidden="true"></span>Resultado · igual que el archivo final</h3>
+              <figure class="page"><div class="page-image-wrap" id="resultWrap"><img id="resultImg" alt="Página anonimizada" /></div></figure>
+            </section>
+          </div>
+
+          <div class="page-nav" aria-label="Navegación de páginas">
+            <div class="pager">
+              <button class="btn ghost small icon" id="btnPrevPage" type="button" aria-label="Página anterior">‹</button>
+              <span id="pageIndicator" aria-live="polite"></span>
+              <button class="btn ghost small icon" id="btnNextPage" type="button" aria-label="Página siguiente">›</button>
+            </div>
+            <p class="shortcuts" aria-label="Atajos de teclado">
+              <span><kbd>←</kbd><kbd>→</kbd> páginas</span>
+              <span><kbd>J</kbd><kbd>K</kbd> hallazgos</span>
+              <span><kbd>Espacio</kbd> incluir</span>
+              <span><kbd>M</kbd> ocultar zona</span>
+              <span><kbd>D</kbd> panel de datos</span>
+            </p>
+          </div>
         </div>
 
-        <div class="toolbar">
-          <button class="btn primary" id="btnPdf">Guardar PDF verificado</button>
-          <button class="btn ghost" id="btnAll">Guardar todos en una carpeta</button>
-          <button class="btn ghost" id="btnCsv">Registro CSV</button>
-          <button class="btn ghost" id="btnJson">Registro JSON</button>
-          <span class="spacer"></span>
-          <label class="inline-check"><input type="checkbox" id="optLogOriginals" /> Originales en registros</label>
-          <label class="inline-check"><input type="checkbox" id="optLogCoords" /> Coordenadas</label>
-          <button class="btn ghost small" id="btnReset">Vaciar lista</button>
-        </div>
-        <p id="logWarning" class="warning" hidden>El registro con valores originales <strong>es en sí mismo un dato personal</strong>. Guárdalo con la misma protección que el documento original.</p>
+        <aside class="findings-panel" id="findingsPanel" aria-label="Datos encontrados y guardado">
+          <div class="panel-rail">
+            <button class="icon-button" id="btnPanelExpand" type="button" aria-label="Mostrar panel de datos encontrados" aria-controls="findingsPanel" aria-expanded="false" aria-keyshortcuts="D" title="Mostrar panel (D)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.4"/><path d="M7.5 6 5.5 8l2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <kbd aria-hidden="true">D</kbd>
+            <span class="rail-count" id="railCount" title="Datos que se ocultarán"></span>
+            <span class="rail-label">Datos encontrados</span>
+            <button class="icon-button primary" id="btnRailSave" type="button" aria-label="Verificar y guardar PDF" title="Verificar y guardar PDF">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5.5 2v4.2c0 3.3-2.3 5.8-5.5 6.8-3.2-1-5.5-3.5-5.5-6.8V3.5L8 1.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 8l1.8 1.8L10.8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
 
-        <div id="verifyCard" class="verify-card" hidden></div>
-        <p id="detectionNotice" class="detection-notice" hidden></p>
-
-        <div class="page-nav" aria-label="Navegación de páginas">
-          <button class="btn ghost small" id="btnPrevPage">← Anterior</button>
-          <span id="pageIndicator" aria-live="polite"></span>
-          <button class="btn ghost small" id="btnNextPage">Siguiente →</button>
-          <button class="btn ghost small" id="btnManual" aria-pressed="false">Ocultar zona (M)</button>
-          <span class="shortcuts">Atajos: ← → páginas · J/K hallazgos · Espacio incluir/excluir · M ocultar zona</span>
-        </div>
-
-        <div class="comparison-grid">
-          <section class="document-column">
-            <h3>Original · hallazgos marcados</h3>
-            <figure class="page"><div class="page-image-wrap" id="originalWrap"><img id="originalImg" alt="Página original" /></div></figure>
-          </section>
-          <section class="document-column anonymized-column">
-            <h3>Resultado anonimizado</h3>
-            <figure class="page"><div class="page-image-wrap" id="resultWrap"><img id="resultImg" alt="Página anonimizada" /></div></figure>
-            <p class="pdf-note">Vista generada con el mismo proceso que el archivo final. Al guardar se verifica que no queda rastro.</p>
-          </section>
-          <aside class="data-column">
-            <h3>Datos detectados <span id="rowsCount"></span></h3>
+          <div class="panel-body">
+            <div class="panel-head">
+              <h3>Datos encontrados</h3>
+              <span class="rows-count" id="rowsCount"></span>
+              <button class="icon-button" id="btnPanelCollapse" type="button" aria-label="Ocultar panel de datos encontrados" aria-controls="findingsPanel" aria-expanded="true" aria-keyshortcuts="D" title="Ocultar panel (D)">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 6l2 2-2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
             <div class="filter-row">
               <select id="typeFilter" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option></select>
-              <button class="btn ghost small" id="btnAllOn">Incluir todo</button>
-              <button class="btn ghost small" id="btnAllOff">Excluir todo</button>
+              <button class="btn ghost small" id="btnAllOn" type="button">Incluir todo</button>
+              <button class="btn ghost small" id="btnAllOff" type="button">Excluir todo</button>
             </div>
             <div class="table-scroll">
               <table>
-                <thead><tr><th></th><th>Pág.</th><th>Tipo</th><th>Conf.</th><th>Valor</th><th>Reemplazo</th></tr></thead>
+                <thead><tr><th><span class="visually-hidden">Incluir</span></th><th>Dato</th><th>Reemplazo</th></tr></thead>
                 <tbody id="rowsBody"></tbody>
               </table>
             </div>
             <div id="notes" class="notes"></div>
-          </aside>
-        </div>
+
+            <div class="panel-footer">
+              <label class="share-card"><input type="checkbox" id="optMaxSecurity" />
+                <span><strong>Voy a compartirlo fuera</strong>
+                  <small>Máxima seguridad: cada página se guarda como imagen tras tachar. El PDF pesará más.</small></span></label>
+              <button class="btn primary" id="btnPdf" type="button">Verificar y guardar PDF</button>
+              <div class="footer-row">
+                <button class="btn ghost small" id="btnAll" type="button">Guardar todos en una carpeta</button>
+                <details class="log-menu" id="logMenu">
+                  <summary class="btn ghost small">Registro</summary>
+                  <div class="log-popover">
+                    <button class="btn ghost small" id="btnCsv" type="button">Guardar registro CSV</button>
+                    <button class="btn ghost small" id="btnJson" type="button">Guardar registro JSON</button>
+                    <label class="inline-check"><input type="checkbox" id="optLogOriginals" /> Incluir valores originales</label>
+                    <label class="inline-check"><input type="checkbox" id="optLogCoords" /> Incluir coordenadas</label>
+                    <p id="logWarning" class="warning" hidden>El registro con valores originales <strong>es en sí mismo un dato personal</strong>. Guárdalo con la misma protección que el documento original.</p>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
   </main>

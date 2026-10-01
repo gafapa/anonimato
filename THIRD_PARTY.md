@@ -16,6 +16,7 @@ All components run locally. Models are downloaded only from their official sourc
 | YuNet 2023mar | Face detection | MIT | github.com/opencv/opencv_zoo |
 | Qwen3-VL-8B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | Handwriting and contextual review (advanced package, GPU with at least 7 GB free) | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF |
 | Qwen3-VL-4B-Instruct (GGUF Q4_K_M + mmproj Q8_0) | Smaller advanced package for lower-memory GPUs | Apache-2.0 | huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF |
+| IBM Plex Sans and IBM Plex Mono (Latin subset, WOFF2) | Interface typefaces, bundled in `app/ui/fonts` with their license | OFL-1.1 | github.com/IBM/plex (files from npm `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-mono`) |
 
 Evaluated but not included (see [docs/benchmark.md](docs/benchmark.md)): PaddleOCR-VL 1.6 (Apache-2.0). It is the fastest option tested, but only performs OCR and reads handwritten names less accurately than Qwen3-VL-8B; it cannot perform contextual review.
 

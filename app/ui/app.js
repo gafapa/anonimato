@@ -4,8 +4,8 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     status: null, docs: [], activeId: null, details: null, page: 0, current: -1,
-    manual: false, polling: false, previewTimer: null, previewSeq: 0, filter: '',
-    analysisSignature: null,
+    manual: false, polling: false, previewTimer: null, previewSeq: 0, originalSeq: 0, filter: '',
+    analysisSignature: null, view: 'compare', panelCollapsed: false, savedIds: new Set(),
   };
   let api = null;
 
@@ -59,6 +59,21 @@
     $('settingsChangeNotice').hidden = !hasResults || !state.analysisSignature ||
       state.analysisSignature === detectionSignature();
     $('sidebar').classList.toggle('reviewing', hasResults);
+    renderSteps();
+  }
+  function renderSteps() {
+    const doc = activeDoc();
+    const ready = state.docs.some((d) => d.status === 'ready');
+    const saved = !!doc && state.savedIds.has(doc.id);
+    const current = !state.docs.length ? 'add' : !ready ? 'analyze' : 'review';
+    const done = { add: state.docs.length > 0, analyze: ready, review: saved, save: saved };
+    for (const item of $('steps').children) {
+      const step = item.dataset.step;
+      const isCurrent = step === current && !done[step];
+      item.classList.toggle('done', done[step]);
+      item.classList.toggle('current', isCurrent);
+      if (isCurrent) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current');
+    }
   }
   function activeDoc() { return state.docs.find((doc) => doc.id === state.activeId) || null; }
   function visibleFindings() {
@@ -278,10 +293,15 @@
     const findings = d.findings;
     const enabled = findings.filter((f) => f.enabled);
     $('currentFileName').textContent = d.name;
-    $('statsHost').replaceChildren(...[
-      ['Páginas', d.pages.length], ['Hallazgos', findings.length], ['Incluidos', enabled.length],
-      ['Rostros', findings.filter((f) => f.type === 'face').length], ['Tiempo', `${d.seconds} s`],
-    ].map(([label, value]) => el('div', { className: 'stat' }, [el('b', { textContent: String(value) }), label])));
+    const faces = findings.filter((f) => f.type === 'face').length;
+    const stats = [
+      [d.pages.length, d.pages.length === 1 ? 'página' : 'páginas'], [findings.length, 'hallazgos'],
+      [enabled.length, 'incluidos'], ...(faces ? [[faces, faces === 1 ? 'rostro' : 'rostros']] : []),
+      [`${d.seconds} s`, 'de análisis'],
+    ];
+    $('statsHost').replaceChildren(...stats.flatMap(([value, label], index) => [
+      ...(index ? [' · '] : []), el('b', { textContent: String(value) }), ` ${label}`,
+    ]));
     const lowText = d.nativeChars / Math.max(1, d.pages.length) < 30;
     $('detectionNotice').hidden = !lowText && !d.notes.length;
     $('detectionNotice').textContent = lowText ? 'Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.' : '';
@@ -310,7 +330,7 @@
         if (located) item.addEventListener('click', () => { state.page = leak.page; renderPage(); });
         return item;
       })));
-      children.push(el('p', { textContent: 'Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o usa el modo «Voy a compartir este documento fuera».' }));
+      children.push(el('p', { textContent: 'Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o activa «Voy a compartirlo fuera» y vuelve a guardar.' }));
     }
     if (report.warnings?.length) {
       children.push(el('ul', { className: 'warn-list' }, report.warnings.map((w) => el('li', { textContent: w }))));
@@ -329,13 +349,17 @@
       checkbox.addEventListener('click', (event) => event.stopPropagation());
       checkbox.addEventListener('change', () => toggle([f.id], checkbox.checked));
       const confidence = Math.round(f.confidence * 100);
-      const conf = el('td', { className: 'confidence' + (confidence < 80 ? ' low' : ''), textContent: `${confidence} %` });
+      const conf = el('span', { className: 'confidence' + (confidence < 80 ? ' low' : ''), textContent: confidence < 80 ? `${confidence} % · revisar` : `${confidence} %` });
       conf.title = f.warning === 'checksum' ? 'Formato reconocido; dígito de control no válido' : (f.detail || '');
-      const value = el('td', { className: 'orig' }, [f.value ?? `(${f.detail || f.label})`, el('span', { className: 'src', textContent: sourceLabel(f.source) })]);
+      const meta = el('div', { className: 'finding-meta' }, [
+        el('span', { className: 'type-badge', textContent: f.label }), el('span', { textContent: `pág. ${f.page + 1}` }), conf,
+      ]);
+      const value = el('td', { className: 'orig' }, [
+        meta, el('span', { className: 'orig-value', textContent: f.value ?? `(${f.detail || f.label})` }),
+        el('span', { className: 'src', textContent: sourceLabel(f.source) }),
+      ]);
       const row = el('tr', { className: (f.enabled ? '' : 'off') + (index === state.current ? ' current' : '') }, [
-        el('td', {}, [checkbox]), el('td', { textContent: String(f.page + 1) }),
-        el('td', {}, [el('span', { className: 'type-badge', textContent: f.label })]), conf, value,
-        el('td', { className: 'tok', textContent: f.token }),
+        el('td', {}, [checkbox]), value, el('td', { className: 'tok', textContent: f.token }),
       ]);
       row.addEventListener('click', () => focusFinding(index));
       if (f.type === 'manual') {
@@ -351,7 +375,8 @@
       body.append(row);
     });
     const enabled = state.details.findings.filter((f) => f.enabled).length;
-    $('rowsCount').textContent = `(${enabled}/${state.details.findings.length} incluidos)`;
+    $('rowsCount').textContent = `${enabled} de ${state.details.findings.length} se ocultarán`;
+    $('railCount').textContent = String(enabled);
   }
 
   function sourceLabel(source) {
@@ -363,6 +388,7 @@
 
   async function toggle(ids, enabled) {
     await api.set_enabled(state.details.id, ids, enabled);
+    state.savedIds.delete(state.details.id);
     for (const f of state.details.findings) if (ids.includes(f.id)) f.enabled = enabled;
     state.details.report = null;
     renderDetails();
@@ -386,10 +412,17 @@
     $('pageIndicator').textContent = `Página ${state.page + 1} de ${d.pages.length}`;
     $('btnPrevPage').disabled = state.page === 0;
     $('btnNextPage').disabled = state.page === d.pages.length - 1;
-    const seq = ++state.previewSeq;
+    // Separate counters: an output-option change re-renders only the result and must not discard
+    // the original of a page or document that is still loading.
+    const seq = ++state.originalSeq;
+    ++state.previewSeq;  // a result still rendering belongs to the previous page
+    clearTimeout(state.previewTimer);
+    $('resultWrap').classList.add('loading-preview');
+    $('resultImg').removeAttribute('src');
     const src = await api.page_image(d.id, state.page, 'original', options());
-    if (seq !== state.previewSeq || state.details !== d) return;
+    if (seq !== state.originalSeq || state.details !== d) return;
     $('originalImg').src = src;
+    $('originalImg').dataset.doc = d.id;
     drawBoxes();
     schedulePreview();
   }
@@ -402,9 +435,15 @@
     state.previewTimer = setTimeout(async () => {
       if (!state.details) return;
       const seq = ++state.previewSeq;
+      const id = state.details.id;
       try {
-        const src = await api.page_image(state.details.id, state.page, 'result', options());
-        if (seq === state.previewSeq) { $('resultImg').src = src; wrap.classList.remove('loading-preview'); drawLeaks(); }
+        const src = await api.page_image(id, state.page, 'result', options());
+        if (seq === state.previewSeq) {
+          $('resultImg').src = src;
+          $('resultImg').dataset.doc = id;
+          wrap.classList.remove('loading-preview');
+          drawLeaks();
+        }
       } catch (error) {
         setError(`No se pudo generar la vista previa: ${error.message || error}`);
         wrap.classList.remove('loading-preview');
@@ -485,6 +524,7 @@
       const finding = await api.add_manual(state.details.id, state.page, rect);
       state.details.findings.push(finding);
       state.details.report = null;
+      state.savedIds.delete(state.details.id);
       setManual(false);
       renderDetails();
     });
@@ -492,15 +532,32 @@
   function setManual(on) {
     state.manual = on;
     $('btnManual').setAttribute('aria-pressed', String(on));
-    $('btnManual').textContent = on ? 'Arrastra sobre la página…' : 'Ocultar zona (M)';
+    $('btnManualLabel').textContent = on ? 'Arrastra sobre la página…' : 'Ocultar zona';
     $('originalWrap').classList.toggle('manual-mode', on);
     $('resultWrap').classList.toggle('manual-mode', on);
+  }
+
+  // ------------------------------------------------------------ view & findings panel
+  function setView(view) {
+    state.view = view;
+    $('comparisonGrid').classList.toggle('result-only', view === 'result');
+    $('btnViewCompare').setAttribute('aria-pressed', String(view === 'compare'));
+    $('btnViewResult').setAttribute('aria-pressed', String(view === 'result'));
+  }
+  function setPanel(collapsed, { focus = false } = {}) {
+    state.panelCollapsed = collapsed;
+    $('resultsCard').classList.toggle('panel-collapsed', collapsed);
+    $('btnPanelExpand').setAttribute('aria-expanded', String(!collapsed));
+    $('btnPanelCollapse').setAttribute('aria-expanded', String(!collapsed));
+    try { localStorage.setItem('anonimato.panelCollapsed', collapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+    if (focus) (collapsed ? $('btnPanelExpand') : $('btnPanelCollapse')).focus();
   }
 
   // ------------------------------------------------------------ export
   async function savePdf() {
     setError('');
     $('btnPdf').disabled = true;
+    $('btnRailSave').disabled = true;
     $('progressCard').hidden = false;
     $('progressText').textContent = 'Generando y verificando…';
     const ticker = setInterval(async () => {
@@ -516,12 +573,17 @@
       renderReport(state.details.report);
       drawLeaks();
       if (!result.ok) setError(result.message);
-      else if (result.saved) $('progressText').textContent = `Guardado: ${result.path}`;
+      else if (result.saved) {
+        $('progressText').textContent = `Guardado: ${result.path}`;
+        state.savedIds.add(state.details.id);
+        renderSteps();
+      }
     } catch (error) {
       setError(`Error al guardar: ${error.message || error}`);
     } finally {
       clearInterval(ticker);
       $('btnPdf').disabled = false;
+      $('btnRailSave').disabled = false;
       setTimeout(() => { if (!state.polling) $('progressCard').hidden = true; }, 2500);
     }
   }
@@ -575,6 +637,18 @@
     $('btnPrevPage').addEventListener('click', () => { state.page -= 1; renderPage(); });
     $('btnNextPage').addEventListener('click', () => { state.page += 1; renderPage(); });
     $('btnManual').addEventListener('click', () => setManual(!state.manual));
+    $('btnViewCompare').addEventListener('click', () => setView('compare'));
+    $('btnViewResult').addEventListener('click', () => setView('result'));
+    $('btnPanelCollapse').addEventListener('click', () => setPanel(true, { focus: true }));
+    $('btnPanelExpand').addEventListener('click', () => setPanel(false, { focus: true }));
+    $('btnRailSave').addEventListener('click', savePdf);
+    document.addEventListener('click', (event) => {
+      const menu = $('logMenu');
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    });
+    let collapsed = false;
+    try { collapsed = localStorage.getItem('anonimato.panelCollapsed') === '1'; } catch { /* storage unavailable */ }
+    setPanel(collapsed);
     $('btnAllOn').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), true));
     $('btnAllOff').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), false));
     $('typeFilter').addEventListener('change', (event) => { state.filter = event.target.value; state.current = -1; renderDetails(); });
@@ -582,6 +656,8 @@
       $(id).addEventListener('change', async () => {
         if (state.details) {
           state.details.report = null;
+          state.savedIds.delete(state.details.id);
+          renderSteps();
           renderReport(null);
           await api.invalidate_report(state.details.id);
           schedulePreview();
@@ -608,6 +684,8 @@
         const f = visibleFindings()[state.current];
         if (f) toggle([f.id], !f.enabled);
       } else if (key === 'm') setManual(!state.manual);
+      else if (key === 'd' && !event.ctrlKey && !event.metaKey && !event.altKey) setPanel(!state.panelCollapsed);
+      else if (key === 'escape' && $('logMenu').open) $('logMenu').open = false;
       else return;
     });
   }
