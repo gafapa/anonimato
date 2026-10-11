@@ -48,7 +48,7 @@ The [implementation report](docs/improvements-2.2.1.md) records validation and l
 
 ## Platform qualification
 
-Windows is the primary platform. The 2.2.1 packaged executable passed the local anonymization, integrity and recovery self-test in an empty local profile; installing over an existing application was not tested locally. macOS and Linux use the same application code with platform-specific dependencies. Cross-platform packaging and installation checks are configured in [the build workflow](.github/workflows/build.yml). See [the implementation report](docs/improvements-2.2.1.md) for current validation evidence and its limits.
+Windows is the primary platform. The 2.2.1 packaged executable passed the local anonymization, integrity and recovery self-test. Isolated Windows qualification verified an upgrade from 2.2.0, same-version reinstall, preservation of fictitious profile data, and complete QA uninstallation; it did not modify an existing production installation. macOS and Linux use the same application code with platform-specific dependencies. Cross-platform packaging and installation checks are configured in [the build workflow](.github/workflows/build.yml). See [the implementation report](docs/improvements-2.2.1.md) for current validation evidence and its limits, and [the Actions guide](docs/github-actions.md) for CI checks, artifacts, and tagged releases.
 
 | | Windows 10/11 x64 | macOS 15+ (Apple Silicon) | Linux x86-64 |
 |---|---|---|---|

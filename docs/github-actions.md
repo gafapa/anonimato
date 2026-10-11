@@ -21,7 +21,11 @@ qualification installers are excluded from Git.
 Builds require all fast, portable, and workflow security checks to pass. A required
 advanced qualification failure also blocks builds. Evidence is retained even when
 tests or qualification fail; distribution packages are uploaded only on success.
-QA installers are excluded from distribution artifacts.
+QA installers are excluded from distribution artifacts. Diagnostic upload failures
+are visible but do not suppress remaining qualification checks. Package upload
+failures still fail the build and block release publication. Package artifacts
+expire after seven days. The real model checksum test runs after downloading models,
+not in the model-free regression lanes.
 
 ## Extended qualification
 
