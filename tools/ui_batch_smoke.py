@@ -107,7 +107,12 @@ def main() -> None:
                     deadline = time.monotonic() + 35
                     while not ready.exists() and time.monotonic() < deadline and collector.poll() is None:
                         time.sleep(0.1)
-                    assert ready.exists(), "JavaScript coverage failed to start"
+                    if not ready.exists():
+                        if collector.poll() is None:
+                            collector.kill()
+                        _stdout, startup_error = collector.communicate(timeout=10)
+                        raise AssertionError("JavaScript coverage failed to start: "
+                                             + startup_error.decode(errors="replace")[-3000:])
                 wait("document.readyState === 'complete' && !!document.getElementById('resultsCard')")
                 wait("!document.getElementById('resultsCard').hidden")
                 wait("document.getElementById('originalImg').dataset.doc === 'd1'")
