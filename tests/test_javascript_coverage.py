@@ -24,7 +24,8 @@ def test_real_javascript_action_coverage(tmp_path):
     if destination := os.environ.get('ANONIMATO_JS_COVERAGE_OUTPUT'):
         Path(destination).write_text(json.dumps(report, indent=2), encoding='utf-8')
     minimum = json.loads((ROOT / 'packaging/coverage-policy.json').read_text('utf-8'))['javascript_blocks']
-    assert report['total'] == len((ROOT / 'app/ui/app.js').read_text('utf-8').encode('utf-16-le')) // 2
+    source = (ROOT / 'app/ui/app.js').read_bytes().decode('utf-8')
+    assert report['total'] == len(source.encode('utf-16-le')) // 2
     assert report['percent'] >= minimum, report
     assert report['coveredFunctions'] > 50
     assert report['raw']['url'] == (ROOT / 'app/ui/app.js').as_uri()
