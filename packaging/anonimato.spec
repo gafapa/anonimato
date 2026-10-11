@@ -2,11 +2,13 @@
 # Windows → dist/Anonimato (then Inno Setup); macOS → dist/Anonimato.app (then .dmg); Linux → dist/Anonimato (then AppImage).
 import json
 import sys
+import tomllib
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 ROOT = Path(SPECPATH).parent
+VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 SYSTEM = "windows" if sys.platform == "win32" else "macos" if sys.platform == "darwin" else "linux"
 manifest = json.loads((ROOT / "models" / "manifest.json").read_text(encoding="utf-8"))
 
@@ -37,6 +39,11 @@ for package in packages:
     binaries += b
     hiddenimports += h
 
+# Include runtime dependency metadata and license files for a reviewable package inventory.
+for distribution in ("filelock", "PyMuPDF", "pikepdf", "pywebview", "numpy", "pillow", "opencv-python-headless",
+                     "onnxruntime-directml" if SYSTEM == "windows" else "onnxruntime", "tokenizers", "rapidfuzz", "regex", "pyyaml"):
+    datas += copy_metadata(distribution, recursive=True)
+
 icon = {"windows": ROOT / "packaging" / "anonimato.ico", "macos": ROOT / "packaging" / "anonimato.icns"}.get(SYSTEM)
 
 a = Analysis(
@@ -60,7 +67,7 @@ if SYSTEM == "macos":
         coll, name="Anonimato.app", icon=str(icon), bundle_identifier="org.anonimato.desktop",
         info_plist={
             "CFBundleName": "Anonimato", "CFBundleDisplayName": "Anonimato",
-            "CFBundleShortVersionString": "2.1.0", "CFBundleVersion": "2.1.0",
+            "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "15.0", "NSHighResolutionCapable": True,
             "LSApplicationCategoryType": "public.app-category.productivity",
         },

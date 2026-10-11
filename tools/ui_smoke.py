@@ -222,6 +222,7 @@ def scenario(window, api):
         step("keyboard page navigation", "de 2" in indicator, indicator)
 
         # ---- manual zone drawn with the mouse, then deleted
+        wait_js(window, "!document.getElementById('originalWrap').classList.contains('loading-preview') && document.getElementById('originalImg').complete", 30)
         before = rows(window)
         key(window, "m")
         js(window, """
@@ -237,6 +238,25 @@ def scenario(window, api):
         js(window, "[...document.querySelectorAll('#rowsBody button')].find(b => b.textContent === 'Borrar').click()")
         wait_js(window, f"document.querySelectorAll('#rowsBody tr').length === {before}", 30)
         step("manual area selection and deletion", has_manual)
+        click(window, "btnUndo")
+        wait_js(window, f"document.querySelectorAll('#rowsBody tr').length === {before + 1}", 30)
+        click(window, "btnRedo")
+        wait_js(window, f"document.querySelectorAll('#rowsBody tr').length === {before}", 30)
+        step("undo and redo review changes", True)
+        js(window, "document.getElementById('manualForm').requestSubmit()")
+        wait_js(window, f"document.querySelectorAll('#rowsBody tr').length === {before + 1}", 30)
+        step("keyboard coordinate zone creation", True)
+        js(window, "[...document.querySelectorAll('#rowsBody tr')].find(row => row.querySelector('.tok').textContent.startsWith('[MANUAL')).click(); document.getElementById('manualWidth').value = '25'; document.getElementById('manualForm').requestSubmit()")
+        wait_js(window, "[...document.querySelectorAll('#originalWrap .box.manual')].some(box => Math.abs(parseFloat(box.style.width) - 25) < 0.01)", 30)
+        step("keyboard coordinate zone editing", True)
+        js(window, "const z = document.getElementById('pageZoom'); z.value = '2'; z.dispatchEvent(new Event('change'))")
+        wait_js(window, "document.getElementById('originalWrap').classList.contains('zoomed')", 30)
+        step("page zoom keeps normalized overlays", js(window, "document.getElementById('originalWrap').style.width === '1190px'"))
+        js(window, "const z = document.getElementById('pageZoom'); z.value = '0'; z.dispatchEvent(new Event('change'))")
+        click(window, "btnUndo")
+        wait_js(window, "[...document.querySelectorAll('#originalWrap .box.manual')].some(box => Math.abs(parseFloat(box.style.width) - 20) < 0.01)", 30)
+        click(window, "btnUndo")
+        wait_js(window, f"document.querySelectorAll('#rowsBody tr').length === {before}", 30)
 
         # ---- engine errors banner (integrity failure blocks the analysis)
         original_status = api.status
@@ -268,7 +288,15 @@ def scenario(window, api):
         batch.mkdir()
         api.attach(Dialogs(window, [str(saved), str(csv_path), str(json_path), [str(batch)]]))
         click(window, "btnPdf")
+        wait_js(window, "document.getElementById('btnPdf').disabled", 30)
+        key(window, "M")
+        step("editing is blocked while saving", js(window,
+             "document.getElementById('btnManual').disabled && "
+             "document.getElementById('optMaxSecurity').disabled && "
+             "document.getElementById('btnManual').getAttribute('aria-pressed') === 'false' && "
+             "[...document.querySelectorAll('#rowsBody input')].every(input => input.disabled)"))
         wait_js(window, "document.getElementById('verifyCard').classList.contains('ok')", 600)
+        wait_js(window, "!document.getElementById('btnPdf').disabled", 30)
         step("save verified PDF", saved.exists())
         click(window, "btnCsv")
         wait_for(csv_path.exists)
@@ -282,6 +310,9 @@ def scenario(window, api):
         report = json.loads((batch / "informe_verificacion.json").read_text(encoding="utf-8"))
         pdfs = list(batch.glob("*.pdf"))
         step("save all PDFs to a folder", len(pdfs) == 5 and all(d["ok"] for d in report["documentos"]), f"{len(pdfs)} PDF")
+        wait_js(window, "!document.getElementById('batchResults').hidden", 30)
+        step("batch shows individual saved results", js(window, "document.querySelectorAll('#batchList li').length === 5 && document.getElementById('batchSummary').textContent.includes('informe_verificacion')"))
+        step("verification announcements are accessible", js(window, "document.getElementById('verifyCard').getAttribute('aria-live') === 'polite'"))
 
         # ---- maximum-security preview on the handwritten document
         select_document(window, "23_")
@@ -292,6 +323,11 @@ def scenario(window, api):
         same = "(() => { const o = document.getElementById('originalImg'), r = document.getElementById('resultImg');"                " return !!o.dataset.doc && o.dataset.doc === r.dataset.doc; })()"
         step("original and result show the same document", wait_js(window, same, 60))
         shot(window, "4_handwritten")
+        window.resize(980, 640)
+        time.sleep(0.8)
+        shot(window, "5_compact")
+        step("compact desktop has no horizontal page overflow", js(window, "document.documentElement.scrollWidth <= window.innerWidth"))
+        window.resize(1480, 940)
         results["errors"] += js(window, "window.__errors") or []
         results["finished"] = True
     except Exception as error:

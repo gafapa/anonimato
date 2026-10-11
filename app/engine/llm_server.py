@@ -55,6 +55,19 @@ def installed_variant() -> str | None:
     return None
 
 
+def choose_variant(available: list[str], mode: str, free_vram: int, ram: int) -> str:
+    """Select among installed packs; preserve an explicit accuracy choice even on CPU."""
+    if mode not in ("auto", "accuracy", "memory") or not available:
+        raise RuntimeError("No hay un modelo avanzado disponible para esta configuración")
+    preferred = "advanced" if mode == "accuracy" or (mode == "auto" and free_vram >= 7000) else "advanced_lite"
+    selected = preferred if preferred in available else available[0]
+    required_vram = 7000 if selected == "advanced" else 3000
+    required_ram = 16384 if selected == "advanced" else 8192
+    if mode == "auto" and free_vram < required_vram and ram < required_ram:
+        raise RuntimeError("No hay memoria suficiente para el modelo instalado. Usa el paquete 4B o libera memoria.")
+    return selected
+
+
 def recommended_variant() -> str:
     """8B needs about 7 GB of free video memory; smaller GPUs get the 4B model."""
     _, free = pick_device(_exe()) if os.path.exists(_exe()) else (None, 0)
@@ -88,10 +101,15 @@ def pick_device(exe: str) -> tuple[str | None, int]:
 
 
 class LlamaServer:
-    def __init__(self, model_path: str, mmproj_path: str | None, context: int = 8192):
+    def __init__(self, model_path: str, mmproj_path: str | None, context: int = 8192, use_gpu: bool = True):
         self.model_path = model_path
         self.mmproj_path = mmproj_path
         self.context = context
+        self.use_gpu = use_gpu
+        self.mode = "auto"
+        self.managed = False
+        self.variant: str | None = None
+        self.backend = "Sin iniciar"
         self.process: subprocess.Popen | None = None
         self.port = 0
         self.key = ""
@@ -101,9 +119,15 @@ class LlamaServer:
         atexit.register(self.stop)
 
     @classmethod
-    def default(cls) -> LlamaServer:
+    def default(cls, use_gpu: bool = True, mode: str = "auto") -> LlamaServer:
         prefix = "vlm" if installed_variant() == "advanced" else "vlm-lite"
-        return cls(str(models.model(prefix).path), str(models.model(f"{prefix}-mmproj").path))
+        server = cls(str(models.model(prefix).path), str(models.model(f"{prefix}-mmproj").path), use_gpu=use_gpu)
+        server.mode, server.managed = mode, True
+        return server
+
+    def execution_status(self) -> str:
+        label = "8B" if self.variant == "advanced" else "4B" if self.variant else "modelo local"
+        return f"{label} · {self.backend}" if self.running() else f"{label} · Sin iniciar"
 
     def running(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -113,7 +137,20 @@ class LlamaServer:
             if self.running():
                 return
             exe = _exe()
-            self.device, free = pick_device(exe)
+            if self.use_gpu and os.environ.get("ANONIMATO_CPU") != "1":
+                self.device, free = pick_device(exe)
+            else:
+                bad = models.verify_runtime()
+                if bad:
+                    raise RuntimeError("Motor de IA alterado o incompleto: " + ", ".join(bad))
+                self.device, free = None, 0
+            if self.managed:
+                available = [group for group in ("advanced", "advanced_lite") if models.group_installed(group)]
+                self.variant = choose_variant(available, self.mode, free, system.available_memory_mb())
+                prefix = "vlm" if self.variant == "advanced" else "vlm-lite"
+                self.model_path = str(models.model(prefix).path)
+                self.mmproj_path = str(models.model(f"{prefix}-mmproj").path)
+            models.require_model_paths([Path(path) for path in (self.model_path, self.mmproj_path) if path])
             self.port = _free_port()
             self.key = secrets.token_hex(24)
             args = [exe, "-m", self.model_path, "--host", "127.0.0.1", "--port", str(self.port),
@@ -121,9 +158,12 @@ class LlamaServer:
                     "--temp", "0", "--log-disable"]
             if self.mmproj_path:
                 args += ["--mmproj", self.mmproj_path]
-            if self.device and free > 3000:
+            minimum_free = 7000 if Path(self.model_path).stat().st_size >= 4 * 1024**3 else 3000
+            if self.device and free >= minimum_free:
+                self.backend = f"GPU ({self.device})"
                 args += ["--device", self.device, "-ngl", "999"]
             else:
+                self.backend = "CPU"
                 args += ["-ngl", "0", "--device", "none"]
             self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                             stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW,

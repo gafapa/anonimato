@@ -17,6 +17,18 @@ def _cell(value) -> str:
     return "'" + text if first in ("=", "+", "-", "@") or text[:1] in ("\t", "\r", "\n") else text
 
 
+def private_report(report: dict | None, include_coords: bool = False) -> dict | None:
+    report = copy.deepcopy(report)
+    if report:
+        for leak in report.get("leaks", []):
+            if "value" in leak:
+                leak["value"] = "…"
+            if not include_coords:
+                leak.pop("rects", None)
+                leak.pop("view", None)
+    return report
+
+
 def build_csv(findings: list[Finding], include_originals: bool = False, include_coords: bool = False) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\r\n")
@@ -47,11 +59,7 @@ def build_json(findings: list[Finding], pages: int, report: dict | None, include
         entry["ocurrencias"] += 1
         if include_originals and f.value:
             entry["originales"] = sorted({f.value} | set(entry.get("originales", [])))
-    report = copy.deepcopy(report)
-    if report and not include_coords:
-        for leak in report.get("leaks", []):
-            leak.pop("rects", None)
-            leak.pop("view", None)
+    report = private_report(report, include_coords)
     data = {
         "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "paginas": pages,

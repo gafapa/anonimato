@@ -13,6 +13,7 @@ def test_manifest_is_pinned():
     for group in ("base", "runtime", "advanced", "advanced_lite"):
         for item in manifest[group]:
             assert item.sha256 and len(item.sha256) == 64, item.id
+            assert item.size is not None and 0 < item.size <= models.MAX_MODEL_BYTES, item.id
             assert item.url.startswith("https://"), item.id
 
 

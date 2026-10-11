@@ -6,12 +6,145 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
 
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
+  workflow-security:
+    name: Workflow validation and secret scanning
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install pinned workflow and secret scanners
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - name: Validate workflow syntax and shell scripts
+        run: '"$(go env GOPATH)/bin/actionlint" -color'
+      - name: Scan repository history for secrets
+        run: '"$(go env GOPATH)/bin/gitleaks" git --redact --report-format sarif --report-path secrets.sarif'
+      - name: Validate JavaScript syntax
+        run: |
+          node --check app/ui/app.js
+          node --check tools/webview_coverage.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: secret-scan-evidence
+          path: secrets.sarif
+          retention-days: 7
+
+  portable:
+    name: Portable regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    env:
+      ANONIMATO_CPU: "1"
+      ANONIMATO_SKIP_UI: "1"
+      PYTHONIOENCODING: utf-8
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run python -m pytest tests --ignore=tests/test_api.py --ignore=tests/test_leaks.py --ignore=tests/test_ui.py --ignore=tests/test_advanced.py -k "not test_selftest_of_the_application" --junitxml=portable-tests.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: portable-test-evidence-${{ runner.os }}
+          path: portable-tests.xml
+
+  fast:
+    name: Fast regression and security
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      ANONIMATO_CPU: "1"
+      PYTHONIOENCODING: utf-8
+      ANONIMATO_JS_COVERAGE_OUTPUT: fast-javascript-coverage.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check app tools tests packaging/launcher.py
+      - name: Dependency security audit
+        run: uv run python -c "import subprocess, sysconfig; subprocess.run(['uv', 'tool', 'run', 'pip-audit==2.10.1', '--path', sysconfig.get_paths()['purelib']], check=True)"
+      - name: Regression tests without model downloads
+        run: |
+          uv run coverage run -m pytest tests --ignore=tests/test_api.py --ignore=tests/test_leaks.py --ignore=tests/test_ui.py --ignore=tests/test_advanced.py -k "not test_selftest_of_the_application" -q --junitxml=fast-tests.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run coverage combine
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run coverage json -o fast-coverage.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run coverage xml -o fast-coverage.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run coverage report --fail-under=70
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run python tools/check_coverage.py fast-coverage.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: fast-test-evidence
+          path: |
+            fast-tests.xml
+            fast-coverage.json
+            fast-coverage.xml
+            fast-javascript-coverage.json
+
+  advanced:
+    name: Real advanced model qualification
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
+    needs: fast
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      ANONIMATO_CPU: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+      - run: uv sync --frozen
+      - run: uv run python tools/fetch_models.py base runtime advanced_lite
+      - name: Require a real advanced pack before testing
+        run: uv run python -c "from app.engine.services import Services; assert Services().advanced_available(), 'Advanced qualification cannot skip missing models'"
+      - run: uv run python -m pytest tests/test_advanced.py -q --junitxml=advanced-tests.xml
+      - name: Reject skipped advanced qualification
+        run: uv run python -c "import xml.etree.ElementTree as E; suites=E.parse('advanced-tests.xml').getroot().iter('testsuite'); assert all(int(s.get('skipped',0)) == 0 and int(s.get('tests',0)) >= 2 for s in suites)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: advanced-test-evidence
+          path: advanced-tests.xml
+
   build:
+    needs: [fast, advanced, portable, workflow-security]
+    if: always() && needs.portable.result == 'success' && needs.workflow-security.result == 'success' && needs.fast.result == 'success' && (needs.advanced.result == 'success' || needs.advanced.result == 'skipped')
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
@@ -29,9 +162,11 @@ jobs:
       PYTHONIOENCODING: utf-8
       ANONIMATO_CPU: "1"          # CI machines have no usable GPU
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
@@ -44,46 +179,62 @@ jobs:
             libxcb-cursor0 libvulkan1
 
       - name: Model cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             models/base
             runtime
           key: models-${{ runner.os }}-${{ hashFiles('models/manifest.json') }}
 
-      - name: Dependencies and models
-        run: |
-          uv sync --frozen
-          uv run python tools/fetch_models.py base runtime
+      - name: Dependencies
+        run: uv sync --frozen
+
+      - name: Download pinned models and runtime
+        run: uv run python tools/fetch_models.py base runtime
 
       - name: Static analysis
         run: uv run ruff check app tools tests packaging/launcher.py
 
       - name: Dependency security audit
-        run: uv run python -c "import subprocess, sysconfig; subprocess.run(['uv', 'tool', 'run', 'pip-audit', '--path', sysconfig.get_paths()['purelib']], check=True)"
+        run: uv run python -c "import subprocess, sysconfig; subprocess.run(['uv', 'tool', 'run', 'pip-audit==2.10.1', '--path', sysconfig.get_paths()['purelib']], check=True)"
 
       - name: Model and runtime integrity
         run: uv run python -c "from app.engine import models; bad = models.verify_all(force=True); print(bad); assert not bad"
 
-      - name: Tests
+      - name: Generate fictitious integration fixtures
+        run: uv run python -m tests.fixtures.generate
+
+      - name: Integration tests
         env:
           ANONIMATO_SKIP_UI: ${{ runner.os == 'Windows' && '0' || '1' }}
+        run: uv run python -m pytest tests/test_api.py tests/test_leaks.py tests/test_ui.py -q -p no:cacheprovider --durations=10 --junitxml=integration-tests.xml
+
+      - name: Evaluate synthetic detection and processing performance
+        if: runner.os == 'Windows' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/'))
+        shell: pwsh
         run: |
-          uv run python -m tests.fixtures.generate
-          uv run python -m pytest tests -q -p no:cacheprovider --durations=10
+          uv run python tools/evaluate_detection.py --docs 40 --scanned --seed 2028 --output tmp/ci-detection.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run python tools/profile_pipeline.py --threads 1 --output tmp/ci-performance.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Source application self-test
+        run: uv run python -m pytest tests/test_units.py -k test_selftest_of_the_application -q --junitxml=selftest-source.xml
 
       - name: Installer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell -ExecutionPolicy Bypass -File packaging/build.ps1
-          $dir = Join-Path $env:RUNNER_TEMP 'AnonimatoInstall'
-          $setup = Get-ChildItem dist/AnonimatoSetup-*.exe | Select-Object -First 1
-          Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',"/DIR=`"$dir`"" -Wait
-          $p = Start-Process "$dir/Anonimato.exe" -ArgumentList "--selftest=$pwd/dist/selftest-windows.json" -Wait -PassThru
-          Get-Content dist/selftest-windows.json
-          if ($p.ExitCode -ne 0) { exit 1 }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $compiler /DQualificationBuild=1 packaging/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = uv run python -c "from app import __version__; print(__version__)"
+          powershell -ExecutionPolicy Bypass -File tools/qualify_installer.ps1 -Installer "dist/AnonimatoQualificationSetup-$version.exe" -ExpectedVersion $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -94,16 +245,89 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: bash packaging/build_macos.sh
 
+      - name: Qualify installed DMG application (macOS)
+        if: runner.os == 'macOS'
+        run: uv run python tools/qualify_unix_package.py dist/*.dmg --output dist/package-qualification-macos.json
+
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: bash packaging/build_linux.sh
 
-      - uses: actions/upload-artifact@v4
+      - name: Qualify installed AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: uv run python tools/qualify_unix_package.py dist/*.AppImage --output dist/package-qualification-linux.json
+
+      - name: Hash distribution packages
+        run: uv run python tools/hash_packages.py dist
+
+      - name: Preserve diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: qualification-evidence-${{ runner.os }}
+          path: |
+            integration-tests.xml
+            selftest-source.xml
+            dist/selftest-*.json
+            dist/**/component-inventory.json
+            dist/component-inventory-*.json
+            dist/package-qualification-*.json
+            tmp/installer-qualification/**/*.json
+            tmp/installer-qualification/**/*.log
+            tmp/ci-detection.md
+            tmp/ci-performance.json
+          retention-days: 14
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: anonimato-${{ runner.os }}
           path: |
             dist/*.exe
+            !dist/AnonimatoQualificationSetup-*.exe
+            dist/*.sha256
             dist/*.dmg
             dist/*.AppImage
             dist/selftest-*.json
+            dist/**/component-inventory.json
+            dist/component-inventory-*.json
+            dist/package-qualification-*.json
+            tmp/installer-qualification/**/*.json
+            tmp/installer-qualification/**/*.log
+            integration-tests.xml
           if-no-files-found: error
+
+  release:
+    name: Publish qualified tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, advanced]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require tag to match the application version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 -c 'import os, tomllib; version=tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]; assert os.environ["RELEASE_TAG"] == "v" + version, "Release tag does not match application version"'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: anonimato-*
+          path: release-assets
+      - name: Verify package hashes and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mapfile -d '' hashes < <(find release-assets -type f -name '*.sha256' -print0)
+          test "${#hashes[@]}" -eq 3
+          assets=()
+          for hash in "${hashes[@]}"; do
+            (cd "$(dirname "$hash")" && sha256sum --check "$(basename "$hash")")
+            assets+=("${hash%.sha256}" "$hash")
+          done
+          gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --generate-notes

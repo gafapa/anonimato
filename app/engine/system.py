@@ -28,6 +28,33 @@ else:
 IS_WINDOWS = SYSTEM == "windows"
 
 
+def peak_memory_mb() -> float:
+    """Peak resident memory of this process only; never inspect unrelated processes."""
+    if not IS_WINDOWS:
+        import resource
+        amount = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return round(amount / (1024**2 if SYSTEM == "macos" else 1024), 2)
+    import ctypes
+    from ctypes import wintypes
+
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+            (name, ctypes.c_size_t) for name in ("PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                                                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                                                "PagefileUsage", "PeakPagefileUsage")]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.GetCurrentProcess.argtypes, kernel.GetCurrentProcess.restype = [], wintypes.HANDLE
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+    psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+    counters = Counters()
+    counters.cb = ctypes.sizeof(counters)
+    if not psapi.GetProcessMemoryInfo(kernel.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return round(counters.PeakWorkingSetSize / 1024**2, 2)
+
+
 def exe(name: str) -> str:
     return name + ".exe" if IS_WINDOWS else name
 
@@ -91,6 +118,38 @@ def physical_memory_mb() -> int:
         return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // (1024 * 1024))
     except (ValueError, OSError, AttributeError):
         return 16384
+
+
+def available_memory_mb() -> int:
+    """Available physical RAM at model startup, including reclaimable memory where reported."""
+    if IS_WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+        class MemoryStatus(ctypes.Structure):
+            _fields_ = [("length", wintypes.DWORD), ("load", wintypes.DWORD)] + [
+                (name, ctypes.c_ulonglong) for name in ("total", "available", "total_pagefile", "available_pagefile",
+                                                       "total_virtual", "available_virtual", "extended")]
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(MemoryStatus)]
+        kernel.GlobalMemoryStatusEx.restype = wintypes.BOOL
+        status = MemoryStatus()
+        status.length = ctypes.sizeof(status)
+        if not kernel.GlobalMemoryStatusEx(ctypes.byref(status)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return int(status.available // 1024**2)
+    if SYSTEM == "linux":
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_AVPHYS_PAGES") // 1024**2)
+    import re
+    import subprocess
+    result = subprocess.run(["/usr/bin/vm_stat"], capture_output=True, text=True, check=True, timeout=5)
+    page_size = re.search(r"page size of (\d+) bytes", result.stdout)
+    counts = re.findall(r"Pages (?:free|inactive|speculative):\s+(\d+)", result.stdout)
+    if not page_size or not counts:
+        raise RuntimeError("No se pudo comprobar la memoria RAM disponible")
+    return sum(map(int, counts)) * int(page_size[1]) // 1024**2
 
 
 def child_setup(memory_limit_mb: int, limit_memory: bool) -> None:

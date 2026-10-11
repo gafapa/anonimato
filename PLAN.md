@@ -79,7 +79,7 @@ Build a PyInstaller directory and Inno Setup installer. Install per user without
 
 Remove the obsolete web app after desktop feature parity, keep generated artifacts out of Git, and document the current project structure.
 
-## Current implementation record (2026-09-26)
+## Historical implementation record (2026-09-26)
 
 | Phase | Status and evidence |
 |---|---|
@@ -99,9 +99,19 @@ The evaluation used public IAM and French census data plus synthetic documents w
 ## Second review and remaining work
 
 - Hostile PDFs run in separate workers. Windows Job Objects limit memory (including `llama-server`); hangs and crashes trigger recovery. The window never opens a PDF directly. `tests/test_worker.py` covers crashes, hangs, memory, damaged files, and passwords.
-- Integrity verification covers base, advanced, and lightweight models plus the llama.cpp runtime. Processing and export wait for checks and are blocked on altered files. A size/time cache avoids unnecessary rehashing. The UI reports integrity failures.
-- Optional model failures are reported in UI status and document notes; GLiNER retries on CPU after GPU failure. Analysis waits for GPU warmup, and detector access is locked to avoid concurrent DirectML use.
+- Integrity verification covers base, advanced, and lightweight models plus the llama.cpp runtime. Processing and export force fresh content hashes and are blocked on altered files. Disk size and timestamps are not accepted as proof of integrity. The UI reports integrity failures.
+- Optional model failures are reported in UI status and document notes; GLiNER retries on CPU after GPU failure. Startup checks integrity; each operation prepares only its required services. Detector access is locked to avoid concurrent DirectML use.
 - Verification rereads covered handwriting with AI when available and uses GLiNER on output text and OCR. Remaining traces carry page and box coordinates, appear in red, and show progress while saving.
 - Further test coverage includes cancellation, passwords, digital signatures, uniform token lengths, advanced-model downloads, JPEG 2000, and residual leak localization.
 
 Outstanding external inputs are representative user documents for private evaluation and a paid certificate if signed Windows installers are required.
+
+## Improvements in 2.2.0 (2026-10-10)
+
+Compatible reanalysis preserves manual areas, including disabled areas. Pending/failed, selected, and all-document scopes avoid repeating unrelated work. Changed source bytes or page geometry block manual-area transfer and retain the previous review. Undo/Redo stores at most 40 snapshots and 4 MiB in memory; edits and history restoration invalidate verification. Closing warns about active work or reviewed revisions not yet saved.
+
+The UI provides scrollable zoom, a keyboard coordinate editor, individual batch outcomes, report locations and targeted retry. Model startup selects installed 8B/4B variants using current free GPU memory and available RAM; explicit accuracy/memory preferences are available. Service status reports actual loaded backends. CPU thread counts can be profiled with `tools/profile_pipeline.py`; settings must be justified by measurements on the target machine.
+
+Evaluation adds fictitious Galician tables, accents, repeated values, small marginal text, noisy scans, low-resolution images, and mixed print/handwriting. Private annotations are opt-in and produce aggregate-only reports inside ignored `tmp/`. Recorded historical recall is not a universal detection guarantee.
+
+CI separates fast regression/security, real integration and packaging, and scheduled/manual/tagged advanced-model qualification. Release jobs require successful qualification when requested; advanced tests cannot silently skip. Package inventories hash actual files and archived native libraries and include Python distribution metadata and license references. They are not a complete native vulnerability assessment. See `docs/improvement-opportunities-2026-10-10.md` and the final implementation report for current evidence and remaining qualification limits.

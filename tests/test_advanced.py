@@ -2,9 +2,10 @@
 import pymupdf
 import pytest
 
-from app.engine import pipeline, rules
+from app.engine import rules
 from app.engine.services import Services
 from app.engine.types import Options
+from app.engine.worker import EngineProcess
 from tests.fixtures.generate import DNI, NAME, build_all
 from tests.test_leaks import independent_scan
 
@@ -13,9 +14,9 @@ pytestmark = pytest.mark.skipif(not Services().advanced_available(), reason="IA 
 
 @pytest.fixture(scope="module")
 def services():
-    svc = Services()
-    yield svc
-    svc.shutdown()
+    engine = EngineProcess(with_models=True)
+    yield engine
+    engine.stop()
 
 
 def _options(**overrides):
@@ -27,11 +28,11 @@ def _options(**overrides):
 def test_handwritten_form_leaves_no_trace(services):
     fixture = next(f for f in build_all() if f.number == 23)
     options = _options()
-    analysis = pipeline.analyze(fixture.data, fixture.filename, options, services)
+    analysis = services.call("analyze", fixture.data, fixture.filename, options)
     kinds = {f.type for f in analysis.findings}
     assert {"name", "dni"} <= kinds or "handwriting" in kinds
     assert "signature" in kinds, "the signature next to «Firma:» must be proposed"
-    result = pipeline.export(analysis, options, services)
+    result = services.call("export", analysis, options, 1, False)
     assert result.report.ok, result.report.to_json()
     assert not independent_scan(result.data)
 
@@ -43,7 +44,7 @@ def test_contextual_review_finds_indirect_identifiers(services):
             f"Contacto del tutor: {NAME}, DNI {DNI}.")
     page.insert_textbox(pymupdf.Rect(72, 72, 520, 300), text, fontsize=11)
     options = _options()
-    analysis = pipeline.analyze(doc.tobytes(), "caso.pdf", options, services)
+    analysis = services.call("analyze", doc.tobytes(), "caso.pdf", options)
     llm = [f for f in analysis.findings if f.source == "llm"]
     assert llm, "the review should flag the indirect identifier / health data"
     joined = " ".join(f.value.lower() for f in llm)

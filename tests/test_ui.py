@@ -15,6 +15,17 @@ ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(os.environ.get("ANONIMATO_SKIP_UI") == "1", reason="no desktop session")
 
 
+@pytest.mark.timeout(120)
+def test_mixed_batch_retry_in_real_window(tmp_path):
+    output = tmp_path / "batch-ui.json"
+    completed = subprocess.run([sys.executable, str(ROOT / "tools/ui_batch_smoke.py"), str(output)],
+                               cwd=ROOT, capture_output=True, text=True, timeout=120, check=False)
+    assert output.exists(), completed.stderr[-3000:]
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert completed.returncode == 0 and result["ok"], result
+
+
+@pytest.mark.timeout(2400)
 def test_every_interface_feature(tmp_path):
     out = tmp_path / "ui.json"
     completed = subprocess.run([sys.executable, str(ROOT / "tools" / "ui_smoke.py"), "--out", str(out)],
@@ -34,4 +45,9 @@ def test_every_interface_feature(tmp_path):
                 "restoring detection clears the warning", "original and result show the same document",
                 "a password being typed survives queue refreshes", "the previous review is hidden while re-analysing",
                 "Space on a focused button is not taken by the shortcut"}
+    expected.add("editing is blocked while saving")
+    expected.update({"undo and redo review changes", "keyboard coordinate zone creation", "page zoom keeps normalized overlays",
+                     "batch shows individual saved results", "verification announcements are accessible",
+                     "compact desktop has no horizontal page overflow"})
+    expected.add("keyboard coordinate zone editing")
     assert expected <= set(results["steps"]), expected - set(results["steps"])

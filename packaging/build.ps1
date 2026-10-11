@@ -26,6 +26,7 @@ if (-not (Test-Path (Join-Path $PSScriptRoot 'anonimato.ico'))) {
 }
 
 Invoke-Checked uv @('run', 'pyinstaller', '--noconfirm', '--clean', '--distpath', 'dist', '--workpath', 'build', 'packaging/anonimato.spec')
+Invoke-Checked uv @('run', 'python', 'tools/package_inventory.py', 'dist/Anonimato')
 
 $iscc = @(
   "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",

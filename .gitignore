@@ -12,6 +12,7 @@ tests/fixtures/out/
 eval/
 *.egg-info/
 .pytest_cache/
+.hypothesis/
 .coverage*
 htmlcov/
 models/base/
@@ -19,3 +20,6 @@ models/candidates/
 runtime/
 packaging/MicrosoftEdgeWebview2Setup.exe
 models/advanced-lite/
+models/.install.lock
+models/.downloads/
+models/.backup-*/

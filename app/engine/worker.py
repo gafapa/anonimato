@@ -18,6 +18,7 @@ import os
 import threading
 import time
 import traceback
+import warnings
 from ctypes import wintypes
 from collections.abc import Callable
 
@@ -62,7 +63,28 @@ class _ExtendedLimits(ctypes.Structure):
 JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
-PROCESS_ALL_ACCESS = 0x1F0FFF
+PROCESS_SET_QUOTA_AND_TERMINATE = 0x0101
+
+
+def _job_api():
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    signatures = {
+        "CreateJobObjectW": ([ctypes.c_void_p, wintypes.LPCWSTR], wintypes.HANDLE),
+        "SetInformationJobObject": ([wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD], wintypes.BOOL),
+        "OpenProcess": ([wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
+        "AssignProcessToJobObject": ([wintypes.HANDLE, wintypes.HANDLE], wintypes.BOOL),
+        "TerminateJobObject": ([wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
+        "CloseHandle": ([wintypes.HANDLE], wintypes.BOOL),
+    }
+    for name, (arguments, result) in signatures.items():
+        function = getattr(kernel32, name)
+        function.argtypes, function.restype = arguments, result
+    return kernel32
+
+
+def _job_error(operation: str) -> EngineError:
+    return EngineError(f"No se pudo aplicar la protección del motor ({operation}): "
+                       f"{ctypes.WinError(ctypes.get_last_error())}", "ProcessProtectionError")
 
 
 class JobObject:
@@ -72,30 +94,42 @@ class JobObject:
         self.handle = None
         if os.name != "nt":
             return
-        kernel32 = ctypes.windll.kernel32
-        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32 = self._api = _job_api()
         self.handle = kernel32.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise _job_error("CreateJobObjectW")
         info = _ExtendedLimits()
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         info.ProcessMemoryLimit = memory_limit_mb * 1024 * 1024
-        kernel32.SetInformationJobObject(self.handle, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-                                         ctypes.byref(info), ctypes.sizeof(info))
+        if not kernel32.SetInformationJobObject(self.handle, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                                                ctypes.byref(info), ctypes.sizeof(info)):
+            error = _job_error("SetInformationJobObject")
+            self.close()
+            raise error
 
     def assign(self, pid: int) -> None:
-        if not self.handle:
+        if os.name != "nt":
             return
-        kernel32 = ctypes.windll.kernel32
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        process = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, pid)
-        if process:
-            kernel32.AssignProcessToJobObject(self.handle, process)
-            kernel32.CloseHandle(process)
+        if not self.handle:
+            raise EngineError("El motor no tiene un límite de memoria válido", "ProcessProtectionError")
+        kernel32 = self._api
+        process = kernel32.OpenProcess(PROCESS_SET_QUOTA_AND_TERMINATE, False, pid)
+        if not process:
+            raise _job_error("OpenProcess")
+        try:
+            if not kernel32.AssignProcessToJobObject(self.handle, process):
+                raise _job_error("AssignProcessToJobObject")
+        finally:
+            if not kernel32.CloseHandle(process):
+                warnings.warn(str(_job_error("CloseHandle(process)")), RuntimeWarning, stacklevel=2)
 
     def close(self) -> None:
         """Terminates every process in the job (the engine and e.g. llama-server)."""
         if self.handle:
-            ctypes.windll.kernel32.TerminateJobObject(self.handle, 1)
-            ctypes.windll.kernel32.CloseHandle(self.handle)
+            if not self._api.TerminateJobObject(self.handle, 1):
+                warnings.warn(str(_job_error("TerminateJobObject")), RuntimeWarning, stacklevel=2)
+            if not self._api.CloseHandle(self.handle):
+                warnings.warn(str(_job_error("CloseHandle(job)")), RuntimeWarning, stacklevel=2)
             self.handle = None
 
 
@@ -105,11 +139,13 @@ def _handlers():
 
     def analyze(ctx, data, filename, options):
         ctx.services.require_integrity(ctx.progress)
+        ctx.services.prepare(options)
         ctx.cancel.clear()
         return pipeline.analyze(data, filename, options, ctx.services, ctx.progress, ctx.cancel.is_set)
 
     def export(ctx, analysis, options, index, keep_name):
         ctx.services.require_integrity(ctx.progress)
+        ctx.services.prepare(options, export=True)
         return pipeline.export(analysis, options, ctx.services, ctx.progress, index=index, keep_name=keep_name)
 
     def build_preview(ctx, analysis, options):
@@ -129,16 +165,22 @@ def _handlers():
         return document.unlock(data, password)
 
     def status(ctx):
-        return ctx.services.status() if ctx.services else {}
+        from .system import peak_memory_mb
+        return {**(ctx.services.status() if ctx.services else {}), "peak_memory_mb": peak_memory_mb()}
 
     def integrity(ctx):
-        return ctx.services.check_integrity() if ctx.services else True
+        return ctx.services.check_integrity(force=True, progress=ctx.progress) if ctx.services else True
 
     def reload_models(ctx):
         if ctx.services is not None:
             ctx.services.reset_advanced()
             if not ctx.services.check_integrity(force=True):
                 raise RuntimeError(ctx.services.errors["integrity"])
+        return True
+
+    def release_advanced(ctx):
+        if ctx.services is not None:
+            ctx.services.reset_advanced()
         return True
 
     def ping(ctx):
@@ -168,7 +210,19 @@ class _Context:
         self.conn.send(("progress", event))
 
 
-def serve(conn, cancel, use_gpu: bool, with_models: bool, memory_limit_mb: int = 0) -> None:
+def serve(conn, cancel, use_gpu: bool, with_models: bool, memory_limit_mb: int = 0, startup_gate=None) -> None:
+    # The parent must apply the Job Object before loading models or parsing an input.
+    if startup_gate is not None:
+        try:
+            allowed = startup_gate.wait(30)
+        except OSError:
+            conn.send(('error', {'kind': 'ProcessProtectionError',
+                                'message': 'No se pudo confirmar la protección del motor; vuelve a intentarlo'}))
+            conn.close()
+            return
+        if not allowed:
+            conn.close()
+            return
     from .system import child_setup
     child_setup(memory_limit_mb, limit_memory=not with_models)
     debug_log = os.environ.get("ANONIMATO_DEBUG_LOG")
@@ -225,19 +279,37 @@ class EngineProcess:
         self._process = None
         self._conn = None
         self._job: JobObject | None = None
+        self._startup_gate = None
         self.cancel = self._ctx.Event()
         self.restarts = 0
         self.gpu_disabled = ""   # reason, when the engine fell back to the CPU
 
     def _start(self) -> None:
         parent, child = self._ctx.Pipe()
+        gate = self._ctx.Event()
         process = self._ctx.Process(target=serve, args=(child, self.cancel, self.use_gpu, self.with_models,
-                                                        self.memory_limit_mb),
+                                                        self.memory_limit_mb, gate),
                                     daemon=True, name="anonimato-engine")
-        process.start()
-        child.close()
-        self._job = JobObject(self.memory_limit_mb)
-        self._job.assign(process.pid)
+        job = None
+        try:
+            job = JobObject(self.memory_limit_mb)
+            process.start()
+            job.assign(process.pid)
+            gate.set()
+        except Exception as error:
+            if process.pid is not None:
+                if process.is_alive():
+                    process.kill()
+                process.join(5)
+            if job is not None:
+                job.close()
+            parent.close()
+            raise EngineError(f"No se pudo iniciar el motor con protección: {error}", "ProcessProtectionError") from error
+        finally:
+            child.close()
+        self._job = job
+        # Keep shared synchronization resources alive until the child has stopped, including slow frozen startup.
+        self._startup_gate = gate
         self._process, self._conn = process, parent
 
     def _kill(self) -> None:
@@ -253,6 +325,7 @@ class EngineProcess:
         if self._conn is not None:
             self._conn.close()
         self._process = self._conn = None
+        self._startup_gate = None
 
     def alive(self) -> bool:
         return self._process is not None and self._process.is_alive()

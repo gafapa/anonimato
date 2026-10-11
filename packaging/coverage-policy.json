@@ -1,0 +1,13 @@
+{
+  "total": 70,
+  "modules": {
+    "app/api.py": 80,
+    "app/engine/review.py": 100,
+    "app/engine/services.py": 85,
+    "app/engine/llm_server.py": 90,
+    "app/engine/verify.py": 80,
+    "app/engine/models.py": 78,
+    "app/engine/worker.py": 70
+  },
+  "javascript_blocks": 65
+}

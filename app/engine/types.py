@@ -82,3 +82,4 @@ class Options:
     uniform_tokens: bool = False
     dpi: int = 200                   # analysis render resolution
     use_gpu: bool = True
+    advanced_mode: str = "auto"       # auto | accuracy | memory

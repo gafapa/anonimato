@@ -28,6 +28,10 @@ FORBIDDEN_ROOT = ["/Metadata", "/Outlines", "/StructTreeRoot", "/AcroForm", "/Na
 FORBIDDEN_PAGE = ["/Annots", "/Thumb", "/Metadata", "/PieceInfo", "/AA", "/B"]
 FORBIDDEN_ANY = ["/Metadata", "/PieceInfo", "/Alternates", "/OPI", "/JS", "/JavaScript", "/EmbeddedFile",
                  "/EmbeddedFiles", "/Thumb", "/ActualText"]
+MAX_OBJECT_DEPTH = 128
+MAX_OBJECT_NODES = 1_000_000
+MAX_STREAM_BYTES = 256 * 1024**2
+SCAN_CHUNK_BYTES = 1024**2
 
 
 class VerificationUnavailable(RuntimeError):
@@ -62,13 +66,9 @@ class Report:
         return {
             "ok": self.ok, "objects": self.objects, "pages": self.pages, "values": self.values,
             "checks": self.checks, "warnings": self.warnings,
-            "leaks": [{"check": leak.check, "where": leak.where, "value": _mask(leak.value), "detail": leak.detail,
+            "leaks": [{"check": leak.check, "where": leak.where, "value": "…", "detail": leak.detail,
                        "page": leak.page, "rects": [list(r) for r in leak.rects]} for leak in self.leaks],
         }
-
-
-def _mask(value: str) -> str:
-    return value[:2] + "…" if len(value) > 3 else "…"
 
 
 def norm_text(text: str) -> str:
@@ -90,15 +90,22 @@ class Target:
     def build(cls, kind: str, value: str) -> Target:
         return cls(kind, value, norm_text(value).strip(), norm_id(value))
 
-    def found_in(self, haystack: str) -> bool:
+    def found_in(self, haystack: str, normalized: dict[str, str] | None = None) -> bool:
         if not self.id_form:
             return False
+        forms = normalized if normalized is not None else {}
+
+        def cached_form(key, transform):
+            if key not in forms:
+                forms[key] = transform(haystack)
+            return forms[key]
+
         if self.kind in ID_TYPES:
             if len(self.id_form) < 4:
                 pattern = r"[\W_]*".join(re.escape(character) for character in self.id_form)
-                return re.search(r"(?<!\w)" + pattern + r"(?!\w)", norm_text(haystack)) is not None
-            return self.id_form in norm_id(haystack)
-        text = norm_text(re.sub(r"[^\w\s]", " ", haystack))
+                return re.search(r"(?<!\w)" + pattern + r"(?!\w)", cached_form("text", norm_text)) is not None
+            return self.id_form in cached_form("id", norm_id)
+        text = cached_form("words", lambda value: norm_text(re.sub(r"[^\w\s]", " ", value)))
         needle = norm_text(re.sub(r"[^\w\s]", " ", self.value)).strip()
         return bool(needle) and re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", text) is not None
 
@@ -128,10 +135,11 @@ def _decode_variants(raw: bytes) -> list[str]:
         out.append(raw.decode("utf-8"))
     except UnicodeDecodeError:
         pass
-    for start in (0, 1):
-        chunk = raw[start:]
-        if len(chunk) >= 4:
-            out.append(chunk[: len(chunk) // 2 * 2].decode("utf-16-be", errors="ignore"))
+    for encoding in ("utf-16-be", "utf-16-le"):
+        for start in (0, 1):
+            chunk = raw[start:]
+            if len(chunk) >= 4:
+                out.append(chunk[: len(chunk) // 2 * 2].decode(encoding, errors="ignore"))
     try:
         out.append(bytes.fromhex(re.sub(rb"[^0-9a-fA-F]", b"", raw).decode()).decode("latin-1"))
     except ValueError:
@@ -181,18 +189,25 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
             content_ids.add(item.objgen)
 
     def check(texts: list[str], where: str, binary: bool = False) -> None:
+        if not targets:
+            return
         joined = "\n".join(texts)
+        normalized = {}
         for target in targets:
             # Short strings occur by chance in binary fonts and image samples. PDF strings,
             # parsed text operands and page text still check all target lengths.
             if binary and len(target.id_form) < 4:
                 continue
-            if target.found_in(joined):
+            if target.found_in(joined, normalized):
                 report.add(Leak("objetos", where, target.value, "copia del dato dentro del archivo"))
 
+    visited_nodes = 0
+
     def walk(value, where: str, depth: int = 0) -> None:
-        if depth > 12:
-            return
+        nonlocal visited_nodes
+        visited_nodes += 1
+        if depth > MAX_OBJECT_DEPTH or visited_nodes > MAX_OBJECT_NODES:
+            raise VerificationUnavailable("La estructura del PDF supera el límite de verificación segura")
         if isinstance(value, pikepdf.String):
             check(_string_text(value), where)
         elif isinstance(value, pikepdf.Name):
@@ -203,6 +218,8 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
                     walk(item, where, depth + 1)
         elif isinstance(value, (pikepdf.Dictionary, pikepdf.Stream)):
             for key, item in value.items():
+                if key in FORBIDDEN_ANY:
+                    report.add(Leak("estructura", where, key, "clave no permitida"))
                 check([key[1:]], where)
                 if not getattr(item, "is_indirect", False):
                     walk(item, where, depth + 1)
@@ -218,12 +235,17 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
             except Exception:  # images with lossy filters cannot be decoded here
                 try:
                     data = obj.read_raw_bytes()
-                except Exception:
-                    continue
-            if obj.get("/Subtype") == pikepdf.Name.Image and len(data) > 4_000_000:
-                continue
+                except Exception as error:
+                    raise VerificationUnavailable("No se pudo leer un flujo del PDF para verificarlo") from error
+            if len(data) > MAX_STREAM_BYTES:
+                raise VerificationUnavailable("Un flujo del PDF supera el límite de verificación segura")
             binary = obj.get("/Subtype") == pikepdf.Name.Image or obj.objgen in font_ids
-            check(_decode_variants(data), where, binary=binary)
+            # Scan large image/font streams in overlapping chunks instead of silently skipping them.
+            overlap = max([128] + [8 * len(target.value.encode("utf-8")) for target in targets])
+            if any(not binary or len(target.id_form) >= 4 for target in targets):
+                for offset in range(0, len(data), SCAN_CHUNK_BYTES):
+                    check(_decode_variants(data[max(0, offset - overlap):offset + SCAN_CHUNK_BYTES + overlap]),
+                          where, binary=binary)
             is_content = obj.objgen in content_ids or obj.get("/Subtype") == pikepdf.Name.Form
             if is_content:
                 try:
@@ -238,8 +260,8 @@ def _scan_objects(pdf: pikepdf.Pdf, targets: list[Target], report: Report) -> No
                                 strings.extend(t for item in operand if isinstance(item, pikepdf.String)
                                                for t in _string_text(item))
                     check(["".join(strings), " ".join(strings)], where + " (contenido)")
-                except Exception:
-                    pass
+                except Exception as error:
+                    raise VerificationUnavailable("No se pudo verificar un flujo de contenido del PDF") from error
     report.objects = count
 
 
@@ -307,19 +329,18 @@ def _scan_pixels(data: bytes, findings: list[Finding], targets: list[Target], se
 
     Returns the OCR text of each page (reused by the residual detection)."""
     ocr = services.ocr() if services else None
-    faces = services.faces() if services else None
+    faces = services.faces() if services and any(f.enabled and f.type == "face" for f in findings) else None
     if ocr is None:
         raise VerificationUnavailable("No se puede verificar el resultado: OCR no disponible")
     if faces is None and any(f.enabled and f.type == "face" for f in findings):
         raise VerificationUnavailable("No se puede verificar el resultado: detector de rostros no disponible")
     reader = None
-    if services is not None and services.advanced_available():
-        llm = services.llm()
-        if llm is not None:
-            from .ocr.handwriting import HandwritingReader
-            reader = HandwritingReader(llm)
-        elif any(f.enabled and f.source == "handwriting" and f.value for f in findings):
+    if any(f.enabled and f.source == "handwriting" and f.value for f in findings):
+        llm = services.llm() if services.advanced_available() else None
+        if llm is None:
             raise VerificationUnavailable("No se puede verificar el resultado: lector de manuscritos no disponible")
+        from .ocr.handwriting import HandwritingReader
+        reader = HandwritingReader(llm)
     with document.open_pdf(data) as doc:
         return _scan_pixel_pages(doc, findings, targets, ocr, faces, reader, report, progress)
 
@@ -413,8 +434,8 @@ def verify(data: bytes, findings: list[Finding], services=None, residual=None, p
             for message in residual(data, ocr_texts):
                 report.warnings.append(message)
             report.checks.append("detección residual")
-        except Exception as error:
-            report.warnings.append(f"Detección residual no disponible: {error}")
+        except Exception:
+            report.warnings.append("Detección residual no disponible; revisa el documento")
     # Deduplicate identical leaks.
     unique = {}
     for leak in report.leaks:

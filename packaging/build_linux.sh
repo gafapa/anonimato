@@ -10,6 +10,7 @@ uv run python -m pytest tests/test_rules.py tests/test_models.py -q
 [ -f packaging/anonimato.png ] || uv run python packaging/make_icon.py
 
 uv run pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/anonimato.spec
+uv run python tools/package_inventory.py dist/Anonimato
 
 APPDIR="build/Anonimato.AppDir"
 rm -rf "$APPDIR"

@@ -19,6 +19,9 @@ if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
   codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$APP"
 fi
 
+# Keep the inventory outside the signed app so its generation cannot invalidate the signature.
+uv run python tools/package_inventory.py "$APP" --output dist/component-inventory-macos.json
+
 DMG="dist/Anonimato-${VERSION}-macos-arm64.dmg"
 rm -f "$DMG"
 STAGE=$(mktemp -d)

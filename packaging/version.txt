@@ -1,12 +1,12 @@
 VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(2, 1, 0, 0), prodvers=(2, 1, 0, 0), mask=0x3f, flags=0x0, OS=0x40004,
+  ffi=FixedFileInfo(filevers=(2, 2, 1, 0), prodvers=(2, 2, 1, 0), mask=0x3f, flags=0x0, OS=0x40004,
                     fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('0C0A04B0', [
       StringStruct('FileDescription', 'Anonimato - anonimización local de documentos'),
-      StringStruct('FileVersion', '2.1.0'),
+      StringStruct('FileVersion', '2.2.1'),
       StringStruct('ProductName', 'Anonimato'),
-      StringStruct('ProductVersion', '2.1.0'),
+      StringStruct('ProductVersion', '2.2.1'),
       StringStruct('LegalCopyright', 'AGPL-3.0-or-later'),
       StringStruct('OriginalFilename', 'Anonimato.exe')])]),
     VarFileInfo([VarStruct('Translation', [0x0C0A, 1200])])

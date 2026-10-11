@@ -7,15 +7,30 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import shutil
 import sys
 import tarfile
+import tempfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
 
+from filelock import FileLock
+
 CHUNK = 1 << 20
+MAX_MODEL_BYTES = 8 * 1024**3
+MAX_PACK_BYTES = 12 * 1024**3
+DISK_RESERVE = 32 * 1024**2
+
+
+def installation_lock() -> FileLock:
+    """Serialize model writers and verification across threads and application instances."""
+    root = user_models_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    return FileLock(root / ".install.lock", timeout=60, is_singleton=True)
 
 
 def app_root() -> Path:
@@ -94,6 +109,7 @@ class ModelFile:
     group: str
     unzip: bool = False
     platform: str = ""        # "", "windows", "macos" or "linux"
+    size: int | None = None   # exact byte length, pinned with the checksum
 
     @property
     def path(self) -> Path:
@@ -123,6 +139,17 @@ def model(model_id: str) -> ModelFile:
     raise KeyError(model_id)
 
 
+def require_model_paths(paths: list[Path]) -> None:
+    """Verify registered GGUF files immediately before handing them to the native runtime."""
+    registered = {item.path: item for items in load_manifest().values() for item in items}
+    with installation_lock():
+        for path in paths:
+            item = registered.get(path.resolve())
+            if item is None:
+                raise RuntimeError("El modelo no está incluido en el manifiesto de confianza")
+            _check_model(item, path)
+
+
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -149,42 +176,148 @@ Progress = Callable[[str, int, int], None]
 
 def download(item: ModelFile, progress: Progress | None = None) -> Path:
     """Download with resume and SHA-256 verification."""
-    target = item.path
+    with installation_lock():
+        return _download_to(item, item.path, progress)
+
+
+def _byte_limit(item: ModelFile) -> int:
+    if item.size is not None and (not isinstance(item.size, int) or isinstance(item.size, bool)
+                                 or not 0 < item.size <= MAX_MODEL_BYTES):
+        raise RuntimeError(f"Invalid pinned size for {item.id}")
+    return item.size or MAX_MODEL_BYTES
+
+
+def _require_space(root: Path, size: int) -> None:
+    if size + DISK_RESERVE > shutil.disk_usage(root).free:
+        raise RuntimeError("No hay espacio libre suficiente para instalar los modelos con seguridad")
+
+
+def _check_model(item: ModelFile, path: Path) -> None:
+    if path.stat().st_size > _byte_limit(item) or (item.size is not None and path.stat().st_size != item.size):
+        raise RuntimeError(f"Tamaño incorrecto para {item.id}")
+    if not item.sha256 or sha256_of(path) != item.sha256:
+        raise RuntimeError(f"Checksum incorrecto para {item.id}")
+
+
+def _download_to(item: ModelFile, target: Path, progress: Progress | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists() and (not item.sha256 or sha256_of(target) == item.sha256):
+    if target.exists() and sha256_of(target) == item.sha256:
+        _check_model(item, target)
         if item.unzip:
-            extract_runtime(target)
+            extract_runtime(target, preserve_verified=True)
         return target
     partial = target.with_suffix(target.suffix + ".part")
+    limit = _byte_limit(item)
     offset = partial.stat().st_size if partial.exists() else 0
+    if offset > limit:
+        partial.unlink()
+        offset = 0
     request = urllib.request.Request(item.url, headers={"User-Agent": "Anonimato-model-installer"})
     if offset:
         request.add_header("Range", f"bytes={offset}-")
     with urllib.request.urlopen(request, timeout=60) as response:
         if offset and response.status != 206:
             offset = 0
+        elif offset:
+            match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", response.headers.get("Content-Range", ""))
+            if not match or int(match[1]) != offset or int(match[3]) > limit:
+                raise RuntimeError(f"Respuesta de descarga parcial no válida para {item.id}")
         total = int(response.headers.get("Content-Length") or 0) + offset
+        if total > limit:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"La descarga supera el tamaño permitido para {item.id}")
+        _require_space(target.parent, max(0, (item.size or total or limit) - offset))
         with partial.open("ab" if offset else "wb") as handle:
             done = offset
             while chunk := response.read(CHUNK):
+                if done + len(chunk) > limit:
+                    handle.close()
+                    partial.unlink(missing_ok=True)
+                    raise RuntimeError(f"La descarga supera el tamaño permitido para {item.id}")
                 handle.write(chunk)
                 done += len(chunk)
                 if progress:
                     progress(item.id, done, total)
-    if item.sha256:
-        actual = sha256_of(partial)
-        if actual != item.sha256:
-            partial.unlink(missing_ok=True)
-            raise RuntimeError(f"Checksum incorrecto para {item.id}: {actual}")
+    try:
+        _check_model(item, partial)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
     partial.replace(target)
     if item.unzip:
-        extract_runtime(target)
+        extract_runtime(target, preserve_verified=True)
     return target
 
 
-def extract_runtime(archive_path: Path) -> None:
+def _publish_models(staged: list[tuple[ModelFile, Path]]) -> None:
+    """Rollback every published file if any replacement fails; readers hold the installation lock."""
+    backup_root = Path(tempfile.mkdtemp(prefix=".backup-", dir=user_models_dir()))
+    changed = []
+    recovered = True
+    try:
+        for index, (item, source) in enumerate(staged):
+            target = item.path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            backup = backup_root / str(index)
+            existed = target.exists()
+            if existed:
+                target.replace(backup)
+            changed.append((target, backup, existed))
+            source.replace(target)
+    except Exception as error:
+        for target, backup, existed in reversed(changed):
+            try:
+                if existed:
+                    backup.replace(target)
+                else:
+                    target.unlink(missing_ok=True)
+            except OSError:
+                recovered = False
+        if not recovered:
+            raise RuntimeError(f"No se pudo restaurar la instalación; conserva la copia de seguridad en {backup_root}") from error
+        raise
+    finally:
+        if recovered:
+            shutil.rmtree(backup_root)
+
+
+def download_group(items: list[ModelFile], progress: Progress | None = None) -> None:
+    """Verify the whole group before replacing installed models; failed downloads remain resumable."""
+    with installation_lock():
+        root = user_models_dir()
+        pending = [item for item in items if not is_installed(item, verify=True)]
+        if sum(_byte_limit(item) for item in pending) > MAX_PACK_BYTES:
+            raise RuntimeError("El paquete supera el tamaño total permitido")
+        downloads = root / ".downloads"
+        downloads.mkdir(exist_ok=True)
+        needed = 0
+        for item in pending:
+            cached = downloads / f"{item.id}-{item.sha256}"
+            if cached.is_file():
+                try:
+                    _check_model(item, cached)
+                except RuntimeError:
+                    pass
+                else:
+                    continue
+            partial = cached.with_suffix(".part")
+            offset = min(_byte_limit(item), partial.stat().st_size) if partial.exists() else 0
+            needed += _byte_limit(item) - offset
+        _require_space(root, needed)
+        staged = []
+        for item in pending:
+            target = downloads / f"{item.id}-{item.sha256}"
+            staged.append((item, _download_to(item, target, progress)))
+        _publish_models(staged)
+
+
+def extract_runtime(archive_path: Path, *, preserve_verified: bool = False) -> None:
     """Unpack a llama.cpp release next to the archive (top-level folder stripped, links kept)."""
     destination = archive_path.parent
+    # Leave verified libraries in place, including while another process is using them.
+    if (preserve_verified and destination.resolve() == runtime_dir().resolve()
+            and (destination / "llama").is_dir() and not verify_runtime()):
+        return
     if archive_path.suffix == ".zip":
         with zipfile.ZipFile(archive_path) as archive:
             archive.extractall(destination)
@@ -207,27 +340,52 @@ def for_this_platform(items: list[ModelFile]) -> list[ModelFile]:
 
 def import_zip(archive_path: Path) -> list[str]:
     """Offline installation: a zip whose entries are named like the manifest files (e.g. advanced/vlm.gguf)."""
+    with installation_lock():
+        return _import_zip(archive_path)
+
+
+def _import_zip(archive_path: Path) -> list[str]:
     manifest = load_manifest()
     items = {item.file: item for group in ("advanced", "advanced_lite") for item in manifest.get(group, [])}
-    imported = []
-    with zipfile.ZipFile(archive_path) as archive:
-        for member in archive.namelist():
-            item = items.get(member.replace("\\", "/"))
+    root = user_models_dir()
+    with zipfile.ZipFile(archive_path) as archive, tempfile.TemporaryDirectory(prefix=".import-", dir=root) as temporary:
+        stage = Path(temporary)
+        selected = []
+        seen = set()
+        total = 0
+        for member in archive.infolist():
+            item = items.get(member.filename.replace("\\", "/"))
             if item is None:
                 continue
-            item.path.parent.mkdir(parents=True, exist_ok=True)
-            partial = item.path.with_suffix(item.path.suffix + ".part")
+            if item.id in seen or member.is_dir() or member.flag_bits & 1:
+                raise RuntimeError("El paquete contiene entradas duplicadas o no válidas")
+            if member.file_size > _byte_limit(item) or (item.size is not None and member.file_size != item.size):
+                raise RuntimeError(f"Tamaño incorrecto para {item.id}")
+            seen.add(item.id)
+            total += member.file_size
+            selected.append((item, member))
+        if not selected:
+            raise RuntimeError("El archivo no contiene ningún modelo reconocido")
+        for group in {item.group for item, _ in selected}:
+            if not {item.id for item in manifest[group]} <= seen:
+                raise RuntimeError("El paquete no contiene el grupo completo de modelos")
+        if total > MAX_PACK_BYTES:
+            raise RuntimeError("El paquete supera el tamaño total permitido")
+        _require_space(root, total)
+        staged = []
+        for index, (item, member) in enumerate(selected):
+            partial = stage / f"{index}.part"
+            done = 0
             with archive.open(member) as source, partial.open("wb") as destination:
                 while chunk := source.read(CHUNK):
+                    done += len(chunk)
+                    if done > member.file_size or done > _byte_limit(item):
+                        raise RuntimeError(f"El modelo supera el tamaño permitido para {item.id}")
                     destination.write(chunk)
-            if item.sha256 and sha256_of(partial) != item.sha256:
-                partial.unlink(missing_ok=True)
-                raise RuntimeError(f"Checksum incorrecto para {item.id}")
-            partial.replace(item.path)
-            imported.append(item.id)
-    if not imported:
-        raise RuntimeError("El archivo no contiene ningún modelo reconocido")
-    return imported
+            _check_model(item, partial)
+            staged.append((item, partial))
+        _publish_models(staged)
+    return [item.id for item, _ in selected]
 
 
 INTEGRITY_GROUPS = ("base", "advanced", "advanced_lite")

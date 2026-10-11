@@ -64,6 +64,8 @@
             </div>
             <label class="field analysis-resolution"><span>Resolución de análisis</span>
               <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+            <label class="field"><span>Modelo de IA avanzada</span><select id="optAdvancedMode"><option value="auto">Automático según memoria</option><option value="accuracy">Priorizar precisión (8B si está instalado)</option><option value="memory">Menor consumo (4B si está instalado)</option></select></label>
+            <p class="section-summary">8B puede leer manuscritos con más precisión; 4B consume menos memoria.</p>
           </div>
         </details>
         <details class="settings-disclosure advanced-disclosure" id="advancedDetails">
@@ -71,6 +73,7 @@
           <div class="advanced-box" id="advancedBox"></div>
         </details>
         <p class="settings-change-notice" id="settingsChangeNotice" role="status" hidden>Has cambiado la detección. Vuelve a analizar para aplicar estos ajustes.</p>
+        <details class="settings-disclosure"><summary>Motores activos</summary><p id="backendStatus" class="section-summary"></p></details>
       </section>
 
       <section class="sidebar-section result-settings">
@@ -90,6 +93,7 @@
       </section>
 
       <div class="sidebar-actions">
+        <label class="field"><span>Documentos a analizar</span><select id="processScope"><option value="pending">Pendientes y fallidos</option><option value="selected">Documento seleccionado</option><option value="all">Todos los documentos</option></select></label>
         <button id="btnRun" class="btn primary" type="button" disabled>Analizar documentos</button>
         <p class="action-hint">Después revisarás cada página antes de guardar.</p>
         <button id="btnCancel" class="btn ghost small wide" type="button" hidden>Cancelar</button>
@@ -116,6 +120,9 @@
               <p class="stats" id="statsHost"></p>
             </div>
             <div class="view-tools">
+              <button class="btn ghost small" id="btnUndo" type="button" disabled>Deshacer</button>
+              <button class="btn ghost small" id="btnRedo" type="button" disabled>Rehacer</button>
+              <label class="field"><span class="visually-hidden">Ampliación de página</span><select id="pageZoom" aria-label="Ampliación de página"><option value="0">Ajustar</option><option value="1">100 %</option><option value="1.5">150 %</option><option value="2">200 %</option><option value="3">300 %</option></select></label>
               <div class="segmented" role="group" aria-label="Vista">
                 <button type="button" id="btnViewCompare" aria-pressed="true">Comparar</button>
                 <button type="button" id="btnViewResult" aria-pressed="false">Solo resultado</button>
@@ -124,17 +131,26 @@
             </div>
           </div>
 
-          <div id="verifyCard" class="verify-card" hidden></div>
+          <div id="verifyCard" class="verify-card" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+          <details class="coordinate-editor"><summary>Crear o editar una zona con coordenadas</summary><form id="manualForm">
+            <p>Porcentajes desde la esquina superior izquierda de la página actual.</p>
+            <label>X (%) <input id="manualX" type="number" min="0" max="99.99" step="0.01" value="10" required /></label>
+            <label>Y (%) <input id="manualY" type="number" min="0" max="99.99" step="0.01" value="10" required /></label>
+            <label>Ancho (%) <input id="manualWidth" type="number" min="0.01" max="100" step="0.01" value="20" required /></label>
+            <label>Alto (%) <input id="manualHeight" type="number" min="0.01" max="100" step="0.01" value="5" required /></label>
+            <button class="btn ghost small" type="submit" id="btnCoordinates">Crear zona</button>
+            <button class="btn ghost small" type="button" id="btnNewZone">Nueva zona</button>
+          </form></details>
           <p id="detectionNotice" class="detection-notice" hidden></p>
 
           <div class="comparison-grid" id="comparisonGrid">
             <section class="document-column original-column">
               <h3><span class="swatch mark" aria-hidden="true"></span>Original · hallazgos marcados</h3>
-              <figure class="page"><div class="page-image-wrap" id="originalWrap"><img id="originalImg" alt="Página original" /></div></figure>
+              <figure class="page" tabindex="0" aria-label="Página original: desplázate con las flechas cuando esté ampliada"><div class="page-image-wrap" id="originalWrap"><img id="originalImg" alt="Página original" /></div></figure>
             </section>
             <section class="document-column anonymized-column">
               <h3><span class="swatch ink" aria-hidden="true"></span>Resultado · igual que el archivo final</h3>
-              <figure class="page"><div class="page-image-wrap" id="resultWrap"><img id="resultImg" alt="Página anonimizada" /></div></figure>
+              <figure class="page" tabindex="0" aria-label="Resultado: desplázate con las flechas cuando esté ampliado"><div class="page-image-wrap" id="resultWrap"><img id="resultImg" alt="Página anonimizada" /></div></figure>
             </section>
           </div>
 
@@ -187,6 +203,7 @@
               </table>
             </div>
             <div id="notes" class="notes"></div>
+            <section id="batchResults" class="notes" aria-label="Resultado del lote" hidden><div id="batchSummary" role="status" aria-live="polite"></div><ul id="batchList"></ul><button id="btnRetryBatch" class="btn ghost small" type="button">Reintentar fallidos</button></section>
 
             <div class="panel-footer">
               <label class="share-card"><input type="checkbox" id="optMaxSecurity" />

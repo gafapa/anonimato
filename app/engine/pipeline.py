@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import math
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
@@ -61,6 +62,7 @@ class ExportResult:
     report: verify.Report
     filename: str
     seconds: float
+    revision: int | None = None  # bound by the window bridge before publication
 
 
 # ---------------------------------------------------------------- detection helpers
@@ -470,7 +472,8 @@ def assign_tokens(findings: list[Finding]) -> None:
 
 
 def add_manual(analysis: Analysis, page: int, rect: Rect) -> Finding:
-    number = sum(1 for f in analysis.findings if f.type == "manual") + 1
+    number = max((int(re.search(r"(\d+)\]$", f.token).group(1)) for f in analysis.findings
+                  if f.type == "manual" and re.search(r"(\d+)\]$", f.token)), default=0) + 1
     finding = Finding(id=analysis.new_id(page), page=page, type="manual", value=None,
                       rects=[rect], confidence=1.0, source="manual", token=f"[{CATEGORIES['manual']['token']} {number}]")
     finding.key = finding.id
@@ -525,14 +528,14 @@ def residual_detector(categories: set[str], services=None):
                 try:
                     matches += [m for m in pii.detect(text) if _useful_ai(m) and m.confidence >= 0.8]
                 except Exception:
-                    pass
+                    messages.append(f"Página {index + 1}: revisión residual con IA no disponible; revisa el documento")
             seen = set()
             for match in matches:
                 key = (match.type, match.value.lower())
                 if match.type in categories and key not in seen:
                     seen.add(key)
                     messages.append(f"Página {index + 1}: posible {CATEGORIES[match.type]['label'].lower()} sin ocultar "
-                                    f"(«{match.value[:2]}…»)")
+                                    "(revisa el documento)")
         doc.close()
         return messages
 
@@ -565,7 +568,10 @@ def preview(data: bytes, page: int, width: int = 1000) -> bytes:
     doc = document.open_pdf(data)
     try:
         target = doc[page]
-        zoom = min(3.0, width / max(1.0, target.rect.width))
+        zoom = min(6.0, width / max(1.0, target.rect.width))
+        while math.ceil(target.rect.width * zoom) * math.ceil(target.rect.height * zoom) > document.LIMITS["max_page_pixels"]:
+            pixels = math.ceil(target.rect.width * zoom) * math.ceil(target.rect.height * zoom)
+            zoom *= (document.LIMITS["max_page_pixels"] / pixels) ** 0.5 * 0.999
         return target.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False, annots=False).tobytes("png")
     finally:
         doc.close()

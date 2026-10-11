@@ -26,7 +26,7 @@ This document maps application behavior to automated tests. `uv run pytest` runs
 | Faces in small ID photos and handwritten signatures | `test_leaks[22,23]`, `test_advanced` |
 | Repeated and variant values, initials, rare surnames, and shared replacement tokens | `test_units::test_propagation_finds_unlabelled_repeats_and_variants`, `test_partial_mentions_share_the_full_name_token`, `test_shared_surname_of_two_people_keeps_separate_tokens` |
 | Optional model failures are reported | `test_units::test_failures_of_optional_models_are_reported_not_hidden`, `test_vlm_failure_during_handwriting_is_noted` |
-| Measured recall and precision by category | `tools/evaluate_detection.py` → `docs/deteccion*.md`; `tools/benchmark_handwriting.py` → `docs/benchmark.md` |
+| Measured recall and precision by category | `tools/evaluate_detection.py` → `docs/detection-evaluation-2.2.0.md` (current); `docs/deteccion.md` (historical); `tools/benchmark_handwriting.py` → `docs/benchmark.md` |
 
 ## Redaction, cleanup, and verification
 
@@ -42,6 +42,8 @@ This document maps application behavior to automated tests. `uv run pytest` runs
 | Neutral filenames or filenames with personal values replaced | `test_leaks::test_filename_keeps_non_personal_words`, `test_units::test_safe_filename_variants` |
 
 ## Application
+
+Version 2.1.1 security regressions are covered by `test_review_fixes`: obsolete export rejection (including the save dialog), busy-state edit guards, preservation of batch reports, accurate partial-success reporting, repeated integrity checks, complete and bounded offline installation, corrupted-ZIP cleanup, rollback and retained recovery backups, resumed downloads, newly available untrusted GGUF rejection, private reports, large image streams, UTF-16LE, verification-limit failures, pointer-safe Job Object error handling, gated worker startup, cleanup after failed assignment, and explicit CPU selection for advanced AI. `test_ui` also checks disabled review controls during export. Tests have explicit time limits; advanced inference is executed through an isolated engine process.
 
 | Feature | Test |
 |---|---|
@@ -64,8 +66,73 @@ and name collisions, log-coordinate privacy and variant mappings, build-tool che
 local AI requests that bypass proxies and refuse redirects. `tests/test_ocr_runtime.py` checks explicit
 CPU selection, mobile-model fallback, and omission of GPU shape compilation on CPU.
 
-## Not automatically exercised on Windows
+## Review and release improvements (2.2.0)
 
-- macOS and Linux branches in `app/engine/system.py` run in GitHub Actions on those platforms.
+`tests/test_improvements.py` covers bounded Undo/Redo, invalidation, preserved manual areas, changed-source/geometry refusal,
+selective processing, coordinate editing, close warnings, lazy service preparation, execution-time model selection,
+bounded zoom previews, targeted batch retries and integrity-lock progress. `tests/test_evaluation_tools.py` covers
+fictitious corpus variants, private-output restrictions, page-specific coverage and hashes/metadata in package inventories.
+The real-window smoke adds Undo/Redo, keyboard coordinate creation, zoom overlays, per-file batch summaries and status semantics.
+
+Fast CI excludes the model-dependent application self-test. Integration runs API, adversarial leak and desktop-window
+checks, then the source self-test. Tagged/manual/scheduled advanced qualification installs a real pack and rejects skipped
+tests. Package builds include actual payload inventories; unknown native versions/licenses remain explicit review limits.
+
+CPU measurement: `uv run python tools/profile_pipeline.py --threads 4 --output tmp/profile-4.json`.
+Compare sequential runs against `--threads 0` on the same machine. Concurrent workloads and integrity-lock waiting
+confound timings. Private evaluation requires `--private --output tmp/private-evaluation.md`; default evaluation reads
+only fictitious fixtures and records provenance. Value-level recall does not measure every occurrence or universal accuracy.
+The separate positional metric now requires complete two-dimensional coverage of each independently annotated occurrence.
+
+## Expanded regression coverage
+
+`tests/test_review_coverage.py` exercises no-op saved-state preservation, rejected edits during processing/installation,
+invalid page indices, independently checked geometry at 0/90/180/270 degrees, cancellation/error recovery,
+distinct preserved manual identifiers, changed-source export refusal, mixed batch causes, aggregate history budgets,
+preview resolution limits and cache invalidation after editing.
+
+`tests/test_service_coverage.py` exercises concurrent single initialization, cached loader failure and recovery,
+model-preference changes, idle release, bounded integrity-lock failure/retry, actual runtime model reselection,
+explicit CPU selection, untrusted-model refusal, health timeout and termination escalation. Native process/network
+boundaries are controlled test doubles here; real advanced inference remains a separate qualification lane.
+
+`tests/test_package_coverage.py` checks actual bundled models versus optional catalog entries, missing/changed artifacts,
+foreign-platform filtering, ZIP/TAR native hashes and links without extraction, and inventory self-exclusion.
+All fixtures are fictitious, tiny and local. The new tests run in the fast CI lane without model downloads.
+
+Measured evidence and reproduction instructions are in [the coverage report](test-coverage-2026-10-10.md).
+
+## Stateful review and occurrence qualification
+
+`tests/test_next_improvements.py` rejects invalid preview requests before native work, preserves the exact integrity cause,
+checks repeated names on multiple pages, requires two-dimensional coverage, and checks transforms against independent geometry.
+`tests/test_stateful_review.py` compares generated edit/undo/redo/reanalysis/cancel/save sequences with an independent model
+(40 deterministic examples, up to 30 actions each). All documents are fictitious.
+
+`tests/test_javascript_coverage.py` measures V8 blocks in a task-owned real WebView2 window with synthetic workers.
+The denominator is the complete UTF-16 source length, including ranges not reported by V8. Startup is excluded from action
+coverage; attachment waits for initialization. The report records raw ranges and the covered-function count.
+The scenario covers cross-document gesture cancellation, batch write failure/retry, manual edits, history, enable/disable,
+filters, zoom, view/panel switches, PDF/log publication and reanalysis. It does not certify accessibility or real AI inference.
+
+`tools/check_coverage.py` rejects missing critical modules and coverage below their individual floors, counting statements
+and branches. `tests/test_coverage_gate.py` proves that a good total cannot hide a missing or under-covered critical module.
+The policy also requires at least 65% JavaScript action coverage. Node.js 22 or newer is needed for this Windows development test.
+
+`tools/qualify_installer.ps1` installs a separately identified Inno qualification build, runs the installed self-test,
+preserves a fictitious profile through upgrade/reinstallation, runs the new installed binary and uninstalls it.
+It checks the QA application/profile/registry removal and unchanged production uninstall registration. Local qualification
+can use a genuine older packaged payload with `-PreviousInstaller` and `-PreviousVersion`; CI qualifies same-version repair.
+QA builds omit shortcuts and WebView2 installation, and target only their own profile for removal. Production package assembly
+is shared; production AppId, shell shortcuts, bootstrapper installation and its profile-removal rule remain distinct boundaries.
+
+`tools/qualify_unix_package.py` copies the mounted DMG app or extracts the AppImage into a private temporary installation,
+runs the installed self-test, replaces it, checks a preserved external marker and removes the application.
+CI runners are disposable: this does not establish old-release data migration, system integration, signing/notarization,
+interactive desktop behavior or removal of a real user's profile. See [2.2.1 evidence](improvements-2.2.1.md).
+
+## Remaining platform qualification
+
+- macOS and Linux branches in `app/engine/system.py` are configured to run in GitHub Actions on those platforms; Windows-local evidence does not qualify them.
 - The pywebview startup loop in `app/main.py` is represented by `tools/ui_smoke.py`, which mounts the same UI and API.
 - Defensive branches for driver and operating-system failures are logged and reported, but cannot be triggered reliably in an automated test.

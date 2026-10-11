@@ -21,6 +21,10 @@ def session(path: str, use_gpu: bool = True, cpu_basic: bool = False) -> ort.Inf
     global _gpu_ok
     use_gpu = _gpu_allowed(use_gpu)
     options = ort.SessionOptions()
+    threads = int(os.environ.get("ANONIMATO_CPU_THREADS", "0"))
+    if not 0 <= threads <= 64:
+        raise ValueError("ANONIMATO_CPU_THREADS must be between 0 and 64")
+    options.intra_op_num_threads = threads
     # Several models coexist in each engine. Idle pools must not compete with inference or the UI.
     options.add_session_config_entry("session.intra_op.allow_spinning", "0")
     options.add_session_config_entry("session.inter_op.allow_spinning", "0")

@@ -96,6 +96,7 @@ def main() -> None:
         background_color="#0b111c", text_select=True,
     )
     api.attach(window)
+    window.events.closing += api.confirm_close
 
     def on_drop(event) -> None:
         handle_drop(api, window, event)

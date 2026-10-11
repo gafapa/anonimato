@@ -16,6 +16,7 @@ from app.api import Api, Doc, _options
 from app.engine import document, files, llm_server, logs, models, pipeline, rasterize, verify
 from app.engine.services import Services
 from app.engine.types import Finding, Options
+from app.engine.worker import EngineError
 
 
 def pdf_with_text(text="Ana"):
@@ -396,7 +397,8 @@ def test_export_snapshot_does_not_restore_an_obsolete_report(api, monkeypatch):
         return pipeline.ExportResult(b"verified", verify.Report(), "export.pdf", 0)
 
     monkeypatch.setattr(api._engine, "call", export_call)
-    assert api._export(doc, options, 1, False).report.ok
+    with pytest.raises(EngineError, match="cambió"):
+        api._export(doc, options, 1, False)
     assert doc.report is None
 
 

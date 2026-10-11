@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+# These are the two public llama-tokenize executable SHA-256 checksums, not tokens.
+# Restrict the exception to the exact values and the model manifest path.
+[[rules.allowlists]]
+condition = "AND"
+paths = ['''(^|/)models/manifest\.json$''']
+regexTarget = "secret"
+regexes = ['''^(361bfd06880733f8966e0173f1972de1efcdccd840081afb4f47f3b34e0179d0|c635c75630b67f5759252ac75401bff23f9c057ba34dcfdf6994c5f8827c495f)$''']

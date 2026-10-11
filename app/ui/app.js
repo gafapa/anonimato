@@ -6,6 +6,7 @@
     status: null, docs: [], activeId: null, details: null, page: 0, current: -1,
     manual: false, polling: false, previewTimer: null, previewSeq: 0, originalSeq: 0, filter: '',
     analysisSignature: null, view: 'compare', panelCollapsed: false, savedIds: new Set(),
+    manualEditId: null, batch: null,
   };
   let api = null;
 
@@ -29,15 +30,18 @@
       faces: $('optFaces').checked, signatures: $('optSignatures').checked, propagate: $('optPropagate').checked,
       maxSecurity: $('optMaxSecurity').checked, textLayer: $('optTextLayer').checked, mode: $('optMode').value,
       uniform: $('optUniform').checked, keepName: $('optKeepName').checked, dpi: Number($('optDpi').value),
+      advancedMode: $('optAdvancedMode').value,
+      previewWidth: Math.min(3300, Math.max(1100, Math.round(1100 * (Number($('pageZoom').value) || 1)))),
     };
   }
-  function detectionSignature() {
-    const selected = options();
+  function detectionSignature(settings = null) {
+    const selected = settings || options();
     return JSON.stringify({
-      categories: [...selected.categories].sort(), ocr: selected.ocr, ai: selected.ai,
+      categories: [...selected.categories].filter((category) => category !== 'manual').sort(), ocr: selected.ocr, ai: selected.ai,
       handwriting: selected.handwriting, llmReview: selected.llmReview,
       faces: selected.faces, signatures: selected.signatures,
       propagate: selected.propagate, dpi: selected.dpi,
+      advancedMode: selected.advancedMode,
     });
   }
   function renderSettingsSummary() {
@@ -55,16 +59,17 @@
     $('advancedDetails').hidden = state.status.advancedInstalled;
     $('textLayerOption').hidden = !$('optMaxSecurity').checked;
     const hasResults = state.docs.some((doc) => doc.status === 'ready');
-    $('btnRun').textContent = hasResults ? 'Volver a analizar documentos' : 'Analizar documentos';
-    $('settingsChangeNotice').hidden = !hasResults || !state.analysisSignature ||
-      state.analysisSignature === detectionSignature();
+    $('btnRun').textContent = 'Analizar documentos';
+    const analyzedSettings = activeDoc()?.analysisSettings;
+    $('settingsChangeNotice').hidden = !hasResults || !analyzedSettings || !Object.keys(analyzedSettings).length ||
+      detectionSignature(analyzedSettings) === detectionSignature();
     $('sidebar').classList.toggle('reviewing', hasResults);
     renderSteps();
   }
   function renderSteps() {
     const doc = activeDoc();
     const ready = state.docs.some((d) => d.status === 'ready');
-    const saved = !!doc && state.savedIds.has(doc.id);
+    const saved = !!doc?.saved;
     const current = !state.docs.length ? 'add' : !ready ? 'analyze' : 'review';
     const done = { add: state.docs.length > 0, analyze: ready, review: saved, save: saved };
     for (const item of $('steps').children) {
@@ -92,10 +97,13 @@
         onclick: () => { $('advancedDetails').open = true; $('advancedDetails').scrollIntoView({ block: 'nearest' }); },
       });
     host.replaceChildren(
-      el('span', { className: 'pill ' + (s.services.gpu ? 'ok' : 'warn'), textContent: s.services.gpu ? 'GPU activa' : 'Modo CPU' }),
+      el('span', { className: 'pill', textContent: s.services.gpu ? 'GPU disponible' : 'Modo CPU',
+        title: Object.entries(s.services.backends || {}).map(([key, value]) => `${key}: ${value}`).join(' · ') }),
       advancedStatus,
       el('span', { className: 'pill ok', textContent: 'Sin conexión · local' }),
     );
+    const backends = Object.entries(s.services.backends || {}).filter(([, value]) => value !== 'Sin cargar');
+    $('backendStatus').textContent = backends.length ? backends.map(([key, value]) => `${labelsForBackend(key)}: ${value}`).join(' · ') : 'Los motores se cargan cuando hacen falta.';
     const errors = Object.entries(s.errors || {});
     const banner = $('engineErrors');
     banner.hidden = !errors.length;
@@ -104,6 +112,8 @@
       el('strong', { textContent: s.blocked ? 'Procesamiento bloqueado por seguridad. ' : 'Atención: ' }),
       ...errors.map(([key, message]) => el('span', { textContent: `${labels[key] || key}: ${message}. ` })),
     );
+    if (s.blocked) banner.append(el('button', { type: 'button', className: 'btn ghost small', textContent: 'Volver a comprobar',
+      disabled: state.polling || state.saving, onclick: async () => { if (await api.recheck_integrity()) startPolling(); } }));
     $('btnRun').dataset.blocked = s.blocked ? '1' : '';
     for (const label of document.querySelectorAll('.toggle.advanced')) {
       label.classList.toggle('unavailable', !s.advancedInstalled);
@@ -122,6 +132,10 @@
       el('div', { className: 'progress-track', id: 'installTrack', hidden: true }, [el('div', { className: 'progress-fill', id: 'installFill' })]),
       el('p', { id: 'installText' }),
     );
+  }
+
+  function labelsForBackend(key) {
+    return { ocr: 'OCR', pii: 'Datos personales', faces: 'Rostros', advanced: 'IA avanzada' }[key] || key;
   }
 
   function buildCategories() {
@@ -162,7 +176,7 @@
     const caret = focused?.selectionStart;
     queue.replaceChildren();
     for (const doc of state.docs) {
-      const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos`
+      const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos${doc.saved ? ' · guardado' : ''}${doc.error ? ' · último análisis fallido' : ''}`
         : doc.status === 'processing' ? 'Analizando…'
           : doc.status === 'failed' ? `Error: ${doc.error}`
             : doc.status === 'locked' ? 'Protegido con contraseña' : `${Math.round(doc.size / 1024)} KB · pendiente`;
@@ -171,9 +185,10 @@
         el('span', { className: `document-status ${doc.status}`, textContent: status }),
       ]);
       select.addEventListener('click', () => selectDoc(doc.id));
-      const remove = el('button', { className: 'document-remove', type: 'button', textContent: 'Quitar' });
+      const remove = el('button', { className: 'document-remove', type: 'button', textContent: 'Quitar', disabled: state.saving || state.polling });
       remove.setAttribute('aria-label', `Quitar ${doc.name}`);
       remove.addEventListener('click', async () => {
+        if (doc.reviewed && !doc.saved && !window.confirm('Este documento tiene una revisión sin guardar. ¿Quieres quitarlo y descartarla?')) return;
         if (await api.remove(doc.id)) {
           if (state.activeId === doc.id) { state.activeId = null; state.details = null; }
           await refreshDocuments();
@@ -227,6 +242,8 @@
     state.details = null;
     state.page = 0;
     state.current = -1;
+    state.manualEditId = null;
+    $('btnCoordinates').textContent = 'Crear zona';
     renderQueue();
     await showActive();
   }
@@ -255,8 +272,15 @@
   // ------------------------------------------------------------ processing & polling
   async function run() {
     setError('');
+    const scope = $('processScope').value;
+    const ids = state.docs.filter((doc) => doc.status !== 'locked' &&
+      (scope === 'all' || (scope === 'selected' ? doc.id === state.activeId : ['pending', 'failed'].includes(doc.status))))
+      .map((doc) => doc.id);
+    if (!ids.length) { setError('No hay documentos para este alcance. Selecciona otro alcance o añade documentos.'); return; }
+    if (state.docs.some((doc) => ids.includes(doc.id) && doc.reviewed) &&
+        !window.confirm('Se conservarán las zonas manuales si el archivo y sus páginas no han cambiado. Los hallazgos automáticos y su selección se recalcularán. ¿Continuar?')) return;
     let started;
-    try { started = await api.process(options(), null); }
+    try { started = await api.process(options(), ids); }
     catch (error) { setError(error.message || String(error)); return; }
     if (!started) { setError('Ya hay un proceso en curso.'); return; }
     state.analysisSignature = detectionSignature();
@@ -275,6 +299,7 @@
   function startPolling() {
     if (state.polling) return;
     state.polling = true;
+    setSaving(true);
     $('progressCard').hidden = false;
     $('btnCancel').hidden = false;
     $('btnRun').disabled = true;
@@ -292,6 +317,7 @@
       const installing = info.install && info.install.running;
       if (info.busy || installing) { setTimeout(tick, 400); return; }
       state.polling = false;
+      setSaving(false);
       state.status = await api.status();
       renderStatus();
       $('progressCard').hidden = true;
@@ -299,7 +325,7 @@
       renderQueue();
       const firstReady = state.docs.find((doc) => doc.status === 'ready');
       if (activeDoc()?.status !== 'ready' && firstReady) state.activeId = firstReady.id;
-      const failed = state.docs.filter((doc) => doc.status === 'failed');
+      const failed = state.docs.filter((doc) => doc.error);
       if (failed.length) setError(failed.map((doc) => `${doc.name}: ${doc.error}`).join(' · '));
       await showActive();
     };
@@ -310,6 +336,10 @@
   function renderDetails() {
     const d = state.details;
     const findings = d.findings;
+    if (state.manualEditId && !findings.some((f) => f.id === state.manualEditId && f.type === 'manual')) {
+      state.manualEditId = null;
+      $('btnCoordinates').textContent = 'Crear zona';
+    }
     const enabled = findings.filter((f) => f.enabled);
     $('currentFileName').textContent = d.name;
     const faces = findings.filter((f) => f.type === 'face').length;
@@ -325,6 +355,8 @@
     $('detectionNotice').hidden = !lowText && !d.notes.length;
     $('detectionNotice').textContent = lowText ? 'Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.' : '';
     $('notes').textContent = d.notes.join(' · ');
+    $('btnUndo').disabled = !d.history?.undo || state.saving || state.polling;
+    $('btnRedo').disabled = !d.history?.redo || state.saving || state.polling;
     renderFilterOptions(findings);
     renderReport(d.report);
     renderTable();
@@ -378,7 +410,7 @@
     body.replaceChildren();
     const list = visibleFindings();
     list.forEach((f, index) => {
-      const checkbox = el('input', { type: 'checkbox', checked: f.enabled });
+      const checkbox = el('input', { type: 'checkbox', checked: f.enabled, disabled: state.saving });
       checkbox.setAttribute('aria-label', `Incluir ${f.label} de la página ${f.page + 1}`);
       checkbox.addEventListener('click', (event) => event.stopPropagation());
       checkbox.addEventListener('change', () => toggle([f.id], checkbox.checked));
@@ -397,12 +429,12 @@
       ]);
       row.addEventListener('click', () => focusFinding(index));
       if (f.type === 'manual') {
-        const del = el('button', { className: 'btn ghost small', textContent: 'Borrar' });
+        const del = el('button', { className: 'btn ghost small', textContent: 'Borrar', disabled: state.saving });
         del.addEventListener('click', async (event) => {
           event.stopPropagation();
+          if (state.saving) return;
           await api.remove_manual(state.details.id, f.id);
-          state.details.findings = state.details.findings.filter((x) => x.id !== f.id);
-          renderDetails();
+          await reloadReview();
         });
         value.append(del);
       }
@@ -421,12 +453,29 @@
   }
 
   async function toggle(ids, enabled) {
-    if (!state.details) return;
+    if (!state.details || state.saving) return;
     await api.set_enabled(state.details.id, ids, enabled);
-    state.savedIds.delete(state.details.id);
-    for (const f of state.details.findings) if (ids.includes(f.id)) f.enabled = enabled;
-    state.details.report = null;
+    await reloadReview();
+  }
+
+  async function reloadReview() {
+    const id = state.details?.id;
+    if (!id) return;
+    const details = await api.details(id);
+    state.docs = await api.documents();
+    if (state.details?.id !== id) return;
+    state.details = details;
+    state.savedIds.delete(id);
+    renderQueue();
     renderDetails();
+  }
+
+  async function restoreReview(redo = false) {
+    if (!state.details || state.saving || state.polling) return;
+    try {
+      await api.restore_review(state.details.id, redo);
+      await reloadReview();
+    } catch (error) { setError(error.message || String(error)); }
   }
 
   function focusFinding(index) {
@@ -436,6 +485,12 @@
     const f = list[state.current];
     if (f.page !== state.page) { state.page = f.page; renderPage(); } else { drawBoxes(); }
     renderTable();
+    state.manualEditId = f.type === 'manual' ? f.id : null;
+    $('btnCoordinates').textContent = state.manualEditId ? 'Actualizar zona seleccionada' : 'Crear zona';
+    if (state.manualEditId) {
+      const [x0, y0, x1, y1] = f.view[0];
+      for (const [id, value] of [['manualX', x0], ['manualY', y0], ['manualWidth', x1 - x0], ['manualHeight', y1 - y0]]) $(id).value = (value * 100).toFixed(2);
+    }
     body().querySelector('tr.current')?.scrollIntoView({ block: 'nearest' });
   }
   const body = () => $('rowsBody');
@@ -444,12 +499,28 @@
     const d = state.details;
     if (!d) return;
     state.page = Math.max(0, Math.min(state.page, d.pages.length - 1));
+    if (state.manualEditId && !d.findings.some((f) => f.id === state.manualEditId && f.page === state.page)) {
+      state.manualEditId = null;
+      $('btnCoordinates').textContent = 'Crear zona';
+    }
     $('pageIndicator').textContent = `Página ${state.page + 1} de ${d.pages.length}`;
     $('btnPrevPage').disabled = state.page === 0;
     $('btnNextPage').disabled = state.page === d.pages.length - 1;
+    const zoom = Number($('pageZoom').value);
+    for (const id of ['originalWrap', 'resultWrap']) {
+      const wrap = $(id);
+      wrap.style.width = zoom ? `${d.pages[state.page].width * zoom}px` : '';
+      wrap.classList.toggle('zoomed', !!zoom);
+      wrap.closest('figure').classList.toggle('zoomed-page', !!zoom);
+    }
     // Separate counters: an output-option change re-renders only the result and must not discard
     // the original of a page or document that is still loading.
     const seq = ++state.originalSeq;
+    setManual(false);
+    $('originalWrap').classList.add('loading-preview');
+    $('originalImg').removeAttribute('src');
+    delete $('originalImg').dataset.doc;
+    for (const node of $('originalWrap').querySelectorAll('.box')) node.remove();
     ++state.previewSeq;  // a result still rendering belongs to the previous page
     clearTimeout(state.previewTimer);
     $('resultWrap').classList.add('loading-preview');
@@ -458,18 +529,19 @@
     if (seq !== state.originalSeq || state.details !== d) return;
     $('originalImg').src = src;
     $('originalImg').dataset.doc = d.id;
+    $('originalWrap').classList.remove('loading-preview');
     drawBoxes();
     schedulePreview();
   }
 
   function schedulePreview() {
     clearTimeout(state.previewTimer);
+    const seq = ++state.previewSeq;
     const wrap = $('resultWrap');
     wrap.classList.add('loading-preview');
     $('resultImg').removeAttribute('src');  // never show the original while the result is generated
     state.previewTimer = setTimeout(async () => {
       if (!state.details) return;
-      const seq = ++state.previewSeq;
       const id = state.details.id;
       try {
         const src = await api.page_image(id, state.page, 'result', options());
@@ -527,10 +599,11 @@
     let start = null;
     let selection = null;
     wrap.addEventListener('pointerdown', (event) => {
-      if (!state.manual || event.button !== 0) return;
+      if (!state.manual || state.saving || wrap.classList.contains('loading-preview') || event.button !== 0) return;
       event.preventDefault();
       const bounds = wrap.getBoundingClientRect();
-      start = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      start = { x: event.clientX - bounds.left, y: event.clientY - bounds.top,
+        doc: state.details.id, page: state.page, seq: state.originalSeq };
       selection = el('div', { className: 'manual-selection' });
       wrap.append(selection);
       wrap.setPointerCapture(event.pointerId);
@@ -547,6 +620,7 @@
     });
     wrap.addEventListener('pointerup', async () => {
       if (!start) return;
+      const draft = start;
       const bounds = wrap.getBoundingClientRect();
       const left = parseFloat(selection.style.left) || 0;
       const top = parseFloat(selection.style.top) || 0;
@@ -554,17 +628,16 @@
       const height = parseFloat(selection.style.height) || 0;
       selection.remove();
       start = null;
-      if (width < 6 || height < 6) return;
+      if (state.saving || state.details?.id !== draft.doc || state.page !== draft.page || state.originalSeq !== draft.seq || width < 6 || height < 6) return;
       const rect = [left / bounds.width, top / bounds.height, (left + width) / bounds.width, (top + height) / bounds.height];
-      const finding = await api.add_manual(state.details.id, state.page, rect);
-      state.details.findings.push(finding);
-      state.details.report = null;
-      state.savedIds.delete(state.details.id);
+      await api.add_manual(state.details.id, state.page, rect);
       setManual(false);
-      renderDetails();
+      await reloadReview();
     });
+    wrap.addEventListener('pointercancel', () => { selection?.remove(); start = null; selection = null; });
   }
   function setManual(on) {
+    if (on && state.saving) return;
     state.manual = on;
     $('btnManual').setAttribute('aria-pressed', String(on));
     $('btnManualLabel').textContent = on ? 'Arrastra sobre la página…' : 'Ocultar zona';
@@ -592,9 +665,21 @@
   function setSaving(on) {
     state.saving = on;
     for (const id of ['btnPdf', 'btnRailSave', 'btnAll', 'btnCsv', 'btnJson']) $(id).disabled = on;
+    if (on) setManual(false);
+    // Restore each control's previous state instead of enabling unavailable controls after saving.
+    for (const control of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #rowsBody input, #rowsBody button, #manualForm input, #manualForm button, #btnUndo, #btnRedo, #btnRetryBatch, #processScope, #btnAllOn, #btnAllOff, #btnManual, #btnRun, #optMode, #optMaxSecurity, #optUniform, #optTextLayer, #optKeepName')) {
+      if (on) {
+        control.dataset.disabledBeforeSave = String(control.disabled);
+        control.disabled = true;
+      } else if ('disabledBeforeSave' in control.dataset) {
+        control.disabled = control.dataset.disabledBeforeSave === 'true';
+        delete control.dataset.disabledBeforeSave;
+      }
+    }
   }
   async function savePdf() {
     if (!state.details || state.saving) return;
+    const docId = state.details.id;
     setError('');
     setSaving(true);
     $('progressCard').hidden = false;
@@ -607,14 +692,18 @@
       }
     }, 500);
     try {
-      const result = await api.save_pdf(state.details.id, options());
-      state.details.report = result.report || null;
-      renderReport(state.details.report, result.ok && result.saved ? result.path : null);
-      drawLeaks();
+      const result = await api.save_pdf(docId, options());
+      if (state.details?.id === docId) {
+        state.details.report = result.report || null;
+        renderReport(state.details.report, result.ok && result.saved ? result.path : null);
+        drawLeaks();
+      }
       if (!result.ok) setError(result.message);
       else if (result.saved) {
         $('progressText').textContent = `Guardado: ${result.path}`;
-        state.savedIds.add(state.details.id);
+        state.savedIds.add(docId);
+        state.docs = await api.documents();
+        renderQueue();
         renderSteps();
       }
     } catch (error) {
@@ -625,8 +714,10 @@
       setTimeout(() => { if (!state.polling) $('progressCard').hidden = true; }, 2500);
     }
   }
-  async function saveAll() {
+  async function saveAll(retry = false) {
     if (!state.details || state.saving) return;
+    const retryIds = state.batch?.results.filter((entry) => !entry.ok && state.docs.some((doc) => doc.id === entry.id && doc.status === 'ready')).map((entry) => entry.id) || [];
+    if (retry && !retryIds.length) { setError('No hay documentos disponibles para reintentar.'); return; }
     setError('');
     setSaving(true);
     $('progressCard').hidden = false;
@@ -639,7 +730,7 @@
     }, 500);
     let result;
     try {
-      result = await api.save_all(options());
+      result = retry && state.batch ? await api.export_folder(state.batch.folder, options(), retryIds) : await api.save_all(options());
     } catch (error) {
       setError(`Error al guardar: ${error.message || error}`);
       return;
@@ -650,8 +741,21 @@
     if (result.message) setError(result.message);
     else if (result.folder) {
       $('progressCard').hidden = false;
-      $('progressText').textContent = `${result.saved} guardados${result.failed ? `, ${result.failed} bloqueados por la verificación` : ''} en ${result.folder}`;
+      $('progressText').textContent = `${result.saved} guardados${result.failed ? `, ${result.failed} pendientes de corregir` : ''} en ${result.folder}`;
     }
+    if (result.folder) {
+      const entries = new Map((retry ? state.batch?.results || [] : []).map((entry) => [entry.id, entry]));
+      for (const entry of result.results) entries.set(entry.id, entry);
+      state.batch = result;
+      state.batch.results = [...entries.values()];
+      $('batchResults').hidden = false;
+      $('batchSummary').textContent = result.reportPath ? `Informe del último intento: ${result.reportPath}` : (result.message || 'Informe no guardado');
+      const labels = { saved: 'Guardado', verification_blocked: 'Bloqueado por verificación', processing_error: 'Error de procesamiento', write_error: 'Error al escribir' };
+      $('batchList').replaceChildren(...state.batch.results.map((entry) => el('li', { textContent: `${state.docs.find((doc) => doc.id === entry.id)?.name || entry.documento}: ${labels[entry.status] || entry.status}${entry.error ? ` · ${entry.error}` : ''}` })));
+      $('btnRetryBatch').hidden = !state.batch.results.some((entry) => !entry.ok);
+    }
+    state.docs = await api.documents();
+    renderQueue();
     state.details = await api.details(state.details.id);
     renderDetails();
   }
@@ -672,11 +776,32 @@
     $('btnRun').addEventListener('click', run);
     $('btnCancel').addEventListener('click', () => api.cancel());
     $('btnPdf').addEventListener('click', savePdf);
-    $('btnAll').addEventListener('click', saveAll);
+    $('btnAll').addEventListener('click', () => saveAll());
+    $('btnRetryBatch').addEventListener('click', () => saveAll(true));
+    $('btnUndo').addEventListener('click', () => restoreReview());
+    $('btnRedo').addEventListener('click', () => restoreReview(true));
+    $('pageZoom').addEventListener('change', renderPage);
+    $('btnNewZone').addEventListener('click', () => { state.manualEditId = null; $('btnCoordinates').textContent = 'Crear zona'; });
+    $('manualForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!state.details || state.saving || state.polling) return;
+      const [x, y, width, height] = ['manualX', 'manualY', 'manualWidth', 'manualHeight'].map((id) => Number($(id).value) / 100);
+      if (x + width > 1 || y + height > 1) { setError('La zona debe quedar dentro de la página.'); return; }
+      try {
+        const rect = [x, y, x + width, y + height];
+        if (state.manualEditId && state.details.findings.some((f) => f.id === state.manualEditId && f.type === 'manual')) await api.update_manual(state.details.id, state.manualEditId, state.page, rect);
+        else await api.add_manual(state.details.id, state.page, rect);
+        setError('');
+        await reloadReview();
+      } catch (error) { setError(error.message || String(error)); }
+    });
     $('btnCsv').addEventListener('click', () => saveLog('csv'));
     $('btnJson').addEventListener('click', () => saveLog('json'));
     $('optLogOriginals').addEventListener('change', () => { $('logWarning').hidden = !$('optLogOriginals').checked; });
-    $('btnReset').addEventListener('click', async () => { if (await api.clear()) { state.activeId = null; state.details = null; state.analysisSignature = null; await refreshDocuments(); } });
+    $('btnReset').addEventListener('click', async () => {
+      if (state.docs.some((doc) => doc.reviewed && !doc.saved) && !window.confirm('Hay revisiones sin guardar. ¿Quieres vaciar la lista y descartarlas?')) return;
+      if (await api.clear()) { state.activeId = null; state.details = null; state.analysisSignature = null; await refreshDocuments(); }
+    });
     $('btnPrevPage').addEventListener('click', () => { state.page -= 1; renderPage(); });
     $('btnNextPage').addEventListener('click', () => { state.page += 1; renderPage(); });
     $('btnManual').addEventListener('click', () => setManual(!state.manual));
@@ -702,7 +827,9 @@
           state.savedIds.delete(state.details.id);
           renderSteps();
           renderReport(null);
-          await api.invalidate_report(state.details.id);
+          for (const doc of state.docs.filter((item) => item.status === 'ready')) await api.invalidate_report(doc.id);
+          state.docs = await api.documents();
+          renderQueue();
           schedulePreview();
         }
       });
@@ -717,8 +844,10 @@
     document.addEventListener('keydown', (event) => {
       const target = event.target;
       if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden) return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const key = event.key.toLowerCase();
+      if (key.startsWith('arrow') && target instanceof Element && target.closest('.zoomed-page')) return;
+      if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(key)) { event.preventDefault(); restoreReview(key === 'y' || event.shiftKey); return; }
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       // Space and Enter keep their normal meaning on a focused button, link or menu.
       if ((key === ' ' || key === 'enter') && target instanceof Element && target.closest('button, a, summary')) return;
       if (key === 'arrowleft' && state.page > 0) { state.page -= 1; renderPage(); }
