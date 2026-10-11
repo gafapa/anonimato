@@ -77,6 +77,19 @@ class Recognizer:
             elif index != 0 and index == previous and spans:
                 spans[-1][1] = t
             previous = index
-        factor = crop_width / width
-        char_spans = [(max(0.0, (a - 0.5) * step_px * factor), min(crop_width, (b + 1.5) * step_px * factor)) for a, b in spans]
-        return "".join(text), (float(np.mean(confs)) if confs else 0.0), char_spans
+        return "".join(text), (float(np.mean(confs)) if confs else 0.0), char_extents(spans, step_px * crop_width / width,
+                                                                                      crop_width)
+
+
+def char_extents(spans: list[list[int]], step: float, crop_width: float) -> list[tuple[float, float]]:
+    """Horizontal extent of each character from its CTC peak steps.
+
+    A CTC peak marks where a glyph was recognised, not where it starts and ends, so peak-only boxes leave
+    gaps and cut the first and last glyph of a line short. Neighbouring characters meet halfway between
+    their peaks, and the outer characters reach the edges of the detected line."""
+    out = []
+    for i, (a, b) in enumerate(spans):
+        left = 0.0 if i == 0 else min((a - 0.5) * step, (spans[i - 1][1] + 1 + a) / 2 * step)
+        right = crop_width if i == len(spans) - 1 else max((b + 1.5) * step, (b + 1 + spans[i + 1][0]) / 2 * step)
+        out.append((max(0.0, left), min(crop_width, right)))
+    return out

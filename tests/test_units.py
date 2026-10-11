@@ -607,3 +607,17 @@ def test_shared_surname_of_two_people_keeps_separate_tokens():
     pipeline.assign_tokens(findings)
     assert findings[2].token not in (findings[0].token, findings[1].token)   # ambiguous: its own token
     assert findings[3].token == findings[1].token                           # only Luis is Pérez
+
+
+def test_ocr_character_extents_have_no_gaps_and_reach_the_line_edges():
+    """CTC peaks mark where a glyph was recognised, not its extent: a value at the end of a line (the control
+    letter of a DNI) must be covered up to the edge of the detected line."""
+    import itertools
+
+    from app.engine.ocr.printed import char_extents
+    extents = char_extents([[2, 3], [6, 6], [10, 11]], 8.0, 110.0)
+    assert extents[0][0] == 0.0 and extents[-1][1] == 110.0
+    assert all(left[1] >= right[0] for left, right in itertools.pairwise(extents))  # neighbours meet
+    for (a, b), (x0, x1) in zip([[2, 3], [6, 6], [10, 11]], extents, strict=True):  # never narrower than the peak
+        assert x0 <= max(0.0, (a - 0.5) * 8.0) and x1 >= min(110.0, (b + 1.5) * 8.0)
+    assert char_extents([], 8.0, 110.0) == []

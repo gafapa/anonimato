@@ -534,12 +534,18 @@ class Api:
             data = analysis.working
         else:
             options = _options(raw_options)
-            key = self._state_key(analysis, options)
-            if doc.preview_key != key or doc.preview_bytes is None:
+            # The key must describe exactly the findings that are rendered. Engine calls run one at a time, so
+            # the review can change while this request waits; render a snapshot taken with its key.
+            with self._lock:
+                snapshot = replace(analysis, findings=copy.deepcopy(analysis.findings), sources={})
+                key = self._state_key(snapshot, options)
+                data = doc.preview_bytes if doc.preview_key == key else None
+            if data is None:
                 # Exactly the pipeline used for saving, minus the (slow) verification.
-                doc.preview_bytes = self._light.call("build_preview", analysis, options)
-                doc.preview_key = key
-            data = doc.preview_bytes
+                data = self._light.call("build_preview", snapshot, options)
+                with self._lock:
+                    if doc.analysis is analysis:
+                        doc.preview_bytes, doc.preview_key = data, key
         png = self._light.call("page_png", data, page, width)
         return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 

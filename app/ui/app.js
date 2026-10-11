@@ -389,7 +389,9 @@
     if (!report.ok) {
       children.push(el('ul', {}, report.leaks.map((leak) => {
         const located = leak.page !== null && leak.page !== undefined && leak.view && leak.view.length;
-        const text = `${leak.where}: ${leak.detail} (${leak.check}) «${leak.value}»`
+        // The engine masks original values ("…") so they never reach logs; only show a value it kept.
+        const value = leak.value && leak.value !== '…' ? ` «${leak.value}»` : '';
+        const text = `${leak.where}: ${leak.detail} (${leak.check})${value}`
           + (located ? ' · ver en la página' : leak.page === null ? ' · en la estructura del archivo' : '');
         if (!located) return el('li', { textContent: text });
         const link = el('button', { type: 'button', className: 'leak-link', textContent: text });

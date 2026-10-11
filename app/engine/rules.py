@@ -366,8 +366,19 @@ def _all_caps(tok: str) -> bool:
     return len(letters) >= 3 and all(c.isupper() for c in letters)
 
 
+def _starts_new_person(text: str, pos: int, captured: int) -> bool:
+    """After a conjunction another person starts ("… Varela y Ana López"; a complete name followed by two or more
+    capitalised words), unlike a compound surname ("José Ortega y Gasset")."""
+    words = []
+    pos = _skip(text, pos)
+    while len(words) < 2 and (nxt := NAME_TOKEN.match(text, pos)) and _is_upper_start(nxt.group()):
+        words.append(no_accents(nxt.group().rstrip(".").lower()))
+        pos = _skip(text, nxt.end())
+    return bool(words) and (words[0] in names_data.FIRST_NAMES or (captured >= 3 and len(words) >= 2))
+
+
 def capture_name_run(text: str, from_pos: int, allow_unknown: bool = False, allow_all_caps: bool = False,
-                     stop_at_conjunction: bool = False) -> tuple[int, int, str] | None:
+                     stop_at_conjunction: bool = False, context: bool = False) -> tuple[int, int, str] | None:
     pos = _skip(text, from_pos)
     start = end = pos
     toks: list[str] = []
@@ -382,7 +393,8 @@ def capture_name_run(text: str, from_pos: int, allow_unknown: bool = False, allo
         low = no_accents(tok.lower()).replace("'", "").replace("’", "").rstrip(".")
         if not _is_upper_start(tok):
             if low in PARTICLES:
-                if stop_at_conjunction and len(toks) >= 2 and low in ("y", "e", "u", "i"):
+                if low in ("y", "e", "u", "i") and toks and (
+                        (stop_at_conjunction and len(toks) >= 2) or _starts_new_person(text, tok_end, len(toks))):
                     break
                 pos = _skip(text, tok_end)
                 continue
@@ -401,12 +413,15 @@ def capture_name_run(text: str, from_pos: int, allow_unknown: bool = False, allo
         toks.append(tok)
         end = tok_end
         nxt = _skip(text, tok_end)
+        if "," in text[tok_end:nxt] and len(toks) >= 3 and _starts_new_person(text, nxt, len(toks)):
+            break  # "Ana López García, Jaione Villarrubia…" lists people; "García López, Juan" is one name
         pending_break = "\n" in text[tok_end:nxt]
         pos = nxt
     if not toks:
         return None
     surnames_after = sum(1 for t in toks[1:] if no_accents(t.lower()).rstrip(".") in names_data.SURNAMES)
-    rare_given_name = len(toks) >= 3 and surnames_after >= 2
+    # Rare given names: two known surnames, or one after a context word ("Comparecen Jaione Villarrubia Varela").
+    rare_given_name = len(toks) >= 3 and surnames_after >= (1 if context and len(toks[0].rstrip(".")) > 1 else 2)
     if not is_known_name(toks[0]) and (not allow_unknown or len(toks) < 2) and not rare_given_name:
         return None
     return start, end, " ".join(toks)
@@ -427,7 +442,10 @@ LABEL_RE = re.compile(
 CONTEXT_RE = re.compile(
     r"(?i)\b(?:el\s+abajo\s+firmante|la\s+abajo\s+firmante|abajo\s+firmante|compareciente|el\s+que\s+suscribe|"
     r"la\s+persona\s+f[ií]sica|representante\s+legal|adjudicatari[oa]|a\s+favor\s+de|en\s+nombre\s+de|"
-    r"comparece|comparecen|expone|solicita\s+que)(?:\b[^\n]{0,25}?)?")
+    r"comparece|comparecen|expone|solicita\s+que)\b(?:[^\n]{0,25}?)?")
+
+
+LIST_SEPARATOR = re.compile(r"[ \t]*(?:,[ \t]*(?:(?:y|e|i)[ \t]+)?|(?:y|e|i)[ \t]+)")
 
 
 def find_names(text: str) -> list[Match]:
@@ -440,9 +458,14 @@ def find_names(text: str) -> list[Match]:
     for m in CONTEXT_RE.finditer(text):
         anchors.append((m.end(), False, False, 0.74))
     for pos, unknown, caps, conf in anchors:
-        found = capture_name_run(text, pos, allow_unknown=unknown, allow_all_caps=caps)
-        if found:
+        found = capture_name_run(text, pos, allow_unknown=unknown, allow_all_caps=caps, context=not unknown)
+        for _ in range(6):  # the anchor covers every person it introduces ("Comparecen A, B y C")
+            if not found:
+                break
             out.append(Match(found[0], found[1], "name", found[2], conf, prio=500))
+            more = LIST_SEPARATOR.match(text, found[1])
+            found = more and capture_name_run(text, more.end(), allow_unknown=unknown, allow_all_caps=caps,
+                                              context=not unknown)
     token = re.compile(r"\b\p{Lu}[\p{L}'’\-‐]+")
     pos = 0
     while (m := token.search(text, pos)):

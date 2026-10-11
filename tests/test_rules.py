@@ -163,3 +163,21 @@ def test_wrapped_and_unicode_values():
 def test_rare_given_name_before_known_surnames():
     names = values("Comparecen Juan Pérez López y Jaione Varela Castro, vecinos de Vigo.", "name")
     assert any("Jaione Varela Castro" in n for n in names)
+
+
+@pytest.mark.parametrize("text, names", [
+    # "Comparecen" is a context word (it used to match only "Comparece", and capture began at the stray "n").
+    ("Comparecen Jaione Villarrubia Varela y Ana López García, vecinos de Lugo.",
+     ["Jaione Villarrubia Varela", "Ana López García"]),
+    # Two people joined by "y" or a comma are two names, never one merged name sharing a token.
+    ("Comparecen Ana López García y Jaione Villarrubia Varela, vecinos de Lugo.",
+     ["Ana López García", "Jaione Villarrubia Varela"]),
+    ("Comparecen Ana López García, Jaione Villarrubia Varela y Eneko Arrizabalaga Pérez, vecinos de Lugo.",
+     ["Ana López García", "Jaione Villarrubia Varela", "Eneko Arrizabalaga Pérez"]),
+    ("Comparecen Juan y María López Fernández.", ["Juan", "María López Fernández"]),
+    # One person: a compound surname and the surname-first form.
+    ("Comparece D. José Ortega y Gasset en calidad de testigo.", ["José Ortega Gasset"]),
+    ("Apellidos y nombre: Villarrubia Varela, Jaione", ["Villarrubia Varela Jaione"]),
+])
+def test_names_listed_together_are_separate_people(text, names):
+    assert values(text, "name") == names

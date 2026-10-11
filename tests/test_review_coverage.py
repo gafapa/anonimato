@@ -1,4 +1,5 @@
 """Review recovery, rotated geometry and publication boundaries using fictitious PDFs."""
+import base64
 import copy
 import hashlib
 import json
@@ -201,3 +202,28 @@ def test_zoom_reuses_redacted_bytes_but_edit_invalidates_preview(bridge):
     api.page_image(doc.id, 0, "result", {})
     assert [call.args[0] for call in api._light.call.call_args_list].count("build_preview") == 2
     assert [call.args[-1] for call in api._light.call.call_args_list if call.args[0] == "page_png"] == [600, 3300, 1100]
+
+
+def test_preview_cache_key_matches_the_findings_that_were_rendered(bridge):
+    """The review may change while a preview waits for the engine; its cache entry must describe what was rendered."""
+    api, doc = bridge
+    item = api.add_manual(doc.id, 0, [0.1, 0.2, 0.4, 0.5])
+    builds = []
+
+    def light_call(operation, *args):
+        if operation == "page_png":
+            return args[0]
+        if not builds:
+            api.set_enabled(doc.id, [item["id"]], False)  # edited while this request waited for the engine
+        enabled = [f.enabled for f in args[0].findings if f.id == item["id"]]
+        builds.append(enabled)
+        return repr(enabled).encode()
+    api._light.call = Mock(side_effect=light_call)
+
+    def shown():
+        return base64.b64decode(api.page_image(doc.id, 0, "result", {}).split(",", 1)[1])
+    assert shown() == b"[True]"
+    api.set_enabled(doc.id, [item["id"]], True)
+    assert shown() == b"[True]"
+    api.set_enabled(doc.id, [item["id"]], False)
+    assert shown() == b"[False]"
