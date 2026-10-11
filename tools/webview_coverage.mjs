@@ -4,12 +4,16 @@ import { setTimeout as delay } from 'node:timers/promises';
 const [port, pageUrl, scriptUrl, output, ready, stop] = process.argv.slice(2);
 const deadline = Date.now() + 30000;
 let target;
+let observed = [], connectionError = '';
 while (Date.now() < deadline) {
-  try { target = (await (await fetch(`http://127.0.0.1:${Number(port)}/json/list`)).json()).find(t => t.url === pageUrl); } catch {}
+  try {
+    observed = await (await fetch(`http://127.0.0.1:${Number(port)}/json/list`)).json();
+    target = observed.find(t => t.url === pageUrl);
+  } catch (error) { connectionError = String(error); }
   if (target) break;
   await delay(100);
 }
-if (!target) throw new Error('The task-owned WebView2 target was not found');
+if (!target) throw new Error(`The task-owned WebView2 target was not found; expected ${pageUrl}; observed ${JSON.stringify(observed.map(t=>t.url))}; connection ${connectionError}`);
 const socket = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, {once:true}); socket.addEventListener('error', reject, {once:true}); });
 let nextId = 0;

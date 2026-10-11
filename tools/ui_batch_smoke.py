@@ -94,6 +94,7 @@ def main() -> None:
                 probe.bind(("127.0.0.1", 0))
                 port = probe.getsockname()[1]
             os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={port} --remote-debugging-address=127.0.0.1"
+            webview.settings["REMOTE_DEBUGGING_PORT"] = port
             ready, stop = folder / "coverage-ready", folder / "coverage-stop"
             collector = subprocess.Popen(["node", str(ROOT / "tools/webview_coverage.mjs"), str(port), _ui_path().as_uri(),
                                            (ROOT / "app/ui/app.js").as_uri(), str(coverage_output), str(ready), str(stop)],
