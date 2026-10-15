@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from . import __version__
-from .engine import document, llm_server, logs, models, pipeline, review, rules
+from .engine import document, llm_server, logs, models, perf, pipeline, review, rules
 from .engine.types import Options
 from .engine.worker import EngineError, EngineProcess
 
@@ -354,7 +354,10 @@ class Api:
                 previous = doc.analysis
                 doc.preview_bytes, doc.preview_key, doc.report = None, "", None
 
-                def progress(event: dict, position=position, doc=doc) -> None:
+                timer = perf.StageTimer()
+
+                def progress(event: dict, position=position, doc=doc, timer=timer) -> None:
+                    timer.event(event)
                     page, pages = event.get("page"), event.get("total")
                     fraction = (page - 0.5) / pages if page and pages else 0.0
                     self._state.progress = {
@@ -362,6 +365,7 @@ class Api:
                         "percent": round(100 * (position + min(1.0, fraction)) / max(1, total), 1),
                     }
 
+                failure: BaseException | None = None
                 try:
                     analyzed = self._engine.call("analyze", doc.data, doc.name, options, progress=progress)
                     digest = hashlib.sha256(doc.data).hexdigest()
@@ -389,13 +393,17 @@ class Api:
                         doc.history.clear()
                         doc.revision += 1
                     doc.status = "ready"
-                except pipeline.Cancelled:
+                except pipeline.Cancelled as error:
+                    failure = error
                     doc.status, doc.error = ("ready" if previous else "pending"), ""
                 except EngineError as error:
+                    failure = error
                     if error.kind == "PasswordRequired":
                         doc.status, doc.error = "locked", "Protegido con contraseña"
                     else:
                         doc.status, doc.error = ("ready" if previous else "failed"), str(error)
+                finally:
+                    self._log_performance("analisis", timer, options, doc, failure)
         finally:
             with self._lock:
                 self._state.busy = False
@@ -589,8 +597,18 @@ class Api:
         return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
     # ------------------------------------------------------------ export
+    def _log_performance(self, operation: str, timer, options: Options, doc: Doc, error: BaseException | None) -> None:
+        """Time per stage of one operation, without names or content (see ``perf``)."""
+        # The last engine status the window already fetched: no extra call to a busy engine.
+        engine = self._status_cache
+        pages = len(doc.analysis.pages) if doc.analysis else 0
+        perf.record(operation, timer, options=options, size_bytes=len(doc.data), pages=pages, engine=engine, error=error)
+
     def _export(self, doc: Doc, options: Options, index: int, keep_name: bool, share: tuple[int, int] = (0, 1)):
+        timer = perf.StageTimer()
+
         def progress(event: dict) -> None:
+            timer.event(event)
             page, pages = event.get("page"), event.get("total")
             fraction = page / pages if page and pages else 0.0
             self._state.progress = {"message": f"{doc.name}: {event.get('message', '')}",
@@ -601,7 +619,12 @@ class Api:
                 raise EngineError("El archivo de origen cambió; revisa el documento antes de guardar")
             revision = doc.revision
             snapshot = replace(doc.analysis, findings=copy.deepcopy(doc.analysis.findings), sources={})
-        result = self._engine.call("export", snapshot, options, index, keep_name, progress=progress)
+        try:
+            result = self._engine.call("export", snapshot, options, index, keep_name, progress=progress)
+        except Exception as error:
+            self._log_performance("guardado", timer, options, doc, error)
+            raise
+        self._log_performance("guardado", timer, options, doc, None)
         with self._lock:
             if doc.revision != revision:
                 doc.report = None
