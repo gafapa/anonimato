@@ -136,6 +136,14 @@ class Services:
             self._llm = None
             self.errors.pop("llm", None)
 
+    def reset_base(self) -> None:
+        """Forget base services that could not load before the first-launch download finished."""
+        with self._lock:
+            for name in ("ocr", "pii", "faces"):
+                if name in self.errors:
+                    self.errors.pop(name)
+                    setattr(self, f"_{name}", None)
+
     def advanced_available(self) -> bool:
         return llm_server.available()
 
@@ -158,6 +166,7 @@ class Services:
         from .onnx_runtime import gpu_available
         return {
             "base": models.group_installed("base"),
+            "missing": [item.id for item in models.required_missing()],  # downloaded on first launch
             "advanced": self.advanced_available(),
             "gpu": gpu_available(self.use_gpu),
             "errors": dict(self.errors),

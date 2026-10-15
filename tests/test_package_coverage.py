@@ -37,8 +37,8 @@ def package(monkeypatch, tmp_path):
     return SimpleNamespace(payload=payload, base=base, runtime=runtime, catalog=catalog, manifest=manifest)
 
 
-def test_strict_inventory_reports_only_actual_bundled_models(package):
-    report = package_inventory.inventory(package.payload, require_models=True)
+def test_inventory_reports_only_actual_bundled_models(package):
+    report = package_inventory.inventory(package.payload)
     assert {item["id"] for item in report["bundled_models"]} == {"synthetic", "synthetic-runtime"}
     assert report["model_catalog"]["advanced"][0]["id"] == "optional"
     entry = report["archived_native_files"][0]
@@ -49,10 +49,14 @@ def test_strict_inventory_reports_only_actual_bundled_models(package):
 
 
 @pytest.mark.parametrize("artifact", ["base", "runtime"])
-def test_strict_inventory_rejects_missing_required_artifact(package, artifact):
+def test_release_inventory_rejects_packaged_models(package, artifact):
+    other = {"base": package.runtime, "runtime": package.base}[artifact]
+    other.unlink()
+    with pytest.raises(ValueError, match="must not be packaged"):
+        package_inventory.inventory(package.payload, allow_models=False)
     getattr(package, artifact).unlink()
-    with pytest.raises(ValueError, match="Required packaged model is missing"):
-        package_inventory.inventory(package.payload, require_models=True)
+    report = package_inventory.inventory(package.payload, allow_models=False)  # downloaded on first launch
+    assert report["bundled_models"] == []
 
 
 @pytest.mark.parametrize("artifact", ["base", "runtime"])
@@ -66,14 +70,14 @@ def test_inventory_rejects_changed_model_or_runtime_bytes(package, artifact):
         with zipfile.ZipFile(path, "a") as archive:
             archive.writestr("extra.txt", "fictitious extra")
     with pytest.raises(ValueError, match="Packaged model hash mismatch"):
-        package_inventory.inventory(package.payload, require_models=True)
+        package_inventory.inventory(package.payload)
 
 
 def test_required_runtime_for_another_platform_is_not_required(package):
     package.catalog["runtime"].append({"id": "foreign", "file": "runtime/linux.tar.gz", "platform": "linux",
                                        "sha256": "not shipped on Windows"})
     package.manifest.write_text(json.dumps(package.catalog), encoding="utf-8")
-    assert len(package_inventory.inventory(package.payload, require_models=True)["bundled_models"]) == 2
+    assert len(package_inventory.inventory(package.payload)["bundled_models"]) == 2
 
 
 def test_tar_inventory_resolves_native_links_without_extracting(package):

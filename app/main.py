@@ -23,8 +23,16 @@ def selftest(report_path: str) -> int:
     from .engine.types import Options
     from .engine.worker import EngineCrashed, EngineProcess
 
+    from .engine import models
+
     started = time.time()
     result: dict = {"ok": False}
+    downloaded = [item.id for item in models.required_missing()]
+    try:
+        models.install_required()  # installed builds ship no models: the first launch downloads them
+    except Exception as error:
+        Path(report_path).write_text(json.dumps({"ok": False, "error": f"model download: {error!r}"}), encoding="utf-8")
+        return 1
     engine = EngineProcess(with_models=True, use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
     try:
         doc = pymupdf.open()
@@ -49,6 +57,7 @@ def selftest(report_path: str) -> int:
             "services": status,
             "integrity": engine.call("integrity"),
             "crash_recovery": recovered,
+            "downloaded_models": downloaded,
             "seconds": round(time.time() - started, 1),
         }
     except Exception as error:
@@ -90,7 +99,7 @@ def main() -> None:
 
     from .api import Api
 
-    api = Api(use_gpu=os.environ.get("ANONIMATO_CPU") != "1")
+    api = Api(use_gpu=os.environ.get("ANONIMATO_CPU") != "1", fetch_models=True)
     window = webview.create_window(
         "Anonimato", url=_ui_path().as_uri(), js_api=api, width=1480, height=940, min_size=(980, 640),
         background_color="#0b111c", text_select=True,

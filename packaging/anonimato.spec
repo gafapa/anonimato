@@ -1,6 +1,6 @@
-# PyInstaller spec: one-folder build with the base models and the llama.cpp runtime of this platform.
+# PyInstaller spec: one-folder build without model weights. Only the pinned manifest is packaged: the
+# application downloads the base models and the llama.cpp runtime on first launch and checks every SHA-256.
 # Windows → dist/Anonimato (then Inno Setup); macOS → dist/Anonimato.app (then .dmg); Linux → dist/Anonimato (then AppImage).
-import json
 import sys
 import tomllib
 from pathlib import Path
@@ -10,22 +10,13 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 ROOT = Path(SPECPATH).parent
 VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 SYSTEM = "windows" if sys.platform == "win32" else "macos" if sys.platform == "darwin" else "linux"
-manifest = json.loads((ROOT / "models" / "manifest.json").read_text(encoding="utf-8"))
 
 datas = [
     (str(ROOT / "app" / "ui"), "app/ui"),
     (str(ROOT / "models" / "manifest.json"), "models"),
-    (str(ROOT / "models" / "base"), "models/base"),
     (str(ROOT / "LICENSE"), "."),
     (str(ROOT / "THIRD_PARTY.md"), "."),
 ]
-# Preserve original bytes: PyInstaller rewrites and signs native files on macOS.
-# The application verifies this archive before extracting it into its private runtime cache.
-for item in manifest.get("runtime", []):
-    if item.get("platform") == SYSTEM:
-        source = (ROOT / "models" / item["file"]).resolve()
-        datas.append((str(source), "runtime"))
-
 binaries = []
 hiddenimports = ["app.engine.ocr.handwriting", "app.engine.llm_review", "app.engine.worker", "yaml"]
 if SYSTEM == "windows":

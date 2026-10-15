@@ -89,6 +89,7 @@
   // ------------------------------------------------------------ status & options
   function renderStatus() {
     const s = state.status;
+    renderSetup();
     const host = $('engineStatus');
     const advancedStatus = s.advancedInstalled
       ? el('span', { className: 'pill ok', textContent: 'IA avanzada lista' })
@@ -104,7 +105,8 @@
     );
     const backends = Object.entries(s.services.backends || {}).filter(([, value]) => value !== 'Sin cargar');
     $('backendStatus').textContent = backends.length ? backends.map(([key, value]) => `${labelsForBackend(key)}: ${value}`).join(' · ') : 'Los motores se cargan cuando hacen falta.';
-    const errors = Object.entries(s.errors || {});
+    // Engines cannot load before the first-launch download; the setup banner explains that instead.
+    const errors = s.modelsMissing ? [] : Object.entries(s.errors || {});
     const banner = $('engineErrors');
     banner.hidden = !errors.length;
     const labels = { integrity: 'Integridad', ocr: 'OCR', pii: 'IA de datos personales', faces: 'Rostros', llm: 'IA avanzada', engine: 'Motor', gpu: 'GPU' };
@@ -132,6 +134,47 @@
       el('div', { className: 'progress-track', id: 'installTrack', hidden: true }, [el('div', { className: 'progress-fill', id: 'installFill' })]),
       el('p', { id: 'installText' }),
     );
+  }
+
+  // ------------------------------------------------------------ first-launch model download
+  function renderSetup() {
+    const s = state.status;
+    const setup = s.setup || {};
+    const banner = $('setupBanner');
+    banner.hidden = !s.modelsMissing && !setup.running;
+    if (banner.hidden) return;
+    const failed = Boolean(setup.error);
+    $('setupText').replaceChildren(
+      el('span', { textContent: setup.message || 'Faltan los modelos de IA necesarios (≈ 700 MB). Solo se descargan modelos; ningún documento sale del equipo.' }),
+      ...(setup.running ? [] : [
+        el('button', { type: 'button', className: 'btn ghost small', textContent: 'Reintentar la descarga', onclick: retrySetup }),
+        el('button', { type: 'button', className: 'btn ghost small', textContent: 'Importar paquete sin conexión (.zip)', onclick: importSetup }),
+      ]),
+    );
+    $('setupFill').style.width = `${setup.percent || 0}%`;
+    banner.classList.toggle('failed', failed);
+    if (setup.running) watchSetup();
+  }
+  async function importSetup() {
+    const result = await api.import_advanced();
+    if (result.ok) await refreshStatus();
+    else if (result.message) setError(result.message);
+  }
+  async function retrySetup() {
+    await api.install_required();
+    await refreshStatus();
+  }
+  function watchSetup() {
+    if (state.watchingSetup) return;
+    state.watchingSetup = true;
+    const tick = async () => {
+      const info = await api.poll();
+      state.status.setup = info.setup || {};
+      if (state.status.setup.running) { renderSetup(); setTimeout(tick, 500); return; }
+      state.watchingSetup = false;
+      await refreshStatus();
+    };
+    setTimeout(tick, 500);
   }
 
   function labelsForBackend(key) {

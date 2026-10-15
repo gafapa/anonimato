@@ -1,7 +1,9 @@
 """Model files: location, integrity checks and downloads.
 
-Downloads only fetch model weights listed in ``models/manifest.json``. Documents
-never leave the machine.
+Installed builds ship no model weights: the base models and the llama.cpp runtime are
+downloaded on first launch (``install_required``) and the advanced pack on request.
+Downloads only fetch files listed in ``models/manifest.json``. Documents never leave
+the machine.
 """
 from __future__ import annotations
 
@@ -50,7 +52,7 @@ def user_data_dir() -> Path:
 
 
 def user_models_dir() -> Path:
-    """Advanced models are installed per user, outside the program folder."""
+    """Downloaded models are installed per user, outside the program folder (a source checkout keeps them in the tree)."""
     if getattr(sys, "frozen", False):
         return user_data_dir() / "models"
     return bundled_models_dir()
@@ -58,12 +60,14 @@ def user_models_dir() -> Path:
 
 def runtime_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return _installed_bundled_runtime()
+        return _installed_runtime()
     return app_root() / "runtime"
 
 
-def _installed_bundled_runtime() -> Path:
-    """Extract the pinned archive without allowing packaging tools to rewrite native binaries."""
+def _installed_runtime() -> Path:
+    """Extract the downloaded pinned archive into a private cache keyed by its checksum.
+
+    Until the archive has been downloaded the returned folder does not exist, so the runtime counts as absent."""
     import shutil
     import tempfile
 
@@ -77,9 +81,11 @@ def _installed_bundled_runtime() -> Path:
     target = cache / item.sha256
     if target.is_dir():
         return target  # verify_runtime still hashes every extracted executable and library.
-    archive = app_root() / "runtime" / Path(item.file).name
+    archive = item.path
+    if not archive.is_file():
+        return target
     if sha256_of(archive) != item.sha256:
-        raise RuntimeError("Bundled runtime archive failed its SHA-256 check")
+        raise RuntimeError("Runtime archive failed its SHA-256 check")
     cache.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".extract-", dir=cache) as temporary:
         payload = Path(temporary) / "payload"
@@ -113,9 +119,7 @@ class ModelFile:
 
     @property
     def path(self) -> Path:
-        if self.group in ("advanced", "advanced_lite", "candidates"):
-            return (user_models_dir() / self.file).resolve()
-        return (bundled_models_dir() / self.file).resolve()
+        return (user_models_dir() / self.file).resolve()
 
 
 def manifest_path() -> Path:
@@ -203,7 +207,7 @@ def _download_to(item: ModelFile, target: Path, progress: Progress | None = None
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and sha256_of(target) == item.sha256:
         _check_model(item, target)
-        if item.unzip:
+        if item.unzip and not getattr(sys, "frozen", False):
             extract_runtime(target, preserve_verified=True)
         return target
     partial = target.with_suffix(target.suffix + ".part")
@@ -244,7 +248,7 @@ def _download_to(item: ModelFile, target: Path, progress: Progress | None = None
         partial.unlink(missing_ok=True)
         raise
     partial.replace(target)
-    if item.unzip:
+    if item.unzip and not getattr(sys, "frozen", False):  # installed builds extract into their private cache
         extract_runtime(target, preserve_verified=True)
     return target
 
@@ -311,6 +315,23 @@ def download_group(items: list[ModelFile], progress: Progress | None = None) -> 
         _publish_models(staged)
 
 
+def required_items() -> list[ModelFile]:
+    """What the application needs before it can process anything: the base models and this platform's runtime."""
+    manifest = load_manifest()
+    return manifest.get("base", []) + for_this_platform(manifest.get("runtime", []))
+
+
+def required_missing() -> list[ModelFile]:
+    return [item for item in required_items() if not is_installed(item)]
+
+
+def install_required(progress: Progress | None = None) -> None:
+    """First-launch download: each file is resumable and checked against its pinned size and SHA-256."""
+    with installation_lock():
+        for item in required_missing():
+            _download_to(item, item.path, progress)
+
+
 def extract_runtime(archive_path: Path, *, preserve_verified: bool = False) -> None:
     """Unpack a llama.cpp release next to the archive (top-level folder stripped, links kept)."""
     destination = archive_path.parent
@@ -338,15 +359,24 @@ def for_this_platform(items: list[ModelFile]) -> list[ModelFile]:
     return [item for item in items if item.platform in ("", SYSTEM)]
 
 
+PACK_GROUPS = ("base", "runtime", "advanced", "advanced_lite")
+
+
+def pack_name(item: ModelFile) -> str:
+    """Entry name inside an offline pack: the manifest path (e.g. advanced/vlm.gguf), runtime/<archive> for the runtime."""
+    return f"runtime/{Path(item.file).name}" if item.group == "runtime" else item.file
+
+
 def import_zip(archive_path: Path) -> list[str]:
-    """Offline installation: a zip whose entries are named like the manifest files (e.g. advanced/vlm.gguf)."""
+    """Offline installation: a zip whose entries are named like ``pack_name`` (base models, runtime, advanced packs)."""
     with installation_lock():
         return _import_zip(archive_path)
 
 
 def _import_zip(archive_path: Path) -> list[str]:
     manifest = load_manifest()
-    items = {item.file: item for group in ("advanced", "advanced_lite") for item in manifest.get(group, [])}
+    groups = {group: for_this_platform(manifest.get(group, [])) for group in PACK_GROUPS}
+    items = {pack_name(item): item for group_items in groups.values() for item in group_items}
     root = user_models_dir()
     with zipfile.ZipFile(archive_path) as archive, tempfile.TemporaryDirectory(prefix=".import-", dir=root) as temporary:
         stage = Path(temporary)
@@ -367,7 +397,7 @@ def _import_zip(archive_path: Path) -> list[str]:
         if not selected:
             raise RuntimeError("El archivo no contiene ningún modelo reconocido")
         for group in {item.group for item, _ in selected}:
-            if not {item.id for item in manifest[group]} <= seen:
+            if not {item.id for item in groups[group]} <= seen:
                 raise RuntimeError("El paquete no contiene el grupo completo de modelos")
         if total > MAX_PACK_BYTES:
             raise RuntimeError("El paquete supera el tamaño total permitido")
@@ -385,6 +415,9 @@ def _import_zip(archive_path: Path) -> list[str]:
             _check_model(item, partial)
             staged.append((item, partial))
         _publish_models(staged)
+    for item, _ in selected:
+        if item.unzip and not getattr(sys, "frozen", False):  # installed builds extract into their private cache
+            extract_runtime(item.path, preserve_verified=True)
     return [item.id for item, _ in selected]
 
 

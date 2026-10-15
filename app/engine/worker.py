@@ -173,6 +173,7 @@ def _handlers():
 
     def reload_models(ctx):
         if ctx.services is not None:
+            ctx.services.reset_base()
             ctx.services.reset_advanced()
             if not ctx.services.check_integrity(force=True):
                 raise RuntimeError(ctx.services.errors["integrity"])

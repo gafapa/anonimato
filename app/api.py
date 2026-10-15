@@ -52,6 +52,7 @@ class State:
     cancel: bool = False
     progress: dict = field(default_factory=dict)
     install: dict = field(default_factory=dict)
+    setup: dict = field(default_factory=dict)    # first-launch download of the required models
     counter: int = 0
 
 
@@ -112,7 +113,8 @@ def _invert(matrix: tuple) -> tuple:
 
 
 class Api:
-    def __init__(self, use_gpu: bool = True, engine: EngineProcess | None = None, light: EngineProcess | None = None):
+    def __init__(self, use_gpu: bool = True, engine: EngineProcess | None = None, light: EngineProcess | None = None,
+                 fetch_models: bool = False):
         self._engine = engine or EngineProcess(with_models=True, use_gpu=use_gpu)
         self._light = light or EngineProcess(with_models=False, use_gpu=False, stall_seconds=180)
         self._state = State()
@@ -121,6 +123,8 @@ class Api:
         self._status_cache: dict | None = None
         threading.Thread(target=self._engine.ensure_started, daemon=True).start()
         threading.Thread(target=self._light.ensure_started, daemon=True).start()
+        if fetch_models:
+            self.install_required()
 
     def attach(self, window) -> None:
         self._window = window
@@ -160,11 +164,14 @@ class Api:
             except (RuntimeError, OSError, ValueError) as error:
                 services = {**services, "errors": {**services.get("errors", {}), "integrity": str(error)}}
                 variant = "advanced_lite"
+        missing = bool(services.get("missing"))
         return {
             "version": VERSION,
             "services": services,
             "errors": services.get("errors", {}),
-            "blocked": "integrity" in services.get("errors", {}),
+            "blocked": "integrity" in services.get("errors", {}) or missing,
+            "modelsMissing": missing,
+            "setup": dict(self._state.setup),
             "advancedInstalled": llm_server.available(),
             "advancedVariant": variant,
             "advancedLabel": "Qwen3-VL 8B · ≈ 5,5 GB" if variant == "advanced" else "Qwen3-VL 4B · ≈ 2,8 GB",
@@ -297,6 +304,10 @@ class Api:
     def process(self, raw_options: dict, only: list[str] | None = None) -> bool:
         options = _options(raw_options)
         status = self.status()
+        if status.get("modelsMissing"):
+            self._state.progress = {"message": "Faltan los modelos de IA necesarios. Espera a que termine la descarga",
+                                    "percent": 0}
+            return False
         if status.get("blocked"):
             self._state.progress = {"message": status.get("errors", {}).get(
                 "integrity", "No se pudo comprobar la integridad. Vuelve a intentarlo"), "percent": 0}
@@ -383,7 +394,7 @@ class Api:
 
     def poll(self) -> dict:
         return {"busy": self._state.busy, "progress": self._state.progress, "documents": self.documents(),
-                "install": self._state.install}
+                "install": self._state.install, "setup": self._state.setup}
 
     # ------------------------------------------------------------ review
     def _analysis(self, doc_id: str) -> tuple[Doc, pipeline.Analysis]:
@@ -709,6 +720,39 @@ class Api:
         from .engine.files import atomic_write
         atomic_write(path, content, encoding="utf-8")
         return {"saved": True, "path": str(path)}
+
+    # ------------------------------------------------------------ required models (first launch)
+    def install_required(self) -> bool:
+        """Download the base models and runtime that installed builds do not ship (first launch, or a retry)."""
+        with self._lock:
+            if self._state.setup.get("running") or not models.required_missing():
+                return False
+            self._state.setup = {"running": True, "percent": 0, "message": "Preparando la descarga de los modelos de IA…"}
+            try:
+                threading.Thread(target=self._install_required, daemon=True).start()
+            except Exception:
+                self._state.setup = {}
+                raise
+        return True
+
+    def _install_required(self) -> None:
+        try:
+            total = sum(item.size or 0 for item in models.required_missing()) or 1
+            received: dict[str, int] = {}
+
+            def progress(model_id: str, done: int, _total: int) -> None:
+                received[model_id] = done
+                got = min(sum(received.values()), total)
+                self._state.setup = {"running": True, "percent": round(100 * got / total, 1),
+                                     "message": f"Descargando los modelos de IA ({got >> 20} de {total >> 20} MB)…"}
+
+            models.install_required(progress)
+            self._engine.call("reload_models")
+            self._status_cache = None
+            self._state.setup = {"running": False, "done": True, "percent": 100, "message": "Modelos de IA instalados"}
+        except Exception as error:
+            self._state.setup = {"running": False, "error": str(error),
+                                 "message": f"No se pudieron descargar los modelos de IA: {error}"}
 
     # ------------------------------------------------------------ advanced models
     def install_advanced(self) -> bool:

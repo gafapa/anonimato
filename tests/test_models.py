@@ -1,5 +1,6 @@
 """Model manifest, integrity and offline installation."""
 import hashlib
+import io
 import json
 import zipfile
 
@@ -52,6 +53,31 @@ def test_offline_import_verifies_checksums(tmp_path, fake_manifest):
     assert not models.group_installed("advanced")
 
 
+def test_offline_pack_installs_the_base_models_and_runtime(tmp_path, monkeypatch):
+    runtime = io.BytesIO()
+    with zipfile.ZipFile(runtime, "w") as archive:
+        archive.writestr("llama-server", b"trusted executable")
+    model, runtime = b"modelo base" * 100, runtime.getvalue()
+    manifest = {
+        "base": [{"id": "m", "file": "base/m.onnx", "url": "https://example.invalid/m", "license": "MIT",
+                  "sha256": hashlib.sha256(model).hexdigest(), "size": len(model)}],
+        "runtime": [{"id": "rt", "file": "../runtime/llama/rt.zip", "url": "https://example.invalid/rt", "license": "MIT",
+                     "sha256": hashlib.sha256(runtime).hexdigest(), "size": len(runtime), "unzip": True}],
+        "advanced": [], "advanced_lite": []}
+    root = tmp_path / "checkout"
+    (root / "models").mkdir(parents=True)
+    (root / "models" / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(models, "bundled_models_dir", lambda: root / "models")
+    pack = tmp_path / "pack.zip"
+    with zipfile.ZipFile(pack, "w") as archive:
+        archive.writestr("base/m.onnx", model)
+        archive.writestr("runtime/rt.zip", runtime)
+    assert [item.id for item in models.required_missing()] == ["m", "rt"]
+    assert sorted(models.import_zip(pack)) == ["m", "rt"]
+    assert models.required_missing() == []
+    assert (root / "runtime" / "llama" / "llama-server").read_bytes() == b"trusted executable"
+
+
 def test_unexpected_backend_library_is_refused(tmp_path, monkeypatch):
     llama = tmp_path / "llama"
     llama.mkdir()
@@ -83,7 +109,7 @@ def bundled_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "load_manifest", lambda: {"runtime": [item]})
     monkeypatch.setattr(models, "_runtime_files", lambda: {
         "llama/llama-server": hashlib.sha256(b"trusted executable").hexdigest()})
-    monkeypatch.setattr(models, "runtime_dir", models._installed_bundled_runtime)
+    monkeypatch.setattr(models, "runtime_dir", models._installed_runtime)
     return archive, item
 
 
@@ -106,6 +132,14 @@ def test_bundled_runtime_rejects_an_altered_archive(bundled_runtime):
     with pytest.raises(RuntimeError, match="SHA-256"):
         models.runtime_dir()
     assert not (archive.parents[2] / "user" / "runtime").exists()
+
+
+def test_runtime_counts_as_absent_until_its_archive_is_downloaded(bundled_runtime):
+    archive, item = bundled_runtime
+    archive.unlink()
+    destination = models.runtime_dir()
+    assert destination.name == item.sha256 and not destination.exists()
+    assert models.verify_runtime() == []  # nothing to run yet, nothing altered
 
 
 def test_concurrent_runtime_extraction_publishes_one_complete_directory(bundled_runtime):

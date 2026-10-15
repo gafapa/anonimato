@@ -1,4 +1,5 @@
-# Build: dependencies -> models -> PyInstaller -> Inno Setup -> dist\AnonimatoSetup-x.y.z.exe
+# Build: dependencies -> tests -> PyInstaller -> Inno Setup -> dist\AnonimatoSetup-x.y.z.exe
+# No model weights are packaged: the application downloads them on first launch.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -10,7 +11,6 @@ function Invoke-Checked {
 }
 
 Invoke-Checked uv @('sync', '--frozen')
-Invoke-Checked uv @('run', 'python', 'tools/fetch_models.py', 'base', 'runtime')
 Invoke-Checked uv @('run', 'python', '-m', 'pytest', 'tests/test_rules.py', '-q')
 
 $webview = Join-Path $PSScriptRoot 'MicrosoftEdgeWebview2Setup.exe'

@@ -51,7 +51,9 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def inventory(root: Path, *, require_models: bool = False) -> dict:
+def inventory(root: Path, *, allow_models: bool = True) -> dict:
+    """``allow_models=False`` refuses a release payload that carries model weights or the runtime archive:
+    the application downloads them on first launch."""
     files, packages, archives = [], [], []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.name == "component-inventory.json":
@@ -97,12 +99,12 @@ def inventory(root: Path, *, require_models: bool = False) -> dict:
             suffix = "runtime/" + Path(item["file"]).name if group == "runtime" else "models/" + item["file"]
             matches = [entry for entry in files if entry["path"] == suffix or entry["path"].endswith("/" + suffix)]
             if matches:
+                if not allow_models:
+                    raise ValueError(f"Model files must not be packaged: {item['id']}")
                 if any(entry["sha256"] != item["sha256"] for entry in matches):
                     raise ValueError(f"Packaged model hash mismatch: {item['id']}")
                 bundled_models.append({"id": item["id"], "group": group, "license": item.get("license", "UNKNOWN"),
                                        "files": [entry["path"] for entry in matches], "sha256": item["sha256"]})
-            elif require_models and group in ("base", "runtime"):
-                raise ValueError(f"Required packaged model is missing: {item['id']}")
     return {"schema": "anonimato-component-inventory-v1", "platform": platform.system(),
             "lock_sha256": digest(ROOT / "uv.lock"), "manifest_sha256": digest(ROOT / "models/manifest.json"),
             "model_catalog": catalog, "bundled_models": bundled_models,
@@ -116,7 +118,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     output = args.output or args.root / "component-inventory.json"
-    output.write_text(json.dumps(inventory(args.root, require_models=True), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output.write_text(json.dumps(inventory(args.root, allow_models=False), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(output)
 
 

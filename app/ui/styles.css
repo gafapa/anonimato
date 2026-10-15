@@ -45,6 +45,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .status-action { font: inherit; cursor: pointer; }
 .status-action:hover { background: var(--warning-soft); }
 .engine-errors { padding: 10px 20px; color: #fff; background: var(--danger); font-size: 13px; }
+.setup-banner { display: grid; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--accent-soft); color: var(--text); font-size: 13px; }
+.setup-banner p { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; }
+.setup-banner.failed .progress-track { display: none; }
 
 /* ---- layout ---- */
 .workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(260px, 280px) minmax(0, 1fr); }

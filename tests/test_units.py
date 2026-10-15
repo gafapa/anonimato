@@ -118,6 +118,25 @@ def file_server(tmp_path):
     server.server_close()
 
 
+def test_first_launch_downloads_only_the_missing_required_models(tmp_path, file_server, monkeypatch):
+    served, base = file_server
+    payloads = {"a": b"modelo a" * 500, "b": b"modelo b" * 700}
+    for name, data in payloads.items():
+        (served / f"{name}.bin").write_bytes(data)
+    items = [models.ModelFile(id=name, file=f"base/{name}.bin", url=f"{base}/{name}.bin", license="MIT",
+                              sha256=hashlib.sha256(data).hexdigest(), group="base", size=len(data))
+             for name, data in payloads.items()]
+    monkeypatch.setattr(models, "user_models_dir", lambda: tmp_path / "user")
+    monkeypatch.setattr(models, "load_manifest", lambda: {"base": items, "runtime": []})
+    items[0].path.parent.mkdir(parents=True)
+    items[0].path.write_bytes(payloads["a"])
+    assert [item.id for item in models.required_missing()] == ["b"]
+    seen = []
+    models.install_required(lambda model_id, done, total: seen.append(model_id))
+    assert models.required_missing() == [] and set(seen) == {"b"}
+    assert items[1].path.read_bytes() == payloads["b"]
+
+
 def test_download_restarts_when_the_server_ignores_ranges(tmp_path, file_server, monkeypatch):
     served, base = file_server
     payload = b"0123456789" * 3000
@@ -537,6 +556,39 @@ class NoEngine:
 def _api(engine=None):
     from app.api import Api
     return Api(engine=engine or NoEngine(), light=NoEngine())
+
+
+def test_api_downloads_missing_models_before_processing(monkeypatch):
+    class MissingEngine(NoEngine):
+        def __init__(self):
+            super().__init__()
+            self.missing, self.calls = ["pii-model"], []
+
+        def call(self, op, *args, **kwargs):
+            self.calls.append(op)
+            return {"base": not self.missing, "missing": list(self.missing), "errors": {}} if op == "status" else True
+
+    engine = MissingEngine()
+    pending = [models.ModelFile("pii-model", "base/pii.onnx", "https://example.invalid/pii", "MIT", "0" * 64, "base",
+                                size=100)]
+    monkeypatch.setattr(models, "required_missing", lambda: list(pending))
+
+    def install(progress):
+        progress("pii-model", 50, 100)
+        pending.clear()
+        engine.missing.clear()
+
+    monkeypatch.setattr(models, "install_required", install)
+    api = _api(engine)
+    status = api.status()
+    assert status["modelsMissing"] and status["blocked"]
+    assert api.process({}) is False and "descarga" in api._state.progress["message"]
+    assert api.install_required()
+    deadline = time.time() + 5
+    while api.poll()["setup"].get("running") and time.time() < deadline:
+        time.sleep(0.01)
+    assert api.poll()["setup"].get("done") and "reload_models" in engine.calls
+    assert not api.status()["blocked"] and not api.install_required()  # nothing left to download
 
 
 def test_api_file_pickers_and_queue(tmp_path):

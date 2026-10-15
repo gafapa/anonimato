@@ -68,7 +68,7 @@ Filename: "{app}\Anonimato.exe"; Description: "Abrir Anonimato"; Flags: nowait p
 #endif
 
 [UninstallDelete]
-; Advanced AI models downloaded after installation (several GB) and the shader cache.
+; AI models downloaded on first launch and on request (base, runtime and advanced) and the shader cache.
 #ifdef QualificationBuild
 Type: filesandordirs; Name: "{app}\qualification-profile\Anonimato"
 #else

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Linux (x86-64) build: dependencies -> models -> tests -> PyInstaller -> AppImage
+# Linux (x86-64) build: dependencies -> tests -> PyInstaller -> AppImage
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 uv sync --frozen
-uv run python tools/fetch_models.py base runtime
-uv run python -m pytest tests/test_rules.py tests/test_models.py -q
+# No model weights are packaged: the application downloads them on first launch (the self-test below too).
+uv run python -m pytest tests/test_rules.py tests/test_models.py -q -k "not test_base_models_match_their_checksums"
 [ -f packaging/anonimato.png ] || uv run python packaging/make_icon.py
 
 uv run pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/anonimato.spec

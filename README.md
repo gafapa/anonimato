@@ -4,8 +4,8 @@ Anonimato is a desktop application that removes personal data, faces, and signat
 
 ## Installation
 
-1. Run `AnonimatoSetup-2.2.1.exe` (about 720 MiB). Administrator rights, Python, and CUDA are not required.
-2. Open **Anonimato** from the Start menu.
+1. Run `AnonimatoSetup-2.2.1.exe`. Administrator rights, Python, and CUDA are not required. The installer carries no AI models.
+2. Open **Anonimato** from the Start menu. On first launch it downloads the base models and the local AI runtime (about 700 MB) into the user profile and checks each file against its pinned SHA-256 hash; processing stays blocked until they are installed. On an offline computer, build a pack elsewhere with `uv run python tools/make_offline_pack.py base.zip base` and choose **Importar paquete sin conexión (.zip)** in the download banner.
 3. Optionally, open **IA avanzada** in the sidebar and choose **Descargar IA avanzada** to enable handwriting recognition and contextual review. The application selects Qwen3-VL-8B (about 5.5 GB) when at least 7 GB of GPU memory is free, or Qwen3-VL-4B (about 2.8 GB) otherwise. Model download is the application's only network connection. It retrieves models from their official source and checks their SHA-256 hashes. On an offline computer, use **Importar paquete sin conexión (.zip)**.
 
 The advanced preference in **Ajustar detección** can prioritize accuracy or memory. Selection is reevaluated at execution time among installed variants; a preference does not download a missing variant. Automatic mode refuses a model that cannot meet its memory budget.
