@@ -746,3 +746,55 @@ def test_ocr_character_extents_have_no_gaps_and_reach_the_line_edges():
     for (a, b), (x0, x1) in zip([[2, 3], [6, 6], [10, 11]], extents, strict=True):  # never narrower than the peak
         assert x0 <= max(0.0, (a - 0.5) * 8.0) and x1 >= min(110.0, (b + 1.5) * 8.0)
     assert char_extents([], 8.0, 110.0) == []
+
+
+def _handwritten_dni_case(monkeypatch, reads):
+    """A handwritten line the OCR misreads; the advanced reader returns ``reads``."""
+    from app.engine.ocr import handwriting
+
+    calls = []
+
+    class Reader:
+        def __init__(self, server):
+            pass
+
+        def read(self, crop):
+            calls.append(crop.shape)
+            return reads
+
+    class WithLlm(StubServices):
+        def llm(self):
+            return object()
+
+    monkeypatch.setattr(handwriting, "HandwritingReader", Reader)
+    scale = 200 / 72
+    line = OcrLine(text="1Z3A5G78", rect=(100 * scale, 100 * scale, 300 * scale, 120 * scale), confidence=0.95,
+                   handwritten=True)
+    options = Options(categories=set(rules.SELECTABLE), ocr=True, ai=False, faces=False, signatures=False,
+                      handwriting=True, llm_review=False, propagate=False)
+    doc = pymupdf.open()
+    doc.new_page()
+    return doc.tobytes(), options, WithLlm(ocr=StubOcr(page_lines=[line])), calls
+
+
+def test_advanced_phase_can_run_later_over_the_kept_handwriting(monkeypatch):
+    data, options, services, calls = _handwritten_dni_case(monkeypatch, DNI)
+    base = pipeline.analyze(data, "h.pdf", options, services, defer_advanced=True)
+    assert base.advanced_pending and len(base.deferred) == 1 and base.deferred[0].crops[0] and not calls
+    assert not any(f.type == "dni" for f in base.findings)            # the base OCR misread the number
+    pipeline.advance(base, options, services)
+    dni = [f for f in base.findings if f.type == "dni"]
+    assert calls and dni and dni[0].source == "handwriting" and len(dni[0].rects) >= 1
+    assert not base.deferred and not base.advanced_pending and any(name == "ocr-alt" for name, _ in base.sources[0])
+    pipeline.advance(base, options, services)                          # nothing left to do: no second reading
+    assert len(calls) == 1
+
+
+def test_one_pass_and_two_phase_analysis_find_the_same_data(monkeypatch):
+    data, options, services, _ = _handwritten_dni_case(monkeypatch, DNI)
+    inline = pipeline.analyze(data, "h.pdf", options, services)
+    later = pipeline.analyze(data, "h.pdf", options, services, defer_advanced=True)
+    pipeline.advance(later, options, services)
+    pipeline._dedupe(later)
+    assert sorted((f.type, f.value) for f in inline.findings) == sorted((f.type, f.value) for f in later.findings)
+    assert not inline.deferred and not inline.advanced_pending

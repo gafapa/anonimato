@@ -50,10 +50,30 @@ class Analysis:
     seconds: float = 0.0
     next_id: int = 1
     signed: bool = False
+    # Work for the advanced phase (handwriting reading and contextual review), done after the base models
+    # have processed every document of the batch. Kept in memory only, never exported.
+    deferred: list[HandwritingWork] = field(default_factory=list)
+    advanced_pending: bool = False
 
     def new_id(self, page: int) -> str:
         self.next_id += 1
         return f"p{page + 1}-{self.next_id - 1}"
+
+    def add(self, page: int, kind: str, value: str | None, rects: list[Rect], confidence: float, source: str,
+            warning: str | None = None, detail: str = "", key: str = "") -> Finding:
+        finding = Finding(id=self.new_id(page), page=page, type=kind, value=value,
+                          rects=rects, confidence=round(float(confidence), 3), source=source, warning=warning,
+                          detail=detail, key=key)
+        self.findings.append(finding)
+        return finding
+
+
+@dataclass
+class HandwritingWork:
+    """Lines of one page whose handwriting the advanced reader will read: a PNG crop per handwritten line."""
+    page: int
+    lines: list[OcrLine]
+    crops: list[bytes | None]
 
 
 @dataclass
@@ -169,7 +189,9 @@ def ocr_page_text(lines: list[OcrLine], texts: list[str] | None = None) -> PageT
 
 # ---------------------------------------------------------------- analysis
 def analyze(data: bytes, filename: str, options: Options, services=None, progress: Progress | None = None,
-            cancelled: Callable[[], bool] | None = None) -> Analysis:
+            cancelled: Callable[[], bool] | None = None, defer_advanced: bool = False) -> Analysis:
+    """Detect personal data. The base models run here; the advanced AI (handwriting and contextual review) runs
+    in ``advance``, straight after unless ``defer_advanced`` leaves it for a later pass over the whole batch."""
     started = time.time()
     progress = progress or (lambda event: None)
     cancelled = cancelled or (lambda: False)
@@ -193,21 +215,9 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                               + ". Se han aplicado solo las reglas.")
     ocr = services.ocr() if services is not None and options.ocr else None
     faces = services.faces() if services is not None and options.faces else None
-    llm = services.llm() if services is not None and (options.handwriting or options.llm_review) else None
-    reader = None
-    if llm is not None and options.handwriting:
-        from .ocr.handwriting import HandwritingReader
-        reader = HandwritingReader(llm)
     categories = set(options.categories)
     total = scan.page_count
-
-    def add(page: int, kind: str, value: str | None, rects: list[Rect], confidence: float, source: str,
-            warning: str | None = None, detail: str = "", key: str = "") -> Finding:
-        finding = Finding(id=analysis.new_id(page), page=page, type=kind, value=value,
-                          rects=rects, confidence=round(float(confidence), 3), source=source, warning=warning,
-                          detail=detail, key=key)
-        analysis.findings.append(finding)
-        return finding
+    add = analysis.add
 
     for index, page in enumerate(scan):
         if cancelled():
@@ -260,66 +270,18 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
                     line.char_rects = [to_page(r) for r in line.char_rects]
                     if not any(_coverage(line.rect, [other.rect]) > 0.5 for other in lines)                             and _coverage(line.rect, native_boxes) < 0.5:
                         lines.append(line)
-        alternatives: list[str] = [line.text for line in lines]
-        if reader is not None:
-            for position, line in enumerate(lines):
-                if not line.handwritten:
-                    continue
-                progress({"stage": "handwriting", "page": index + 1, "total": total,
-                          "message": f"Leyendo manuscritos en la página {index + 1}"})
-                x0, y0, x1, y1 = (int(v) for v in line.pixel_rect)  # type: ignore[attr-defined]
-                pad = max(3, (y1 - y0) // 6)
-                crop = rendered.image[max(0, y0 - pad):y1 + pad, max(0, x0 - pad):x1 + pad]
-                try:
-                    alternatives[position] = reader.read(crop) or line.text
-                    line.engine = "vlm"
-                except Exception as error:
-                    analysis.notes.append(f"Lectura de manuscritos no disponible: {error}")
-                    reader = None
-                    break
         if lines:
             primary = ocr_page_text(lines)
             page_sources.append(("ocr", primary))
-            texts = [primary]
-            if alternatives != [line.text for line in lines]:
-                alt = ocr_page_text(lines, alternatives)
-                page_sources.append(("ocr-alt", alt))
-                texts.append(alt)
-            # Whole-line covering only for lines whose reading is uncertain (clearly handwritten or the
-            # two readers disagree); confidently read printed lines keep their tight boxes.
-            hand_rects = [line.rect for position, line in enumerate(lines) if line.handwritten and (
-                line.confidence < 0.9 or (line.engine == "vlm" and Levenshtein.normalized_distance(
-                    line.text.lower(), alternatives[position].lower()) > 0.15))]
-            for source_text in texts:
-                for match in detect_text(source_text.text, categories, pii, analysis.notes):
-                    rects = source_text.rects_for(match.start, match.end)
-                    if not rects:
-                        continue
-                    handwritten = [h for h in hand_rects if any(_coverage(r, [h]) > 0.3 for r in rects)]
-                    if handwritten:  # conservative: cover the whole handwritten line *in addition* to the data
-                        rects = rects + [h for h in handwritten if h not in rects]
-                    add(index, match.type, match.value.strip(), rects, match.confidence,
-                        "handwriting" if handwritten else "ocr", match.warning,
-                        detail="manuscrito" if handwritten else "")
-            # Illegible or doubtful handwriting next to a personal-data label.
-            if "handwriting" in categories:
-                for position, line in enumerate(lines):
-                    if not line.handwritten:
-                        continue
-                    reading = alternatives[position]
-                    if line.engine == "vlm":
-                        # Illegible for the model, or the two readers disagree: treat as doubtful.
-                        disagreement = Levenshtein.normalized_distance(line.text.lower(), reading.lower())
-                        doubtful = "[ilegible]" in reading or disagreement > 0.4
-                    else:
-                        doubtful = line.confidence < 0.9
-                    row_text = " ".join(other.text for other in lines if abs((other.rect[1] + other.rect[3]) / 2 - (line.rect[1] + line.rect[3]) / 2)
-                                        < (line.rect[3] - line.rect[1]) * 0.6 and other.rect[0] < line.rect[0])
-                    labelled = bool(PERSONAL_LABELS.search(row_text)) or bool(PERSONAL_LABELS.search(
-                        _native_left_of(native, line.rect)))
-                    if labelled and doubtful:
-                        add(index, "handwriting", None, [line.rect], 0.6, "handwriting",
-                            detail="manuscrito dudoso junto a un campo personal")
+            # Whole-line covering only for handwritten lines read with low confidence; the advanced reader
+            # later adds the lines it reads differently.
+            hand_rects = [line.rect for line in lines if line.handwritten and line.confidence < 0.9]
+            _detect_lines(analysis, index, [primary], hand_rects, categories, pii)
+            _doubtful_handwriting(analysis, index, lines, [line.text for line in lines], native, categories)
+            if options.handwriting and any(line.handwritten for line in lines):
+                analysis.deferred.append(HandwritingWork(index, lines, [
+                    _crop_png(rendered.image, line.pixel_rect) if line.handwritten else None  # type: ignore[attr-defined]
+                    for line in lines]))
         if faces is not None and "face" in categories:
             for box in faces.detect(rendered.image):
                 add(index, "face", None, [rendered.to_page(box)], 0.9, "face")
@@ -344,14 +306,138 @@ def analyze(data: bytes, filename: str, options: Options, services=None, progres
     if options.propagate:
         progress({"stage": "propagation", "message": "Buscando cada dato en todo el documento"})
         _propagate(analysis, add)
-    if llm is not None and options.llm_review:
-        _llm_review(analysis, llm, categories, add, progress, cancelled)
+    analysis.advanced_pending = bool(analysis.deferred) or options.llm_review
+    if not defer_advanced:
+        advance(analysis, options, services, progress, cancelled)
     _dedupe(analysis)
     assign_tokens(analysis.findings)
-    analysis.findings.sort(key=lambda f: (f.page, f.rects[0][1] if f.rects else 0, f.rects[0][0] if f.rects else 0))
+    _sort(analysis)
     analysis.seconds = round(time.time() - started, 1)
     progress({"stage": "done", "message": "Análisis terminado"})
     return analysis
+
+
+def advance(analysis: Analysis, options: Options, services=None, progress: Progress | None = None,
+            cancelled: Callable[[], bool] | None = None) -> None:
+    """Advanced phase: read the handwritten lines with the vision model and review the text in context.
+    It only adds findings: what the base phase found stays."""
+    progress = progress or (lambda event: None)
+    cancelled = cancelled or (lambda: False)
+    if not analysis.advanced_pending:
+        return
+    llm = services.llm() if services is not None and (options.handwriting or options.llm_review) else None
+    pii = services.pii() if services is not None and options.ai else None
+    categories = set(options.categories)
+    total = len(analysis.pages)
+    before = len(analysis.findings)
+    if llm is not None and options.handwriting and analysis.deferred:
+        from .ocr.handwriting import HandwritingReader
+        reader = HandwritingReader(llm)
+        for work in analysis.deferred:
+            if cancelled():
+                raise Cancelled()
+            progress({"stage": "handwriting", "page": work.page + 1, "total": total,
+                      "message": f"Leyendo manuscritos en la página {work.page + 1}"})
+            alternatives = [line.text for line in work.lines]
+            try:
+                for position, (line, crop) in enumerate(zip(work.lines, work.crops, strict=True)):
+                    if crop is not None:
+                        alternatives[position] = reader.read(_png_array(crop)) or line.text
+                        line.engine = "vlm"
+            except Exception as error:
+                analysis.notes.append(f"Lectura de manuscritos no disponible: {error}")
+                break
+            _apply_handwriting(analysis, work, alternatives, categories, pii)
+    if options.propagate and len(analysis.findings) > before:
+        _propagate(analysis, analysis.add)
+    if llm is not None and options.llm_review:
+        _llm_review(analysis, llm, categories, analysis.add, progress, cancelled)
+    analysis.deferred, analysis.advanced_pending = [], False
+
+
+def _sort(analysis: Analysis) -> None:
+    analysis.findings.sort(key=lambda f: (f.page, f.rects[0][1] if f.rects else 0, f.rects[0][0] if f.rects else 0))
+
+
+def _crop_png(image: np.ndarray, pixel_rect) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+    x0, y0, x1, y1 = (int(v) for v in pixel_rect)
+    pad = max(3, (y1 - y0) // 6)
+    buffer = BytesIO()
+    Image.fromarray(image[max(0, y0 - pad):y1 + pad, max(0, x0 - pad):x1 + pad]).save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def _png_array(data: bytes) -> np.ndarray:
+    from io import BytesIO
+
+    from PIL import Image
+    return np.asarray(Image.open(BytesIO(data)).convert("RGB"))
+
+
+def _detect_lines(analysis: Analysis, index: int, texts: list[PageText], hand_rects: list[Rect], categories, pii,
+                  only_near: list[Rect] | None = None) -> None:
+    """Detect data in OCR text; a match on an uncertain handwritten line also covers that whole line.
+    ``only_near`` keeps just the matches touching those lines (the ones the advanced reader changed)."""
+    for source_text in texts:
+        for match in detect_text(source_text.text, categories, pii, analysis.notes):
+            rects = source_text.rects_for(match.start, match.end)
+            if not rects:
+                continue
+            handwritten = [h for h in hand_rects if any(_coverage(r, [h]) > 0.3 for r in rects)]
+            if only_near is not None and not any(h in only_near for h in handwritten):
+                continue
+            if handwritten:  # conservative: cover the whole handwritten line *in addition* to the data
+                rects = rects + [h for h in handwritten if h not in rects]
+            analysis.add(index, match.type, match.value.strip(), rects, match.confidence,
+                         "handwriting" if handwritten else "ocr", match.warning,
+                         detail="manuscrito" if handwritten else "")
+
+
+def _doubtful_handwriting(analysis: Analysis, index: int, lines: list[OcrLine], readings: list[str],
+                          native: PageText, categories, only_vlm: bool = False) -> None:
+    """Illegible or doubtful handwriting next to a personal-data label."""
+    if "handwriting" not in categories:
+        return
+    for position, line in enumerate(lines):
+        if not line.handwritten or (only_vlm and line.engine != "vlm"):
+            continue
+        reading = readings[position]
+        if line.engine == "vlm":
+            # Illegible for the model, or the two readers disagree: treat as doubtful.
+            disagreement = Levenshtein.normalized_distance(line.text.lower(), reading.lower())
+            doubtful = "[ilegible]" in reading or disagreement > 0.4
+        else:
+            doubtful = line.confidence < 0.9
+        row_text = " ".join(other.text for other in lines if abs((other.rect[1] + other.rect[3]) / 2 - (line.rect[1] + line.rect[3]) / 2)
+                            < (line.rect[3] - line.rect[1]) * 0.6 and other.rect[0] < line.rect[0])
+        labelled = bool(PERSONAL_LABELS.search(row_text)) or bool(PERSONAL_LABELS.search(
+            _native_left_of(native, line.rect)))
+        if labelled and doubtful:
+            analysis.add(index, "handwriting", None, [line.rect], 0.6, "handwriting",
+                         detail="manuscrito dudoso junto a un campo personal")
+
+
+def _apply_handwriting(analysis: Analysis, work: HandwritingWork, alternatives: list[str], categories, pii) -> None:
+    """Findings from the advanced reading of one page's handwriting."""
+    lines, index = work.lines, work.page
+    sources = analysis.sources.setdefault(index, [])
+    native = next((text for name, text in sources if name == "text"), PageText("", []))
+    primary = next((text for name, text in sources if name == "ocr"), None) or ocr_page_text(lines)
+    hand_rects = [line.rect for position, line in enumerate(lines) if line.handwritten and (
+        line.confidence < 0.9 or (line.engine == "vlm" and Levenshtein.normalized_distance(
+            line.text.lower(), alternatives[position].lower()) > 0.15))]
+    base_rects = [line.rect for line in lines if line.handwritten and line.confidence < 0.9]
+    changed = [rect for rect in hand_rects if rect not in base_rects]
+    if changed:
+        _detect_lines(analysis, index, [primary], hand_rects, categories, pii, only_near=changed)
+    if alternatives != [line.text for line in lines]:
+        alt = ocr_page_text(lines, alternatives)
+        sources.append(("ocr-alt", alt))
+        _detect_lines(analysis, index, [alt], hand_rects, categories, pii)
+    _doubtful_handwriting(analysis, index, lines, alternatives, native, categories, only_vlm=True)
 
 
 def _native_left_of(native: PageText, rect: Rect) -> str:
