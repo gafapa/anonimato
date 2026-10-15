@@ -164,6 +164,14 @@ def main() -> None:
                 wait("document.querySelectorAll('#rowsBody tr').length === 0")
                 window.evaluate_js("const a=document.getElementById('typeFilter');a.value='';a.dispatchEvent(new Event('change'))")
                 wait("document.querySelectorAll('#rowsBody tr').length === 1")
+                # Settings open from the gear at the top right; the loaded files are listed inside the drop zone.
+                assert window.evaluate_js("document.getElementById('dropzone').contains(document.getElementById('documentQueue')) && document.querySelectorAll('#dropzone .document-item').length === 2")
+                window.evaluate_js("document.getElementById('btnSettings').click()")
+                wait("document.getElementById('settingsDialog').open && document.querySelectorAll('#settingsDialog #catGrid input').length > 0")
+                window.evaluate_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'g'}))")
+                assert window.evaluate_js("!document.getElementById('saveDialog').open")
+                window.evaluate_js("document.getElementById('btnSettingsDone').click()")
+                wait("!document.getElementById('settingsDialog').open")
                 # G opens the save dialog with every output choice; review shortcuts stay off while it is open.
                 window.evaluate_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'g'}))")
                 wait("document.getElementById('saveDialog').open && document.getElementById('saveSummary').textContent.includes('Se ocultará 1 dato')")

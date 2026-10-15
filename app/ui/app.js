@@ -101,7 +101,7 @@
       ? el('span', { className: 'pill ok', textContent: 'IA avanzada lista' })
       : el('button', {
         className: 'pill warn status-action', type: 'button', textContent: 'Instalar IA avanzada',
-        onclick: () => { $('advancedDetails').open = true; $('advancedDetails').scrollIntoView({ block: 'nearest' }); },
+        onclick: () => { openSettings(); $('advancedDetails').scrollIntoView({ block: 'nearest' }); },
       });
     host.replaceChildren(
       el('span', { className: 'pill', textContent: s.services.gpu ? 'GPU disponible' : 'Modo CPU',
@@ -328,8 +328,6 @@
     catch (error) { setError(error.message || String(error)); return; }
     if (!started) { setError('Ya hay un proceso en curso.'); return; }
     state.analysisSignature = detectionSignature();
-    $('detectionDetails').open = false;
-    $('advancedDetails').open = false;
     state.details = null;
     setManual(false);
     $('resultsCard').hidden = true;
@@ -734,6 +732,12 @@
     $('saveDialog').showModal();
     ($('optMaxSecurity').checked ? $('optMaxSecurity') : $('optInternal')).focus();
   }
+  // Detection settings live in their own dialog, opened from the gear at the top right.
+  function openSettings() {
+    if ($('settingsDialog').open) return;
+    $('settingsDialog').showModal();
+    $('catGrid').querySelector('input')?.focus();
+  }
   function closeSave() {
     if ($('saveDialog').open) $('saveDialog').close();
   }
@@ -873,6 +877,9 @@
     $('btnRailSave').addEventListener('click', openSave);
     $('btnOpenSave').addEventListener('click', openSave);
     $('btnSaveBack').addEventListener('click', closeSave);
+    $('btnSettings').addEventListener('click', openSettings);
+    $('btnSettingsInline').addEventListener('click', openSettings);
+    $('btnSettingsDone').addEventListener('click', () => $('settingsDialog').close());
     let collapsed = false;
     try { collapsed = localStorage.getItem('anonimato.panelCollapsed') === '1'; } catch { /* storage unavailable */ }
     setPanel(collapsed);
@@ -895,15 +902,19 @@
     }
     installManual($('originalWrap'));
     installManual($('resultWrap'));
+    // The whole documents list is the drop target; files dropped anywhere in the window are added as well.
     const dropzone = $('dropzone');
-    for (const name of ['dragenter', 'dragover']) dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
-    for (const name of ['dragleave', 'drop']) dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); });
+    let dragDepth = 0;
+    dropzone.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth += 1; dropzone.classList.add('drag'); });
+    dropzone.addEventListener('dragover', (e) => e.preventDefault());
+    dropzone.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropzone.classList.remove('drag'); });
+    dropzone.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; dropzone.classList.remove('drag'); });
     document.addEventListener('dragover', (e) => e.preventDefault());
     document.addEventListener('drop', (e) => e.preventDefault());
     document.addEventListener('keydown', (event) => {
       const target = event.target;
       if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden ||
-        $('saveDialog').open) return;
+        $('saveDialog').open || $('settingsDialog').open) return;
       const key = event.key.toLowerCase();
       if (key.startsWith('arrow') && target instanceof Element && target.closest('.zoomed-page')) return;
       if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(key)) { event.preventDefault(); restoreReview(key === 'y' || event.shiftKey); return; }

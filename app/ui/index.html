@@ -20,6 +20,9 @@
       <li data-step="save"><span class="step-mark" aria-hidden="true">4</span>Guardar</li>
     </ol>
     <div class="engine-status" id="engineStatus" aria-live="polite"></div>
+    <button class="icon-button settings-button" id="btnSettings" type="button" aria-haspopup="dialog" aria-label="Ajustes" title="Ajustes">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
   </header>
 
   <div id="engineErrors" class="engine-errors" role="alert" hidden></div>
@@ -29,53 +32,31 @@
   </div>
   <main class="workspace">
     <aside class="sidebar" id="sidebar" aria-label="Documentos y opciones">
-      <section class="sidebar-section">
+      <section class="sidebar-section documents-section">
         <div class="section-head">
           <h2>Documentos</h2>
           <button class="link-button" id="btnReset" type="button">Vaciar lista</button>
         </div>
-        <div id="dropzone" class="dropzone" aria-label="Zona para soltar archivos">
-          <svg class="dz-icon" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><path d="M11 14V3M6.5 7.5 11 3l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 14v3.5A1.5 1.5 0 0 0 4.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          <div>
+        <div id="dropzone" class="dropzone" aria-label="Documentos cargados: suelta aquí más PDF o imágenes">
+          <div id="documentQueue" class="document-queue" aria-label="Lista de documentos"></div>
+          <div class="dz-hint">
+            <svg class="dz-icon" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><path d="M11 14V3M6.5 7.5 11 3l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 14v3.5A1.5 1.5 0 0 0 4.5 19h13a1.5 1.5 0 0 0 1.5-1.5V14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             <p class="dz-title">Suelta aquí PDF o imágenes</p>
-            <p class="dz-sub">o usa los botones</p>
+            <p class="dz-sub">o añádelos con los botones</p>
           </div>
         </div>
         <div class="button-row">
           <button class="btn ghost small" id="btnAddFiles" type="button">Añadir archivos</button>
           <button class="btn ghost small" id="btnAddFolder" type="button">Añadir carpeta</button>
         </div>
-        <div id="documentQueue" class="document-queue" aria-label="Lista de documentos"></div>
       </section>
 
       <section class="sidebar-section">
-        <h2>Qué anonimizar</h2>
+        <div class="section-head">
+          <h2>Qué anonimizar</h2>
+          <button class="link-button" id="btnSettingsInline" type="button" aria-haspopup="dialog">Cambiar</button>
+        </div>
         <p class="section-summary" id="detectionSummary" role="status" aria-live="polite"></p>
-        <details class="settings-disclosure" id="detectionDetails">
-          <summary>Ajustar detección</summary>
-          <div class="settings-content">
-            <h3>Categorías de datos</h3>
-            <div class="grid-cats" id="catGrid"></div>
-            <h3>Métodos de detección</h3>
-            <div class="opts">
-              <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
-              <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
-              <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
-              <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
-              <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
-              <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
-              <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
-            </div>
-            <label class="field analysis-resolution"><span>Resolución de análisis</span>
-              <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
-            <label class="field"><span>Modelo de IA avanzada</span><select id="optAdvancedMode"><option value="auto">Automático según memoria</option><option value="accuracy">Priorizar precisión (8B si está instalado)</option><option value="memory">Menor consumo (4B si está instalado)</option></select></label>
-            <p class="section-summary">8B puede leer manuscritos con más precisión; 4B consume menos memoria.</p>
-          </div>
-        </details>
-        <details class="settings-disclosure advanced-disclosure" id="advancedDetails">
-          <summary>IA avanzada <span id="advancedSummary"></span></summary>
-          <div class="advanced-box" id="advancedBox"></div>
-        </details>
         <p class="settings-change-notice" id="settingsChangeNotice" role="status" hidden>Has cambiado la detección. Vuelve a analizar para aplicar estos ajustes.</p>
       </section>
 
@@ -203,12 +184,12 @@
     </section>
   </main>
 
-  <dialog class="save-dialog" id="saveDialog" aria-labelledby="saveTitle" aria-describedby="saveSummary">
-    <div class="save-head">
+  <dialog class="modal save-dialog" id="saveDialog" aria-labelledby="saveTitle" aria-describedby="saveSummary">
+    <div class="modal-head">
       <h2 id="saveTitle">Guardar</h2>
       <p id="saveSummary"></p>
     </div>
-    <div class="save-body">
+    <div class="modal-body">
       <fieldset class="destination">
         <legend>¿Dónde va a acabar el documento?</legend>
         <div class="destination-options">
@@ -244,10 +225,41 @@
         </div>
       </details>
     </div>
-    <div class="save-foot">
+    <div class="modal-foot">
       <button class="btn ghost" id="btnSaveBack" type="button">Volver a revisar</button>
       <button class="btn ghost" id="btnAll" type="button">Guardar todos en una carpeta</button>
       <button class="btn" id="btnPdf" type="button">Verificar y guardar PDF</button>
+    </div>
+  </dialog>
+  <dialog class="modal settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+    <div class="modal-head">
+      <h2 id="settingsTitle">Ajustes</h2>
+      <p>Qué se busca en los documentos y cómo se analizan. Se aplican al próximo análisis.</p>
+    </div>
+    <div class="modal-body" id="detectionDetails">
+          <h3>Categorías de datos</h3>
+          <div class="grid-cats" id="catGrid"></div>
+          <h3>Métodos de detección</h3>
+          <div class="opts">
+            <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
+            <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
+            <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
+            <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
+            <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
+            <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
+            <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
+          </div>
+          <label class="field analysis-resolution"><span>Resolución de análisis</span>
+            <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+          <label class="field"><span>Modelo de IA avanzada</span><select id="optAdvancedMode"><option value="auto">Automático según memoria</option><option value="accuracy">Priorizar precisión (8B si está instalado)</option><option value="memory">Menor consumo (4B si está instalado)</option></select></label>
+          <p class="section-summary">8B puede leer manuscritos con más precisión; 4B consume menos memoria.</p>
+      <section class="advanced-section" id="advancedDetails">
+        <h3>IA avanzada <span id="advancedSummary"></span></h3>
+        <div class="advanced-box" id="advancedBox"></div>
+      </section>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnSettingsDone" type="button">Hecho</button>
     </div>
   </dialog>
   <script src="app.js"></script>
