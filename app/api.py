@@ -42,6 +42,7 @@ class Doc:
     reviewed: bool = False
     saved_revision: int | None = None
     analysis_settings: dict = field(default_factory=dict)
+    advanced: str = ""               # "" | pending | running: the advanced AI phase of the last analysis
 
 
 @dataclass
@@ -286,6 +287,7 @@ class Api:
             "saved": doc.saved_revision == doc.revision,
             "reviewed": doc.reviewed,
             "analysisSettings": doc.analysis_settings,
+            "advanced": doc.advanced,
         }
 
     def documents(self) -> list[dict]:
@@ -342,72 +344,140 @@ class Api:
         self._engine.cancel.set()
 
     def _run(self, targets: list[str], options: Options) -> None:
+        """Analyse a batch in two phases. Phase 1 runs the base models document by document, and each document
+        can be reviewed as soon as it is ready. Phase 2 then runs the advanced AI over the whole batch, with the
+        base models released, and adds what it finds. Saving waits until both phases have finished."""
         try:
-            total = len(targets)
-            for position, doc_id in enumerate(targets):
-                doc = self._state.docs.get(doc_id)
-                if doc is None:
-                    continue
-                if self._state.cancel:
-                    break
-                doc.status, doc.error = "processing", ""
-                previous = doc.analysis
-                doc.preview_bytes, doc.preview_key, doc.report = None, "", None
-
-                timer = perf.StageTimer()
-
-                def progress(event: dict, position=position, doc=doc, timer=timer) -> None:
-                    timer.event(event)
-                    page, pages = event.get("page"), event.get("total")
-                    fraction = (page - 0.5) / pages if page and pages else 0.0
-                    self._state.progress = {
-                        "doc": doc.id, "name": doc.name, "message": event.get("message", ""),
-                        "percent": round(100 * (position + min(1.0, fraction)) / max(1, total), 1),
-                    }
-
-                failure: BaseException | None = None
-                try:
-                    analyzed = self._engine.call("analyze", doc.data, doc.name, options, progress=progress)
-                    digest = hashlib.sha256(doc.data).hexdigest()
-                    manual = [f for f in previous.findings if f.type == "manual"] if previous else []
-                    if manual and ((doc.analysis_hash and digest != doc.analysis_hash) or previous.pages != analyzed.pages):
-                        raise EngineError("El documento o sus páginas han cambiado. Conserva la revisión anterior y añade el archivo como un documento nuevo.")
-                    for finding in manual:
-                        kept = copy.deepcopy(finding)
-                        kept.id = analyzed.new_id(kept.page)
-                        kept.key = kept.id
-                        analyzed.findings.append(kept)
-                    if manual:
-                        analyzed.notes.append(f"Se conservaron {len(manual)} zonas manuales de la revisión anterior.")
-                    with self._lock:
-                        # The same person or value keeps one identifier in every document of the session.
-                        doc.analysis = analyzed
-                        self._reconcile_tokens()
-                        doc.analysis_hash = digest
-                        doc.analysis_settings = {
-                            "categories": sorted(options.categories), "ocr": options.ocr, "ai": options.ai,
-                            "handwriting": options.handwriting, "llmReview": options.llm_review,
-                            "faces": options.faces, "signatures": options.signatures, "propagate": options.propagate,
-                            "dpi": options.dpi, "advancedMode": options.advanced_mode,
-                        }
-                        doc.history.clear()
-                        doc.revision += 1
-                    doc.status = "ready"
-                except pipeline.Cancelled as error:
-                    failure = error
-                    doc.status, doc.error = ("ready" if previous else "pending"), ""
-                except EngineError as error:
-                    failure = error
-                    if error.kind == "PasswordRequired":
-                        doc.status, doc.error = "locked", "Protegido con contraseña"
-                    else:
-                        doc.status, doc.error = ("ready" if previous else "failed"), str(error)
-                finally:
-                    self._log_performance("analisis", timer, options, doc, failure)
+            pending = self._analyse_base(targets, options)
+            if pending and not self._state.cancel:
+                self._analyse_advanced(pending, options)
+            for doc in pending:
+                if doc.advanced == "pending" and doc.analysis is not None:
+                    doc.advanced = ""
+                    doc.analysis.deferred, doc.analysis.advanced_pending = [], False
+                    doc.analysis.notes.append("Revisión con IA avanzada cancelada: el resultado no incluye la lectura "
+                                              "de manuscritos ni la revisión contextual.")
         finally:
             with self._lock:
                 self._state.busy = False
                 self._state.progress = {"message": "", "percent": 100}
+
+    def _progress(self, doc: Doc, timer, step: float, steps: int, label: str = ""):
+        def progress(event: dict) -> None:
+            timer.event(event)
+            page, pages = event.get("page"), event.get("total")
+            fraction = (page - 0.5) / pages if page and pages else 0.0
+            message = event.get("message", "")
+            self._state.progress = {
+                "doc": doc.id, "name": doc.name, "message": f"{label}{message}" if label else message,
+                "percent": round(100 * (step + min(1.0, fraction)) / max(1, steps), 1),
+            }
+        return progress
+
+    def _analyse_base(self, targets: list[str], options: Options) -> list[Doc]:
+        # Only worth a second pass when the advanced AI is installed (known from the status the window fetched).
+        defer = (options.handwriting or options.llm_review) and bool((self._status_cache or {}).get("advanced"))
+        steps = len(targets) * (2 if defer else 1)
+        pending: list[Doc] = []
+        for position, doc_id in enumerate(targets):
+            doc = self._state.docs.get(doc_id)
+            if doc is None:
+                continue
+            if self._state.cancel:
+                break
+            doc.status, doc.error, doc.advanced = "processing", "", ""
+            previous = doc.analysis
+            doc.preview_bytes, doc.preview_key, doc.report = None, "", None
+            timer = perf.StageTimer()
+            progress = self._progress(doc, timer, position, steps)
+            failure: BaseException | None = None
+            try:
+                analyzed = self._engine.call("analyze", doc.data, doc.name, options, *((True,) if defer else ()),
+                                             progress=progress)
+                digest = hashlib.sha256(doc.data).hexdigest()
+                manual = [f for f in previous.findings if f.type == "manual"] if previous else []
+                if manual and ((doc.analysis_hash and digest != doc.analysis_hash) or previous.pages != analyzed.pages):
+                    raise EngineError("El documento o sus páginas han cambiado. Conserva la revisión anterior y añade el archivo como un documento nuevo.")
+                for finding in manual:
+                    kept = copy.deepcopy(finding)
+                    kept.id = analyzed.new_id(kept.page)
+                    kept.key = kept.id
+                    analyzed.findings.append(kept)
+                if manual:
+                    analyzed.notes.append(f"Se conservaron {len(manual)} zonas manuales de la revisión anterior.")
+                with self._lock:
+                    # The same person or value keeps one identifier in every document of the session.
+                    doc.analysis = analyzed
+                    self._reconcile_tokens()
+                    doc.analysis_hash = digest
+                    doc.analysis_settings = {
+                        "categories": sorted(options.categories), "ocr": options.ocr, "ai": options.ai,
+                        "handwriting": options.handwriting, "llmReview": options.llm_review,
+                        "faces": options.faces, "signatures": options.signatures, "propagate": options.propagate,
+                        "dpi": options.dpi, "advancedMode": options.advanced_mode,
+                    }
+                    doc.history.clear()
+                    doc.revision += 1
+                    if defer and analyzed.advanced_pending:
+                        doc.advanced = "pending"
+                        pending.append(doc)
+                doc.status = "ready"
+            except pipeline.Cancelled as error:
+                failure = error
+                doc.status, doc.error = ("ready" if previous else "pending"), ""
+            except EngineError as error:
+                failure = error
+                if error.kind == "PasswordRequired":
+                    doc.status, doc.error = "locked", "Protegido con contraseña"
+                else:
+                    doc.status, doc.error = ("ready" if previous else "failed"), str(error)
+            finally:
+                self._log_performance("analisis", timer, options, doc, failure)
+        return pending
+
+    def _analyse_advanced(self, pending: list[Doc], options: Options) -> None:
+        steps = len(pending) * 2
+        for position, doc in enumerate(pending):
+            if self._state.cancel:
+                return
+            with self._lock:
+                analysis = doc.analysis
+                if self._state.docs.get(doc.id) is not doc or analysis is None or doc.advanced != "pending":
+                    continue
+                doc.advanced = "running"
+                base_ids = {finding.id for finding in analysis.findings}
+                snapshot = replace(analysis, findings=copy.deepcopy(analysis.findings),
+                                   sources=copy.deepcopy(analysis.sources), deferred=copy.deepcopy(analysis.deferred),
+                                   notes=list(analysis.notes))
+            timer = perf.StageTimer()
+            progress = self._progress(doc, timer, len(pending) + position, steps, "IA avanzada · ")
+            failure: BaseException | None = None
+            try:
+                # The base models are released once, before the first document of this phase.
+                result = self._engine.call("advance", snapshot, options, position == 0, progress=progress)
+                with self._lock:
+                    if self._state.docs.get(doc.id) is doc and doc.analysis is analysis:
+                        added = pipeline.merge_advanced(analysis, result, base_ids)
+                        if added:
+                            analysis.notes.append(f"La IA avanzada añadió {len(added)} "
+                                                  f"{'dato' if len(added) == 1 else 'datos'} a la revisión.")
+                        doc.history.clear()   # earlier snapshots would drop the added findings on undo
+                        self._reconcile_tokens()
+                        self.invalidate_report(doc.id)
+                        doc.preview_bytes, doc.preview_key = None, ""
+                    doc.advanced = ""
+            except pipeline.Cancelled as error:
+                failure = error
+                doc.advanced = "pending"
+                return
+            except EngineError as error:
+                failure = error
+                with self._lock:
+                    doc.advanced = ""
+                    analysis.deferred, analysis.advanced_pending = [], False
+                    analysis.notes.append(f"Revisión con IA avanzada no disponible: {error}")
+            finally:
+                self._log_performance("ia_avanzada", timer, options, doc, failure)
 
     def _reconcile_tokens(self) -> None:
         """Resolve current documents together; invalidate exports when new evidence changes a token."""

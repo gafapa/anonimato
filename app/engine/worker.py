@@ -137,11 +137,22 @@ class JobObject:
 def _handlers():
     from . import document, pipeline, rasterize, redact, sanitize
 
-    def analyze(ctx, data, filename, options):
+    def analyze(ctx, data, filename, options, defer_advanced=False):
         ctx.services.require_integrity(ctx.progress)
         ctx.services.prepare(options)
         ctx.cancel.clear()
-        return pipeline.analyze(data, filename, options, ctx.services, ctx.progress, ctx.cancel.is_set)
+        return pipeline.analyze(data, filename, options, ctx.services, ctx.progress, ctx.cancel.is_set,
+                                defer_advanced=defer_advanced)
+
+    def advance(ctx, analysis, options, release_base=True):
+        """Advanced phase of an analysis made with ``defer_advanced``: the base models are released first so the
+        large model has the memory (and the video memory) to itself."""
+        ctx.services.require_integrity(ctx.progress)
+        if release_base:
+            ctx.services.release_base(keep_pii=options.ai)
+        ctx.cancel.clear()
+        pipeline.advance(analysis, options, ctx.services, ctx.progress, ctx.cancel.is_set)
+        return analysis
 
     def export(ctx, analysis, options, index, keep_name):
         ctx.services.require_integrity(ctx.progress)
@@ -344,7 +355,7 @@ class EngineProcess:
         try:
             return self._call(op, *args, progress=progress, stall_seconds=stall_seconds)
         except EngineError as error:
-            gpu_hang = error.kind == "WarmupTimeout" or (isinstance(error, EngineTimeout) and op in ("analyze", "export"))
+            gpu_hang = error.kind == "WarmupTimeout" or (isinstance(error, EngineTimeout) and op in ("analyze", "advance", "export"))
             if not (gpu_hang and self.with_models and self.use_gpu):
                 raise
             self.use_gpu = False

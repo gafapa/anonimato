@@ -141,6 +141,17 @@ class Services:
             self._llm = None
             self.errors.pop("llm", None)
 
+    def release_base(self, keep_pii: bool = True) -> None:
+        """Free the OCR and face models (and their GPU memory) before the advanced phase; the personal-data model
+        stays when the advanced phase still needs it for handwritten text. They load again on the next analysis."""
+        import gc
+        with self._lock:
+            self._ocr = None
+            self._faces = None
+            if not keep_pii:
+                self._pii = None
+        gc.collect()
+
     def reset_base(self) -> None:
         """Forget base services that could not load before the first-launch download finished."""
         with self._lock:

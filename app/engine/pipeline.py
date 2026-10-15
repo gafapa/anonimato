@@ -355,6 +355,35 @@ def advance(analysis: Analysis, options: Options, services=None, progress: Progr
     analysis.deferred, analysis.advanced_pending = [], False
 
 
+def merge_advanced(target: Analysis, result: Analysis, base_ids: set[str]) -> list[Finding]:
+    """Bring the findings of a later advanced phase into the analysis being reviewed.
+
+    Review changes made meanwhile stay: only new findings are added, with identifiers of ``target`` (manual zones
+    may have taken ids in between), and none that repeats a finding already there."""
+    added = []
+    for finding in result.findings:
+        if finding.id in base_ids:
+            continue
+        repeated = any(other.page == finding.page and (other.type == finding.type or (other.value and finding.value))
+                       and all(any(_coverage(rect, [own]) > 0.6 for own in other.rects) for rect in finding.rects)
+                       for other in target.findings + added)
+        if repeated:
+            continue
+        finding.id = target.new_id(finding.page)
+        finding.key = ""
+        added.append(finding)
+    target.findings.extend(added)
+    for page, entries in result.sources.items():
+        mine = target.sources.setdefault(page, [])
+        for name, text in entries:
+            if name == "ocr-alt" and not any(own == "ocr-alt" for own, _ in mine):
+                mine.append((name, text))
+    target.notes.extend(note for note in result.notes if note not in target.notes)
+    target.deferred, target.advanced_pending = [], False
+    _sort(target)
+    return added
+
+
 def _sort(analysis: Analysis) -> None:
     analysis.findings.sort(key=lambda f: (f.page, f.rects[0][1] if f.rects else 0, f.rects[0][0] if f.rects else 0))
 
