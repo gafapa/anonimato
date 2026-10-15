@@ -12,6 +12,7 @@ import threading
 import time
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pymupdf
@@ -677,6 +678,60 @@ def test_shared_surname_of_two_people_keeps_separate_tokens():
     pipeline.assign_tokens(findings)
     assert findings[2].token not in (findings[0].token, findings[1].token)   # ambiguous: its own token
     assert findings[3].token == findings[1].token                           # only Luis is Pérez
+
+
+def test_tokens_are_shared_by_every_document_of_the_session():
+    registry = pipeline.TokenRegistry()
+    first = [Finding("p1-1", 0, "name", "Ana Varela López", [(0, 0, 1, 1)], 1, "text"),
+             Finding("p1-2", 0, "dni", DNI, [(0, 20, 1, 21)], 1, "text"),
+             Finding("p1-3", 0, "face", None, [(0, 40, 1, 41)], 1, "face")]
+    second = [Finding("p1-1", 0, "name", "Luis Gil Mora", [(0, 0, 1, 1)], 1, "text"),
+              Finding("p1-2", 0, "dni", DNI, [(0, 20, 1, 21)], 1, "text"),
+              Finding("p1-3", 0, "face", None, [(0, 40, 1, 41)], 1, "face"),
+              Finding("p1-4", 0, "name", "Ana Varela", [(0, 60, 1, 61)], 1, "text")]
+    pipeline.assign_tokens(first, registry, scope="d1")
+    pipeline.assign_tokens(second, registry, scope="d2")
+    assert [f.token for f in first] == ["[NOMBRE 1]", "[DNI 1]", "[ROSTRO 1]"]
+    assert second[1].token == "[DNI 1]"                       # the same value keeps its identifier in every file
+    assert second[0].token == "[NOMBRE 2]"                    # a new person continues the session numbering
+    assert second[2].token == "[ROSTRO 2]"                    # faces of different files are never merged
+    assert second[3].token == "[NOMBRE 1]"                    # a partial mention of the only session «Ana Varela …»
+    pipeline.assign_tokens(second, registry, scope="d2")      # processing a document again keeps its identifiers
+    assert [f.token for f in second] == ["[NOMBRE 2]", "[DNI 1]", "[ROSTRO 2]", "[NOMBRE 1]"]
+    third = [Finding("p1-1", 0, "name", "Ana Varela Ruiz", [(0, 0, 1, 1)], 1, "text"),
+             Finding("p1-2", 0, "name", "Varela", [(0, 20, 1, 21)], 1, "text")]
+    pipeline.assign_tokens(third, registry, scope="d3")
+    assert third[0].token == "[NOMBRE 3]" and third[1].token == "[NOMBRE 3]"   # its own document decides first
+    fourth = [Finding("p1-1", 0, "name", "Ana Varela", [(0, 0, 1, 1)], 1, "text")]
+    pipeline.assign_tokens(fourth, registry, scope="d4")
+    assert fourth[0].token == "[NOMBRE 4]"                    # two session people hold those words: not merged
+    assert pipeline.add_manual(SimpleNamespace(new_id=lambda page: "p1-9", findings=[]), 0, (0, 0, 1, 1), registry).token == "[MANUAL 1]"
+
+
+def test_api_numbers_identifiers_across_the_session(tmp_path):
+    people = {"a.pdf": ["Ana Varela López", DNI], "b.pdf": ["Luis Gil Mora", DNI]}
+
+    class AnalyzingEngine(NoEngine):
+        def call(self, op, *args, **kwargs):
+            if op != "analyze":
+                return super().call(op, *args, **kwargs)
+            name = args[1]
+            findings = [Finding(f"p1-{i}", 0, kind, value, [(0, 20 * i, 1, 20 * i + 1)], 1, "text")
+                        for i, (kind, value) in enumerate(zip(("name", "dni"), people[name], strict=True), 1)]
+            pipeline.assign_tokens(findings)  # the engine numbers each document on its own
+            return pipeline.Analysis(id=name, filename=name, working=b"", pages=[pipeline.PageInfo(100, 100, 0)],
+                                     findings=findings, options=args[2])
+
+    for name in people:
+        (tmp_path / name).write_bytes(_pdf("uno"))
+    api = _api(AnalyzingEngine())
+    api.add_paths([str(tmp_path / name) for name in people])
+    assert api.process({})
+    deadline = time.time() + 5
+    while api.poll()["busy"] and time.time() < deadline:
+        time.sleep(0.01)
+    tokens = {doc["name"]: [f["token"] for f in api.details(doc["id"])["findings"]] for doc in api.documents()}
+    assert tokens == {"a.pdf": ["[NOMBRE 1]", "[DNI 1]"], "b.pdf": ["[NOMBRE 2]", "[DNI 1]"]}
 
 
 def test_ocr_character_extents_have_no_gaps_and_reach_the_line_edges():

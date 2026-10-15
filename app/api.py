@@ -53,6 +53,7 @@ class State:
     progress: dict = field(default_factory=dict)
     install: dict = field(default_factory=dict)
     setup: dict = field(default_factory=dict)    # first-launch download of the required models
+    tokens: pipeline.TokenRegistry = field(default_factory=pipeline.TokenRegistry)  # identifiers shared by the session
     counter: int = 0
 
 
@@ -369,6 +370,8 @@ class Api:
                     if manual:
                         analyzed.notes.append(f"Se conservaron {len(manual)} zonas manuales de la revisión anterior.")
                     with self._lock:
+                        # The same person or value keeps one identifier in every document of the session.
+                        pipeline.assign_tokens(analyzed.findings, self._state.tokens, scope=doc.id)
                         doc.analysis = analyzed
                         doc.analysis_hash = digest
                         doc.analysis_settings = {
@@ -465,7 +468,7 @@ class Api:
             doc.history.record(analysis.findings)
             info = analysis.pages[page]
             shown = (view_rect[0] * info.width, view_rect[1] * info.height, view_rect[2] * info.width, view_rect[3] * info.height)
-            finding = pipeline.add_manual(analysis, page, _transform(_invert(info.matrix), shown))
+            finding = pipeline.add_manual(analysis, page, _transform(_invert(info.matrix), shown), self._state.tokens)
             self.invalidate_report(doc_id)
         data = finding.to_json()
         data["label"] = rules.CATEGORIES["manual"]["label"]

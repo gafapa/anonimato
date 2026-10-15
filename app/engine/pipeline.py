@@ -442,9 +442,28 @@ def _dedupe(analysis: Analysis) -> None:
     analysis.findings = kept
 
 
-def assign_tokens(findings: list[Finding]) -> None:
-    counters: dict[str, int] = {}
-    tokens: dict[str, str] = {}
+@dataclass
+class TokenRegistry:
+    """Replacement identifiers of one session, shared by all its documents: the same value gets the same
+    token in every file and numbers continue from one document to the next."""
+    tokens: dict[str, str] = field(default_factory=dict)
+    counters: dict[str, int] = field(default_factory=dict)
+    full_names: dict[str, frozenset[str]] = field(default_factory=dict)   # name key -> its words
+
+    def next(self, kind: str) -> str:
+        self.counters[kind] = self.counters.get(kind, 0) + 1
+        return f"[{CATEGORIES[kind]['token']} {self.counters[kind]}]"
+
+    def token(self, kind: str, key: str) -> str:
+        if key not in self.tokens:
+            self.tokens[key] = self.next(kind)
+        return self.tokens[key]
+
+
+def assign_tokens(findings: list[Finding], registry: TokenRegistry | None = None, scope: str = "") -> None:
+    """Number the findings of one document. With a session ``registry`` values keep the tokens they received in
+    earlier documents; ``scope`` (the document) keeps faces, signatures and manual zones apart between files."""
+    registry = registry if registry is not None else TokenRegistry()
     ordered = sorted(findings, key=lambda f: (f.page, f.rects[0][1] if f.rects else 0, f.rects[0][0] if f.rects else 0))
     names = [f for f in ordered if f.type == "name" and f.value]
     full_names: list[tuple[set[str], str]] = []
@@ -453,29 +472,38 @@ def assign_tokens(findings: list[Finding]) -> None:
             if not finding.key:
                 finding.key = finding.type + "|" + canonical(finding.type, finding.value)
         else:
-            finding.key = finding.key or finding.id
+            finding.key = f"{scope}#{finding.id}" if scope else finding.key or finding.id
     # Partial mentions of a detected full name share its token. A single word ("Sr. Goikoetxea") only when it
     # belongs to exactly one person in the document: two people sharing a surname keep separate tokens.
+    # Without a full name in the document, two or more words ("Ana Varela") join the only session name holding them.
     for finding in sorted(names, key=lambda f: -len(f.value.split())):
         words = {w for w in canonical("name", finding.value).split() if w not in rules.PARTICLES}
         parents = list(dict.fromkeys(key for full, key in full_names if words and words < full))
+        if not parents and len(words) >= 2:
+            session = [key for key, full in registry.full_names.items() if words < full]
+            parents = session if len(session) == 1 else []
         parent = parents[0] if parents and (len(words) >= 2 or len(parents) == 1) else None
         if parent and finding.source != "propagation":
             finding.key = parent
         else:
             full_names.append((words, finding.key))
+    for words, key in full_names:
+        registry.full_names.setdefault(key, frozenset(words))
     for finding in ordered:
-        if finding.key not in tokens:
-            counters[finding.type] = counters.get(finding.type, 0) + 1
-            tokens[finding.key] = f"[{CATEGORIES[finding.type]['token']} {counters[finding.type]}]"
-        finding.token = tokens[finding.key]
+        if finding.type == "manual" and finding.token:
+            continue  # a zone kept from an earlier review keeps its number
+        finding.token = registry.token(finding.type, finding.key)
 
 
-def add_manual(analysis: Analysis, page: int, rect: Rect) -> Finding:
-    number = max((int(re.search(r"(\d+)\]$", f.token).group(1)) for f in analysis.findings
-                  if f.type == "manual" and re.search(r"(\d+)\]$", f.token)), default=0) + 1
+def add_manual(analysis: Analysis, page: int, rect: Rect, registry: TokenRegistry | None = None) -> Finding:
+    if registry is not None:
+        token = registry.next("manual")
+    else:
+        number = max((int(re.search(r"(\d+)\]$", f.token).group(1)) for f in analysis.findings
+                      if f.type == "manual" and re.search(r"(\d+)\]$", f.token)), default=0) + 1
+        token = f"[{CATEGORIES['manual']['token']} {number}]"
     finding = Finding(id=analysis.new_id(page), page=page, type="manual", value=None,
-                      rects=[rect], confidence=1.0, source="manual", token=f"[{CATEGORIES['manual']['token']} {number}]")
+                      rects=[rect], confidence=1.0, source="manual", token=token)
     finding.key = finding.id
     analysis.findings.append(finding)
     return finding
