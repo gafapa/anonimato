@@ -172,6 +172,23 @@ def test_integrity_rehashes_models_instead_of_trusting_disk_metadata(tmp_path, m
 
 
 # ------------------------------------------------------------------ services
+def test_services_retry_base_engines_after_the_first_launch_download():
+    from app.engine.services import Services
+    services = Services(use_gpu=False)
+    attempts = []
+
+    def missing():
+        attempts.append(1)
+        raise FileNotFoundError("pii/model.onnx")
+
+    assert services._load("pii", missing) is None and services._load("pii", missing) is None
+    assert len(attempts) == 1 and "pii" in services.errors  # a failed load is not retried by itself
+    loaded = services._load("faces", lambda: "faces")
+    services.reset_base()  # the download finished
+    assert "pii" not in services.errors and services._load("pii", lambda: "pii") == "pii"
+    assert services._faces is loaded  # engines that did load are kept
+
+
 def test_services_integrity_gate_and_warmup_timeout(monkeypatch):
     from app.engine.services import Services, WarmupTimeout
     services = Services(use_gpu=False)
