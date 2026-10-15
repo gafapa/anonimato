@@ -46,22 +46,16 @@
   }
   function renderSettingsSummary() {
     if (!state.status) return;
-    const total = state.status.categories.length;
-    const selected = document.querySelectorAll('#catGrid input:checked').length;
-    const methods = [
-      $('optOcr').checked && 'OCR',
-      $('optAi').checked && 'IA de datos personales',
-      $('optFaces').checked && 'rostros',
-      $('optSignatures').checked && 'firmas',
-    ].filter(Boolean);
-    $('detectionSummary').textContent = `${selected} de ${total} categorías seleccionadas · ${methods.length ? methods.join(', ') : 'sin métodos adicionales'}`;
-    $('advancedSummary').textContent = state.status.advancedInstalled ? '· instalada' : '· opcional';
-    $('advancedDetails').hidden = state.status.advancedInstalled;
+    $('advancedSummary').textContent = state.status.advancedInstalled ? '(instalada).' : '(opcional).';
     $('textLayerOption').hidden = !$('optMaxSecurity').checked;
     $('destinationSummary').textContent = $('optMaxSecurity').checked
       ? 'Destino: compartir fuera · máxima seguridad' : 'Destino: uso interno · se elige al guardar';
     const hasResults = state.docs.some((doc) => doc.status === 'ready');
-    $('btnRun').textContent = 'Analizar documentos';
+    // Pending or failed documents are analysed first; with none left the button re-analyses everything.
+    const pending = state.docs.filter((doc) => ['pending', 'failed'].includes(doc.status)).length;
+    $('btnRun').dataset.scope = pending ? 'pending' : 'all';
+    $('btnRun').textContent = pending ? `Analizar ${pending} ${pending === 1 ? 'documento' : 'documentos'}`
+      : state.docs.length ? 'Volver a analizar todo' : 'Analizar';
     const analyzedSettings = activeDoc()?.analysisSettings;
     $('settingsChangeNotice').hidden = !hasResults || !analyzedSettings || !Object.keys(analyzedSettings).length ||
       detectionSignature(analyzedSettings) === detectionSignature();
@@ -86,7 +80,7 @@
       ? el('span', { className: 'pill ok', textContent: 'IA avanzada lista' })
       : el('button', {
         className: 'pill warn status-action', type: 'button', textContent: 'Instalar IA avanzada',
-        onclick: () => { openSettings(); $('advancedDetails').scrollIntoView({ block: 'nearest' }); },
+        onclick: () => openSettings('tabAdvanced'),
       });
     host.replaceChildren(
       el('span', { className: 'pill', textContent: s.services.gpu ? 'GPU disponible' : 'Modo CPU',
@@ -301,11 +295,10 @@
   // ------------------------------------------------------------ processing & polling
   async function run() {
     setError('');
-    const scope = $('processScope').value;
+    const scope = $('btnRun').dataset.scope || 'pending';
     const ids = state.docs.filter((doc) => doc.status !== 'locked' &&
-      (scope === 'all' || (scope === 'selected' ? doc.id === state.activeId : ['pending', 'failed'].includes(doc.status))))
-      .map((doc) => doc.id);
-    if (!ids.length) { setError('No hay documentos para este alcance. Selecciona otro alcance o añade documentos.'); return; }
+      (scope === 'all' || ['pending', 'failed'].includes(doc.status))).map((doc) => doc.id);
+    if (!ids.length) { setError('No hay documentos que analizar. Añade documentos o desbloquea los protegidos.'); return; }
     if (state.docs.some((doc) => ids.includes(doc.id) && doc.reviewed) &&
         !window.confirm('Se conservarán las zonas manuales si el archivo y sus páginas no han cambiado. Los hallazgos automáticos y su selección se recalcularán. ¿Continuar?')) return;
     let started;
@@ -696,7 +689,7 @@
     for (const id of ['btnPdf', 'btnRailSave', 'btnOpenSave', 'btnAll', 'btnCsv', 'btnJson']) $(id).disabled = on;
     if (on) setManual(false);
     // Restore each control's previous state instead of enabling unavailable controls after saving.
-    for (const control of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #rowsBody input, #rowsBody button, #manualForm input, #manualForm button, #btnUndo, #btnRedo, #btnRetryBatch, #processScope, #btnAllOn, #btnAllOff, #btnManual, #btnRun, #optMode, #optInternal, #optMaxSecurity, #optUniform, #optTextLayer, #optKeepName')) {
+    for (const control of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #rowsBody input, #rowsBody button, #manualForm input, #manualForm button, #btnUndo, #btnRedo, #btnRetryBatch, #btnAllOn, #btnAllOff, #btnManual, #btnRun, #optMode, #optInternal, #optMaxSecurity, #optUniform, #optTextLayer, #optKeepName')) {
       if (on) {
         control.dataset.disabledBeforeSave = String(control.disabled);
         control.disabled = true;
@@ -718,10 +711,21 @@
     ($('optMaxSecurity').checked ? $('optMaxSecurity') : $('optInternal')).focus();
   }
   // Detection settings live in their own dialog, opened from the gear at the top right.
-  function openSettings() {
+  const SETTINGS_TABS = ['tabData', 'tabMethods', 'tabAnalysis', 'tabAdvanced'];
+  function selectTab(id, { focus = false } = {}) {
+    for (const tabId of SETTINGS_TABS) {
+      const tab = $(tabId), selected = tabId === id;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !selected;
+    }
+    if (focus) $(id).focus();
+  }
+  function openSettings(tab = null) {
+    if (tab) selectTab(tab);
     if ($('settingsDialog').open) return;
     $('settingsDialog').showModal();
-    $('catGrid').querySelector('input')?.focus();
+    $(SETTINGS_TABS.find((id) => $(id).getAttribute('aria-selected') === 'true')).focus();
   }
   function closeSave() {
     if ($('saveDialog').open) $('saveDialog').close();
@@ -792,6 +796,8 @@
     else if (result.folder) {
       $('progressCard').hidden = false;
       $('progressText').textContent = `${result.saved} guardados${result.failed ? `, ${result.failed} pendientes de corregir` : ''} en ${result.folder}`;
+      // The batch summary in the findings panel keeps the details; the sidebar only flashes the outcome.
+      setTimeout(() => { if (!state.polling && !state.saving) $('progressCard').hidden = true; }, 2500);
     }
     if (result.folder) {
       const entries = new Map((retry ? state.batch?.results || [] : []).map((entry) => [entry.id, entry]));
@@ -861,8 +867,16 @@
     $('btnRailSave').addEventListener('click', openSave);
     $('btnOpenSave').addEventListener('click', openSave);
     $('btnSaveBack').addEventListener('click', closeSave);
-    $('btnSettings').addEventListener('click', openSettings);
-    $('btnSettingsInline').addEventListener('click', openSettings);
+    $('btnSettings').addEventListener('click', () => openSettings());
+    for (const id of SETTINGS_TABS) {
+      $(id).addEventListener('click', () => selectTab(id));
+      $(id).addEventListener('keydown', (event) => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!step) return;
+        event.preventDefault();
+        selectTab(SETTINGS_TABS[(SETTINGS_TABS.indexOf(id) + step + SETTINGS_TABS.length) % SETTINGS_TABS.length], { focus: true });
+      });
+    }
     $('btnSettingsDone').addEventListener('click', () => $('settingsDialog').close());
     let collapsed = false;
     try { collapsed = localStorage.getItem('anonimato.panelCollapsed') === '1'; } catch { /* storage unavailable */ }

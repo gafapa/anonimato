@@ -167,6 +167,10 @@ def main() -> None:
                 assert window.evaluate_js("document.getElementById('dropzone').contains(document.getElementById('documentQueue')) && document.querySelectorAll('#dropzone .document-item').length === 2")
                 window.evaluate_js("document.getElementById('btnSettings').click()")
                 wait("document.getElementById('settingsDialog').open && document.querySelectorAll('#settingsDialog #catGrid input').length > 0")
+                assert window.evaluate_js("document.getElementById('btnRun').textContent === 'Volver a analizar todo' && !document.getElementById('detectionSummary')")
+                window.evaluate_js("document.getElementById('tabMethods').dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowLeft'})); document.getElementById('tabAnalysis').click()")
+                assert window.evaluate_js("!document.getElementById('panelAnalysis').hidden && document.getElementById('panelData').hidden && document.getElementById('tabAnalysis').getAttribute('aria-selected') === 'true'")
+                window.evaluate_js("document.getElementById('tabData').click()")
                 window.evaluate_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'g'}))")
                 assert window.evaluate_js("!document.getElementById('saveDialog').open")
                 window.evaluate_js("document.getElementById('btnSettingsDone').click()")
@@ -186,7 +190,7 @@ def main() -> None:
                 window.evaluate_js("document.getElementById('btnCsv').click(); document.getElementById('btnJson').click()")
                 wait("document.getElementById('btnRun').disabled === false")
                 previous_revision = api._state.docs['d2'].revision
-                window.evaluate_js("window.confirm=()=>true; document.getElementById('processScope').value='all'; document.getElementById('btnRun').click()")
+                window.evaluate_js("window.confirm=()=>true; document.getElementById('btnRun').click()")
                 deadline = time.monotonic() + 30
                 while api._state.docs['d2'].revision == previous_revision and time.monotonic() < deadline:
                     time.sleep(0.1)

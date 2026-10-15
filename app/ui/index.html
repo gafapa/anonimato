@@ -45,19 +45,10 @@
         </div>
       </section>
 
-      <section class="sidebar-section">
-        <div class="section-head">
-          <h2>Qué anonimizar</h2>
-          <button class="link-button" id="btnSettingsInline" type="button" aria-haspopup="dialog">Cambiar</button>
-        </div>
-        <p class="section-summary" id="detectionSummary" role="status" aria-live="polite"></p>
-        <p class="settings-change-notice" id="settingsChangeNotice" role="status" hidden>Has cambiado la detección. Vuelve a analizar para aplicar estos ajustes.</p>
-      </section>
 
       <div class="sidebar-actions">
-        <label class="field"><span>Documentos a analizar</span><select id="processScope"><option value="pending">Pendientes y fallidos</option><option value="selected">Documento seleccionado</option><option value="all">Todos los documentos</option></select></label>
-        <button id="btnRun" class="btn primary" type="button" disabled>Analizar documentos</button>
-        <p class="action-hint">Después revisarás cada página antes de guardar.</p>
+        <p class="settings-change-notice" id="settingsChangeNotice" role="status" hidden>Has cambiado los ajustes. Vuelve a analizar para aplicarlos.</p>
+        <button id="btnRun" class="btn primary" type="button" disabled>Analizar</button>
         <button id="btnCancel" class="btn ghost small wide" type="button" hidden>Cancelar</button>
         <p id="errMsg" class="err" role="alert" hidden></p>
         <section class="progress-card" id="progressCard" hidden aria-label="Progreso">
@@ -230,25 +221,37 @@
       <h2 id="settingsTitle">Ajustes</h2>
       <p>Qué se busca en los documentos y cómo se analizan. Se aplican al próximo análisis.</p>
     </div>
+    <div class="tabs" role="tablist" aria-label="Secciones de ajustes">
+      <button class="tab" type="button" role="tab" id="tabData" aria-controls="panelData" aria-selected="true">Datos</button>
+      <button class="tab" type="button" role="tab" id="tabMethods" aria-controls="panelMethods" aria-selected="false" tabindex="-1">Detección</button>
+      <button class="tab" type="button" role="tab" id="tabAnalysis" aria-controls="panelAnalysis" aria-selected="false" tabindex="-1">Análisis</button>
+      <button class="tab" type="button" role="tab" id="tabAdvanced" aria-controls="advancedDetails" aria-selected="false" tabindex="-1">IA avanzada</button>
+    </div>
     <div class="modal-body" id="detectionDetails">
-          <h3>Categorías de datos</h3>
-          <div class="grid-cats" id="catGrid"></div>
-          <h3>Métodos de detección</h3>
-          <div class="opts">
-            <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
-            <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
-            <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
-            <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
-            <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
-            <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
-            <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
-          </div>
-          <label class="field analysis-resolution"><span>Resolución de análisis</span>
-            <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
-          <label class="field"><span>Modelo de IA avanzada</span><select id="optAdvancedMode"><option value="auto">Automático según memoria</option><option value="accuracy">Priorizar precisión (8B si está instalado)</option><option value="memory">Menor consumo (4B si está instalado)</option></select></label>
-          <p class="section-summary">8B puede leer manuscritos con más precisión; 4B consume menos memoria.</p>
-      <section class="advanced-section" id="advancedDetails">
-        <h3>IA avanzada <span id="advancedSummary"></span></h3>
+      <section class="tab-panel" id="panelData" role="tabpanel" aria-labelledby="tabData">
+        <p class="tab-intro">Tipos de dato que se buscan y se ocultan.</p>
+        <div class="grid-cats" id="catGrid"></div>
+      </section>
+      <section class="tab-panel" id="panelMethods" role="tabpanel" aria-labelledby="tabMethods" hidden>
+        <p class="tab-intro">Cómo se encuentran los datos en cada página.</p>
+        <div class="opts">
+          <label class="toggle"><input type="checkbox" id="optOcr" checked /><span>Leer <strong>imágenes y escaneos</strong> (OCR)</span></label>
+          <label class="toggle"><input type="checkbox" id="optAi" checked /><span><strong>IA de datos personales</strong> (nombres, direcciones, salud…)</span></label>
+          <label class="toggle advanced"><input type="checkbox" id="optHandwriting" checked /><span>Leer <strong>texto manuscrito</strong> con IA avanzada</span></label>
+          <label class="toggle advanced"><input type="checkbox" id="optReview" checked /><span><strong>Revisión contextual</strong> con IA avanzada</span></label>
+          <label class="toggle"><input type="checkbox" id="optFaces" checked /><span>Ocultar <strong>rostros</strong></span></label>
+          <label class="toggle"><input type="checkbox" id="optSignatures" checked /><span>Ocultar <strong>firmas</strong></span></label>
+          <label class="toggle"><input type="checkbox" id="optPropagate" checked /><span>Buscar cada dato en <strong>todo el documento</strong></span></label>
+        </div>
+      </section>
+      <section class="tab-panel" id="panelAnalysis" role="tabpanel" aria-labelledby="tabAnalysis" hidden>
+        <label class="field analysis-resolution"><span>Resolución de análisis</span>
+          <select id="optDpi"><option value="150">150 ppp · rápido</option><option value="200" selected>200 ppp · equilibrado</option><option value="300">300 ppp · letra pequeña</option></select></label>
+        <label class="field"><span>Modelo de IA avanzada</span><select id="optAdvancedMode"><option value="auto">Automático según memoria</option><option value="accuracy">Priorizar precisión (8B si está instalado)</option><option value="memory">Menor consumo (4B si está instalado)</option></select></label>
+        <p class="section-summary">8B puede leer manuscritos con más precisión; 4B consume menos memoria.</p>
+      </section>
+      <section class="tab-panel advanced-section" id="advancedDetails" role="tabpanel" aria-labelledby="tabAdvanced" hidden>
+        <p class="tab-intro">Lectura de manuscritos y revisión contextual con un modelo local opcional <span id="advancedSummary"></span></p>
         <div class="advanced-box" id="advancedBox"></div>
       </section>
     </div>
