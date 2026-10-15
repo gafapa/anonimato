@@ -153,7 +153,7 @@ jobs:
 
   build:
     needs: [fast, advanced, portable, workflow-security]
-    if: always() && needs.portable.result == 'success' && needs.workflow-security.result == 'success' && needs.fast.result == 'success' && (needs.advanced.result == 'success' || needs.advanced.result == 'skipped')
+    if: ${{ !cancelled() && needs.portable.result == 'success' && needs.workflow-security.result == 'success' && needs.fast.result == 'success' && (needs.advanced.result == 'success' || needs.advanced.result == 'skipped') }}
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180

@@ -55,3 +55,7 @@ and notarization require the corresponding repository secrets.
 
 The repository is private. This workflow uses dependency auditing and Gitleaks
 without requiring a paid GitHub code-scanning entitlement.
+
+Superseded build jobs use `!cancelled()` in their dependency gate so concurrency
+cancellation can stop expensive package qualification instead of keeping a newer
+run pending behind an `always()` job. Diagnostic uploads still run on failure.
