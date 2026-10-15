@@ -50,6 +50,8 @@ measurements over 8.79 GiB of weights took 32.6/53.6 seconds with two readers an
 63.4/79.5 seconds serially. These were shared-load measurements, not a controlled
 cross-platform performance benchmark; rotational disks may behave differently.
 
+The workflow also updates setup-node to 7.1.0 and setup-uv to 10.3.0 using verified immutable commit hashes.
+
 The frozen lock updates filelock to 4.2.0, pikepdf to 10.17.0, NumPy to 2.5.4,
 ONNX Runtime to 1.31.0, tokenizers to 0.23.3, Ruff to 0.17.1 and Hypothesis to
 6.169.4. Windows retains its platform-specific ONNX Runtime DirectML dependency.
@@ -66,6 +68,7 @@ outside that Python dependency audit.
   staged model repair/extraction, byte-level integrity and detection policy failures.
 - A separate state-machine/identity/real-window subset passed all 11 tests, including
   both the batch fixture and the WebView2 coverage scenario.
+- The source application self-test passes, including export verification and crash recovery.
 - Ruff, JavaScript syntax, actionlint and whitespace validation pass locally.
 
 The Windows batch fixture uses a private per-run WebView2 profile, the supported
