@@ -105,6 +105,10 @@ def main() -> None:
         def scenario():
             nonlocal failing
             try:
+                # The hosted runner can need more than pywebview's default 20-second
+                # API-call wait to create its first WebView2 profile.
+                if not window.events.loaded.wait(60):
+                    raise AssertionError("The synthetic window did not finish loading within 60 seconds")
                 if collector:
                     deadline = time.monotonic() + 35
                     while not ready.exists() and time.monotonic() < deadline and collector.poll() is None:

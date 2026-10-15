@@ -72,7 +72,9 @@ outside that Python dependency audit.
 - Ruff, JavaScript syntax, actionlint and whitespace validation pass locally.
 
 The Windows batch fixture uses a private per-run WebView2 profile, the supported
-loopback debugging setting, and startup exception diagnostics. Its local real-window
+loopback debugging setting, and startup exception diagnostics. It waits explicitly
+for the window's load event before invoking the JavaScript bridge, rather than
+relying on pywebview's 20-second API-call startup timeout. Its local real-window
 checks pass; the hosted Windows failure requires a fresh Actions run for confirmation.
 No 2.2.1 installer or previous CI run qualifies this 2.2.2 source/dependency snapshot.
 Cross-platform packages, the real advanced model and release publication must pass
