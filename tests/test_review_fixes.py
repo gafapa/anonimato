@@ -107,15 +107,20 @@ def test_report_write_failure_returns_the_actual_saved_count(bridge, tmp_path, m
     assert len(list(tmp_path.glob("*.pdf"))) == 1 and not api.poll()["busy"]
 
 
-def test_every_processing_gate_rechecks_integrity(tmp_path, monkeypatch):
+def test_integrity_is_verified_once_per_session_and_rechecked_after_a_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "user_models_dir", lambda: tmp_path)
-    checker = Mock(side_effect=[[], ["changed model"]])
+    checker = Mock(side_effect=[["changed model"], [], ["changed model"], ["changed model"]])
     monkeypatch.setattr(models, "verify_all", checker)
     services = Services(use_gpu=False)
-    services.require_integrity()
+    services._ready.set()
     with pytest.raises(RuntimeError, match="alterados"):
         services.require_integrity()
+    services.require_integrity()          # a failed check is repeated: the repaired files unblock processing
+    services.require_integrity()          # verified in this session: no further hashing per document
     assert checker.call_count == 2
+    assert not services.check_integrity(force=True)   # an explicit recheck still hashes and blocks again
+    with pytest.raises(RuntimeError, match="alterados"):
+        services.require_integrity()
 
 
 def model_item(identifier, payload, size=None):

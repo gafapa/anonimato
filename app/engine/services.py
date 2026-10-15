@@ -26,6 +26,7 @@ class Services:
         self.timings: dict[str, float] = {}
         self.errors: dict[str, str] = {}
         self._integrity_checked = threading.Event()
+        self._integrity_ok = False   # verified in this engine session: later operations do not hash again
         self._ready = threading.Event()
         self._ready.set()  # only cleared while a warm-up is running
 
@@ -108,6 +109,7 @@ class Services:
             self.errors["integrity"] = "Archivos alterados o dañados: " + ", ".join(bad)
         else:
             self.errors.pop("integrity", None)
+        self._integrity_ok = not bad
         return not bad
 
     def require_integrity(self, progress=None, timeout: float = 300) -> None:
@@ -123,10 +125,13 @@ class Services:
                 progress({"stage": "prepare", "message": "Preparando los modelos de IA…"})
             if waited >= timeout:
                 raise WarmupTimeout("La tarjeta gráfica no responde al preparar los modelos")
-        if progress:
-            progress({"stage": "prepare", "message": "Comprobando la integridad de los modelos…"})
-        self.check_integrity(force=True, progress=progress)
-        if "integrity" in self.errors:
+        # The models are hashed once per engine session (at start-up, and again after an install, an import or
+        # «Volver a comprobar»). A failed check is repeated on the next operation so a repaired install unblocks it.
+        if not self._integrity_ok:
+            if progress:
+                progress({"stage": "prepare", "message": "Comprobando la integridad de los modelos…"})
+            self.check_integrity(force=True, progress=progress)
+        if "integrity" in self.errors or not self._integrity_ok:
             raise RuntimeError(self.errors["integrity"] + ". Procesamiento bloqueado hasta completar la comprobación de integridad.")
 
     def reset_advanced(self) -> None:
