@@ -54,7 +54,7 @@
     // Pending or failed documents are analysed first; with none left the button re-analyses everything.
     const pending = state.docs.filter((doc) => ['pending', 'failed'].includes(doc.status)).length;
     $('btnRun').dataset.scope = pending ? 'pending' : 'all';
-    $('btnRun').textContent = pending ? `Analizar ${pending} ${pending === 1 ? 'documento' : 'documentos'}`
+    $('btnRun').textContent = state.polling ? 'Analizando…' : pending ? `Analizar ${pending} ${pending === 1 ? 'documento' : 'documentos'}`
       : state.docs.length ? 'Volver a analizar todo' : 'Analizar';
     const analyzedSettings = activeDoc()?.analysisSettings;
     $('settingsChangeNotice').hidden = !hasResults || !analyzedSettings || !Object.keys(analyzedSettings).length ||
@@ -322,6 +322,7 @@
     $('progressCard').hidden = false;
     $('btnCancel').hidden = false;
     $('btnRun').disabled = true;
+    $('btnRun').textContent = 'Analizando…';
     const tick = async () => {
       const info = await api.poll();
       $('progressFill').style.width = `${info.progress.percent || 0}%`;
