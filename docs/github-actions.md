@@ -30,7 +30,7 @@ not in the model-free regression lanes.
 ## Extended qualification
 
 Manual, weekly, and version-tag runs additionally download the real advanced-lite
-pack and require both advanced tests to run without skips. Windows also produces a
+pack and require both advanced tests to run without skips. Every Windows build also enforces category-specific detection regression floors and produces a
 40-document synthetic detection report including scanned variants and a cold/warm
 CPU processing profile. Detection reports are diagnostics, not a claim of complete
 automatic anonymization; verified export and manual review remain required.

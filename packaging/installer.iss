@@ -1,6 +1,6 @@
 ; Inno Setup script: per-user installation, no administrator rights.
 #ifndef AppVersion
-#define AppVersion "2.2.1"
+#define AppVersion "2.2.2"
 #endif
 #ifndef PayloadRoot
 #define PayloadRoot "..\dist\Anonimato"

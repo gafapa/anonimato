@@ -251,10 +251,13 @@ def main() -> None:
     parser.add_argument("--private", action="store_true", help="Include local annotated documents; output is aggregate-only")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--policy", type=Path, help="Fail when synthetic detection regresses below the policy")
     args = parser.parse_args()
     output = args.output or ROOT / "docs" / "deteccion.md"
     if args.private and (args.output is None or not output.resolve().is_relative_to((ROOT / "tmp").resolve())):
         parser.error("Private evaluation requires --output inside ignored tmp/; no names or values are included")
+    if args.private and args.policy:
+        parser.error("Quality gates only accept the reproducible synthetic corpus")
     rng = random.Random(args.seed)
     services = Services()
     categories = set(rules.SELECTABLE) - rules.DEFAULT_OFF
@@ -370,6 +373,13 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
+    if args.policy:
+        from tools.detection_quality import failures
+        errors = failures(stats, occurrence_stats, precision_hits, precision_total,
+                          json.loads(args.policy.read_text(encoding="utf-8")))
+        if errors:
+            raise SystemExit("Detection quality gate failed:\n" + "\n".join(errors))
+
 
 
 if __name__ == "__main__":

@@ -589,7 +589,7 @@ def test_api_downloads_missing_models_before_processing(monkeypatch):
     engine = MissingEngine()
     pending = [models.ModelFile("pii-model", "base/pii.onnx", "https://example.invalid/pii", "MIT", "0" * 64, "base",
                                 size=100)]
-    monkeypatch.setattr(models, "required_missing", lambda: list(pending))
+    monkeypatch.setattr(models, "required_missing", lambda **kwargs: list(pending))
 
     def install(progress):
         progress("pii-model", 50, 100)

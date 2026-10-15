@@ -1,5 +1,6 @@
 # Anonimato
 
+The [2.2.2 audit remediation report](docs/improvements-2.2.2.md) describes identity consistency, verified model repair, detection gates, dependency updates, and current qualification limits.
 Anonimato is a desktop application that removes personal data, faces, and signatures from PDFs, photos, and scans. It runs on the local computer: documents are not sent to a server. The application removes marked content from both the visible page and recoverable document structures, then verifies the output before saving it.
 
 ## Installation

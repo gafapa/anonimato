@@ -203,11 +203,11 @@ def _check_model(item: ModelFile, path: Path) -> None:
         raise RuntimeError(f"Checksum incorrecto para {item.id}")
 
 
-def _download_to(item: ModelFile, target: Path, progress: Progress | None = None) -> Path:
+def _download_to(item: ModelFile, target: Path, progress: Progress | None = None, *, extract: bool = True) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and sha256_of(target) == item.sha256:
         _check_model(item, target)
-        if item.unzip and not getattr(sys, "frozen", False):
+        if extract and item.unzip and not getattr(sys, "frozen", False):
             extract_runtime(target, preserve_verified=True)
         return target
     partial = target.with_suffix(target.suffix + ".part")
@@ -248,7 +248,7 @@ def _download_to(item: ModelFile, target: Path, progress: Progress | None = None
         partial.unlink(missing_ok=True)
         raise
     partial.replace(target)
-    if item.unzip and not getattr(sys, "frozen", False):  # installed builds extract into their private cache
+    if extract and item.unzip and not getattr(sys, "frozen", False):  # installed builds extract into their private cache
         extract_runtime(target, preserve_verified=True)
     return target
 
@@ -311,8 +311,13 @@ def download_group(items: list[ModelFile], progress: Progress | None = None) -> 
         staged = []
         for item in pending:
             target = downloads / f"{item.id}-{item.sha256}"
-            staged.append((item, _download_to(item, target, progress)))
+            downloaded = (_download_to(item, target, progress, extract=False) if item.unzip
+                          else _download_to(item, target, progress))
+            staged.append((item, downloaded))
         _publish_models(staged)
+        for item in items:
+            if item.unzip and not getattr(sys, "frozen", False):
+                extract_runtime(item.path, preserve_verified=True)
 
 
 def required_items() -> list[ModelFile]:
@@ -321,15 +326,13 @@ def required_items() -> list[ModelFile]:
     return manifest.get("base", []) + for_this_platform(manifest.get("runtime", []))
 
 
-def required_missing() -> list[ModelFile]:
-    return [item for item in required_items() if not is_installed(item)]
+def required_missing(*, verify: bool = False) -> list[ModelFile]:
+    return [item for item in required_items() if not is_installed(item, verify=verify)]
 
 
 def install_required(progress: Progress | None = None) -> None:
     """First-launch download: each file is resumable and checked against its pinned size and SHA-256."""
-    with installation_lock():
-        for item in required_missing():
-            _download_to(item, item.path, progress)
+    download_group(required_items(), progress)
 
 
 def extract_runtime(archive_path: Path, *, preserve_verified: bool = False) -> None:
@@ -442,10 +445,16 @@ def verify_all(force: bool = False) -> list[str]:
         for item in manifest.get(group, []):
             if item.sha256:
                 targets.append((item.id, item.path, item.sha256))
-    bad = []
-    for label, path, expected in targets:
-        if path.exists() and sha256_of(path) != expected:
-            bad.append(label)
+    # Hash independent weights concurrently, with bounded I/O and no trusted metadata cache.
+    # Every installed file is still read in full before the operation is allowed to proceed.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def mismatch(target):
+        label, path, expected = target
+        return label if path.exists() and sha256_of(path) != expected else None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        bad = [label for label in pool.map(mismatch, targets) if label is not None]
     return bad + verify_runtime()
 
 

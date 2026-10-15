@@ -304,7 +304,7 @@
       else { heading.textContent = 'Añade tus documentos'; text.textContent = 'PDF, fotos o escaneos. Nada sale de este equipo.'; }
       return;
     }
-    if (!state.details || state.details.id !== doc.id) {
+    if (!state.details || state.details.id !== doc.id || state.details.revision !== doc.revision) {
       state.details = await api.details(doc.id);
       state.page = 0;
       state.current = -1;

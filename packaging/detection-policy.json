@@ -1,0 +1,23 @@
+{
+  "description": "Seed 2028, 40 synthetic documents plus scanned and layout variants. Baseline floors are regression guards, not a completeness claim.",
+  "values": {
+    "native/name": 0.98,
+    "native/dni": 1.0,
+    "native/nie": 1.0,
+    "scanned/name": 0.98,
+    "scanned/dni": 1.0,
+    "scanned/nie": 1.0
+  },
+  "occurrences": {
+    "native/name": 0.98,
+    "native/dni": 1.0,
+    "native/nie": 1.0,
+    "scanned/name": 0.95,
+    "scanned/dni": 1.0,
+    "scanned/nie": 1.0,
+    "layout/name": 1.0,
+    "noisy-layout/name": 1.0,
+    "low-resolution-photo/name": 1.0
+  },
+  "precision": 0.98
+}

@@ -89,12 +89,13 @@ def main() -> None:
 
         collector = None
         coverage_output = Path(sys.argv[sys.argv.index("--js-coverage") + 1]).resolve() if "--js-coverage" in sys.argv else None
-        if coverage_output:
+        if sys.platform == "win32":
             with socket.socket() as probe:
                 probe.bind(("127.0.0.1", 0))
                 port = probe.getsockname()[1]
             os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={port} --remote-debugging-address=127.0.0.1"
             webview.settings["REMOTE_DEBUGGING_PORT"] = port
+        if coverage_output:
             ready, stop = folder / "coverage-ready", folder / "coverage-stop"
             collector = subprocess.Popen(["node", str(ROOT / "tools/webview_coverage.mjs"), str(port), _ui_path().as_uri(),
                                            (ROOT / "app/ui/app.js").as_uri(), str(coverage_output), str(ready), str(stop)],
@@ -178,8 +179,13 @@ def main() -> None:
                     collector.communicate(timeout=10)
                 window.destroy()
 
-        webview.start(scenario, gui=webview_gui(), private_mode=True)
-        api.shutdown()
+        try:
+            webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
+            webview.start(scenario, gui=webview_gui(), private_mode=True, debug=True, storage_path=str(folder / "webview-profile"))
+        except Exception as error:
+            result["errors"].append(f"Window startup failed: {type(error).__name__}: {error}")
+        finally:
+            api.shutdown()
     output.write_text(json.dumps(result, indent=2), encoding="utf-8")
     if not result["ok"]:
         raise SystemExit(json.dumps(result))

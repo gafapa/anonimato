@@ -450,6 +450,25 @@ class TokenRegistry:
     counters: dict[str, int] = field(default_factory=dict)
     full_names: dict[str, frozenset[str]] = field(default_factory=dict)   # name key -> its words
 
+    def register_names(self, findings: list[Finding]) -> None:
+        """Seed maximal names before resolving a batch, so input order cannot select an identity."""
+        names = {"name|" + canonical("name", finding.value): frozenset(
+            word for word in canonical("name", finding.value).split() if word not in rules.PARTICLES)
+            for finding in findings if finding.type == "name" and finding.value}
+        names = {**self.full_names, **names}
+        roots: dict[str, frozenset[str]] = {}
+        by_word: dict[str, set[str]] = {}
+        for key, words in sorted(names.items(), key=lambda entry: (-len(entry[1]), entry[0])):
+            if not words:
+                continue
+            candidates = min((by_word.get(word, set()) for word in words), key=len)
+            if any(words < roots[parent] for parent in candidates):
+                continue
+            roots[key] = words
+            for word in words:
+                by_word.setdefault(word, set()).add(key)
+        self.full_names = roots
+
     def next(self, kind: str) -> str:
         self.counters[kind] = self.counters.get(kind, 0) + 1
         return f"[{CATEGORIES[kind]['token']} {self.counters[kind]}]"
@@ -469,7 +488,7 @@ def assign_tokens(findings: list[Finding], registry: TokenRegistry | None = None
     full_names: list[tuple[set[str], str]] = []
     for finding in ordered:
         if finding.value and finding.type not in ("face", "signature", "manual", "handwriting"):
-            if not finding.key:
+            if not finding.key or (finding.type == "name" and finding.source != "propagation"):
                 finding.key = finding.type + "|" + canonical(finding.type, finding.value)
         else:
             finding.key = f"{scope}#{finding.id}" if scope else finding.key or finding.id
@@ -482,7 +501,7 @@ def assign_tokens(findings: list[Finding], registry: TokenRegistry | None = None
         if not parents and len(words) >= 2:
             session = [key for key, full in registry.full_names.items() if words < full]
             parents = session if len(session) == 1 else []
-        parent = parents[0] if parents and (len(words) >= 2 or len(parents) == 1) else None
+        parent = parents[0] if len(parents) == 1 else None
         if parent and finding.source != "propagation":
             finding.key = parent
         else:

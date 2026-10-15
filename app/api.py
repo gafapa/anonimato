@@ -189,7 +189,9 @@ class Api:
         self._state.progress = {"message": "Comprobando la integridad de los modelos…", "percent": 0}
         def run() -> None:
             try:
-                self._engine.call("integrity", progress=self._state.progress.update)
+                if not self._engine.call("integrity", progress=self._state.progress.update):
+                    models.install_required()
+                    self._engine.call("reload_models")
             except EngineError as error:
                 self._state.progress = {"message": str(error), "percent": 0}
             finally:
@@ -261,6 +263,7 @@ class Api:
             self._state.docs.pop(doc_id, None)
             if doc_id in self._state.order:
                 self._state.order.remove(doc_id)
+            self._reconcile_tokens()
         return True
 
     def clear(self) -> bool:
@@ -269,12 +272,15 @@ class Api:
                 return False
             self._state.docs.clear()
             self._state.order.clear()
+            self._state.tokens = pipeline.TokenRegistry()
+            self._status_cache = None
         return True
 
     def _doc_summary(self, doc: Doc) -> dict:
         analysis = doc.analysis
         return {
             "id": doc.id, "name": doc.name, "size": doc.size, "status": doc.status, "error": doc.error,
+            "revision": doc.revision,
             "pages": len(analysis.pages) if analysis else None,
             "findings": len(analysis.findings) if analysis else None,
             "saved": doc.saved_revision == doc.revision,
@@ -371,8 +377,8 @@ class Api:
                         analyzed.notes.append(f"Se conservaron {len(manual)} zonas manuales de la revisión anterior.")
                     with self._lock:
                         # The same person or value keeps one identifier in every document of the session.
-                        pipeline.assign_tokens(analyzed.findings, self._state.tokens, scope=doc.id)
                         doc.analysis = analyzed
+                        self._reconcile_tokens()
                         doc.analysis_hash = digest
                         doc.analysis_settings = {
                             "categories": sorted(options.categories), "ocr": options.ocr, "ai": options.ai,
@@ -394,6 +400,25 @@ class Api:
             with self._lock:
                 self._state.busy = False
                 self._state.progress = {"message": "", "percent": 100}
+
+    def _reconcile_tokens(self) -> None:
+        """Resolve current documents together; invalidate exports when new evidence changes a token."""
+        registry = pipeline.TokenRegistry()
+        documents = [self._state.docs[key] for key in self._state.order if self._state.docs[key].analysis]
+        registry.register_names([finding for doc in documents for finding in doc.analysis.findings])
+        # Manual zones retain their identifiers and reserve their numbers for future edits.
+        import re
+        registry.counters["manual"] = max((int(match.group(1)) for doc in documents
+            for finding in doc.analysis.findings if finding.type == "manual"
+            and (match := re.search(r"(\d+)\]$", finding.token))), default=0)
+        for doc in documents:
+            before = [finding.token for finding in doc.analysis.findings]
+            pipeline.assign_tokens(doc.analysis.findings, registry, scope=doc.id)
+            if before != [finding.token for finding in doc.analysis.findings]:
+                doc.history.clear()
+                doc.preview_bytes, doc.preview_key, doc.report = None, "", None
+                doc.revision += 1
+        self._state.tokens = registry
 
     def poll(self) -> dict:
         return {"busy": self._state.busy, "progress": self._state.progress, "documents": self.documents(),
@@ -437,7 +462,7 @@ class Api:
             findings.append(data)
         return {
             "id": doc.id, "name": doc.name, "pages": [{"width": p.width, "height": p.height} for p in analysis.pages],
-            "findings": findings, "notes": analysis.notes, "seconds": analysis.seconds,
+            "findings": findings, "notes": analysis.notes, "seconds": analysis.seconds, "revision": doc.revision,
             "nativeChars": analysis.native_chars, "report": doc.report, "signed": analysis.signed,
             "history": {"undo": bool(doc.history.undo), "redo": bool(doc.history.redo)},
             "saved": doc.saved_revision == doc.revision,
@@ -728,7 +753,7 @@ class Api:
     def install_required(self) -> bool:
         """Download the base models and runtime that installed builds do not ship (first launch, or a retry)."""
         with self._lock:
-            if self._state.setup.get("running") or not models.required_missing():
+            if self._state.setup.get("running") or not models.required_missing(verify=True):
                 return False
             self._state.setup = {"running": True, "percent": 0, "message": "Preparando la descarga de los modelos de IA…"}
             try:
