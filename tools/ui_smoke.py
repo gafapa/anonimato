@@ -163,7 +163,6 @@ def scenario(window, api):
              rows(window) > 0 and js(window, "document.querySelectorAll('#originalWrap .box').length") > 0)
         step("settings are collapsed during review",
              js(window, "!document.getElementById('detectionDetails').open && "
-                        "!document.getElementById('resultDetails').open && "
                         "document.getElementById('sidebar').classList.contains('reviewing')"))
         click(window, "optAi")
         step("detection changes request reanalysis",

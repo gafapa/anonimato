@@ -58,6 +58,8 @@
     $('advancedSummary').textContent = state.status.advancedInstalled ? '· instalada' : '· opcional';
     $('advancedDetails').hidden = state.status.advancedInstalled;
     $('textLayerOption').hidden = !$('optMaxSecurity').checked;
+    $('destinationSummary').textContent = $('optMaxSecurity').checked
+      ? 'Destino: compartir fuera · máxima seguridad' : 'Destino: uso interno · se elige al guardar';
     const hasResults = state.docs.some((doc) => doc.status === 'ready');
     $('btnRun').textContent = 'Analizar documentos';
     const analyzedSettings = activeDoc()?.analysisSettings;
@@ -329,7 +331,6 @@
     state.analysisSignature = detectionSignature();
     $('detectionDetails').open = false;
     $('advancedDetails').open = false;
-    $('resultDetails').open = false;
     state.details = null;
     setManual(false);
     $('resultsCard').hidden = true;
@@ -709,10 +710,10 @@
   // ------------------------------------------------------------ export
   function setSaving(on) {
     state.saving = on;
-    for (const id of ['btnPdf', 'btnRailSave', 'btnAll', 'btnCsv', 'btnJson']) $(id).disabled = on;
+    for (const id of ['btnPdf', 'btnRailSave', 'btnOpenSave', 'btnAll', 'btnCsv', 'btnJson']) $(id).disabled = on;
     if (on) setManual(false);
     // Restore each control's previous state instead of enabling unavailable controls after saving.
-    for (const control of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #rowsBody input, #rowsBody button, #manualForm input, #manualForm button, #btnUndo, #btnRedo, #btnRetryBatch, #processScope, #btnAllOn, #btnAllOff, #btnManual, #btnRun, #optMode, #optMaxSecurity, #optUniform, #optTextLayer, #optKeepName')) {
+    for (const control of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #rowsBody input, #rowsBody button, #manualForm input, #manualForm button, #btnUndo, #btnRedo, #btnRetryBatch, #processScope, #btnAllOn, #btnAllOff, #btnManual, #btnRun, #optMode, #optInternal, #optMaxSecurity, #optUniform, #optTextLayer, #optKeepName')) {
       if (on) {
         control.dataset.disabledBeforeSave = String(control.disabled);
         control.disabled = true;
@@ -722,8 +723,23 @@
       }
     }
   }
+  // Every output choice lives in the save dialog, next to the button that uses it.
+  function openSave() {
+    if (!state.details || state.saving || $('saveDialog').open) return;
+    const enabled = state.details.findings.filter((f) => f.enabled).length;
+    const pages = state.details.pages.length;
+    $('saveTitle').textContent = `Guardar ${state.details.name}`;
+    $('saveSummary').textContent = `${enabled === 1 ? 'Se ocultará 1 dato' : `Se ocultarán ${enabled} datos`} en ${pages} ${pages === 1 ? 'página' : 'páginas'}. ` +
+      'Antes de escribir el archivo se comprueba que ninguno siga legible.';
+    $('saveDialog').showModal();
+    ($('optMaxSecurity').checked ? $('optMaxSecurity') : $('optInternal')).focus();
+  }
+  function closeSave() {
+    if ($('saveDialog').open) $('saveDialog').close();
+  }
   async function savePdf() {
     if (!state.details || state.saving) return;
+    closeSave();
     const docId = state.details.id;
     setError('');
     setSaving(true);
@@ -763,6 +779,7 @@
     if (!state.details || state.saving) return;
     const retryIds = state.batch?.results.filter((entry) => !entry.ok && state.docs.some((doc) => doc.id === entry.id && doc.status === 'ready')).map((entry) => entry.id) || [];
     if (retry && !retryIds.length) { setError('No hay documentos disponibles para reintentar.'); return; }
+    closeSave();
     setError('');
     setSaving(true);
     $('progressCard').hidden = false;
@@ -806,14 +823,13 @@
   }
   async function saveLog(format) {
     if (!state.details) return;
-    $('logMenu').open = false;
     try { await api.save_log(state.details.id, format, $('optLogOriginals').checked, $('optLogCoords').checked); }
     catch (error) { setError(`Error al guardar: ${error.message || error}`); }
   }
 
   // ------------------------------------------------------------ wiring
   function wire() {
-    for (const input of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #optMaxSecurity')) {
+    for (const input of document.querySelectorAll('#detectionDetails input, #detectionDetails select, #optInternal, #optMaxSecurity')) {
       input.addEventListener('change', renderSettingsSummary);
     }
     $('btnAddFiles').addEventListener('click', () => addDocuments(() => api.pick_files()));
@@ -854,18 +870,16 @@
     $('btnViewResult').addEventListener('click', () => setView('result'));
     $('btnPanelCollapse').addEventListener('click', () => setPanel(true, { focus: true }));
     $('btnPanelExpand').addEventListener('click', () => setPanel(false, { focus: true }));
-    $('btnRailSave').addEventListener('click', savePdf);
-    document.addEventListener('click', (event) => {
-      const menu = $('logMenu');
-      if (menu.open && !menu.contains(event.target)) menu.open = false;
-    });
+    $('btnRailSave').addEventListener('click', openSave);
+    $('btnOpenSave').addEventListener('click', openSave);
+    $('btnSaveBack').addEventListener('click', closeSave);
     let collapsed = false;
     try { collapsed = localStorage.getItem('anonimato.panelCollapsed') === '1'; } catch { /* storage unavailable */ }
     setPanel(collapsed);
     $('btnAllOn').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), true));
     $('btnAllOff').addEventListener('click', () => toggle(visibleFindings().map((f) => f.id), false));
     $('typeFilter').addEventListener('change', (event) => { state.filter = event.target.value; state.current = -1; renderDetails(); });
-    for (const id of ['optMode', 'optMaxSecurity', 'optUniform', 'optTextLayer']) {
+    for (const id of ['optMode', 'optInternal', 'optMaxSecurity', 'optUniform', 'optTextLayer']) {
       $(id).addEventListener('change', async () => {
         if (state.details) {
           state.details.report = null;
@@ -888,7 +902,8 @@
     document.addEventListener('drop', (e) => e.preventDefault());
     document.addEventListener('keydown', (event) => {
       const target = event.target;
-      if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden) return;
+      if ((target instanceof Element && target.matches('input, select, textarea')) || !state.details || $('resultsCard').hidden ||
+        $('saveDialog').open) return;
       const key = event.key.toLowerCase();
       if (key.startsWith('arrow') && target instanceof Element && target.closest('.zoomed-page')) return;
       if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(key)) { event.preventDefault(); restoreReview(key === 'y' || event.shiftKey); return; }
@@ -905,7 +920,7 @@
         if (f) toggle([f.id], !f.enabled);
       } else if (key === 'm') setManual(!state.manual);
       else if (key === 'd') setPanel(!state.panelCollapsed);
-      else if (key === 'escape' && $('logMenu').open) $('logMenu').open = false;
+      else if (key === 'g') { event.preventDefault(); openSave(); }
       else if (key === 'escape' && state.manual) setManual(false);
       else return;
     });

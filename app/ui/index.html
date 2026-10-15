@@ -80,22 +80,6 @@
         <details class="settings-disclosure"><summary>Motores activos</summary><p id="backendStatus" class="section-summary"></p></details>
       </section>
 
-      <section class="sidebar-section result-settings">
-        <h2>Archivo de salida</h2>
-        <details class="settings-disclosure" id="resultDetails">
-          <summary>Opciones de salida</summary>
-          <div class="settings-content opts">
-            <label class="toggle" id="textLayerOption"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en máxima seguridad</span>
-              <small>Se genera por OCR sobre el resultado ya anonimizado.</small></label>
-            <label class="field"><span>Estilo de los cambios</span>
-              <select id="optMode"><option value="label" selected>Sustituir por [NOMBRE 1]</option><option value="blank">Borrar sin reemplazo visible</option></select></label>
-            <label class="toggle"><input type="checkbox" id="optUniform" /><span>Ocultar la longitud de los datos</span></label>
-            <label class="toggle"><input type="checkbox" id="optKeepName" /><span>Conservar el nombre del archivo</span>
-              <small>Por defecto: documento-1_anonimizado.pdf</small></label>
-          </div>
-        </details>
-      </section>
-
       <div class="sidebar-actions">
         <label class="field"><span>Documentos a analizar</span><select id="processScope"><option value="pending">Pendientes y fallidos</option><option value="selected">Documento seleccionado</option><option value="all">Todos los documentos</option></select></label>
         <button id="btnRun" class="btn primary" type="button" disabled>Analizar documentos</button>
@@ -170,6 +154,7 @@
               <span><kbd>Espacio</kbd> incluir</span>
               <span><kbd>M</kbd> ocultar zona</span>
               <span><kbd>D</kbd> panel de datos</span>
+              <span><kbd>G</kbd> guardar</span>
             </p>
           </div>
         </div>
@@ -182,7 +167,7 @@
             <kbd aria-hidden="true">D</kbd>
             <span class="rail-count" id="railCount" title="Datos que se ocultarán"></span>
             <span class="rail-label">Datos encontrados</span>
-            <button class="icon-button primary" id="btnRailSave" type="button" aria-label="Verificar y guardar PDF" title="Verificar y guardar PDF">
+            <button class="icon-button primary" id="btnRailSave" type="button" aria-haspopup="dialog" aria-label="Continuar a guardar" title="Continuar a guardar (G)">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5.5 2v4.2c0 3.3-2.3 5.8-5.5 6.8-3.2-1-5.5-3.5-5.5-6.8V3.5L8 1.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 8l1.8 1.8L10.8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
@@ -210,29 +195,62 @@
             <section id="batchResults" class="notes" aria-label="Resultado del lote" hidden><div id="batchSummary" role="status" aria-live="polite"></div><ul id="batchList"></ul><button id="btnRetryBatch" class="btn ghost small" type="button">Reintentar fallidos</button></section>
 
             <div class="panel-footer">
-              <label class="share-card"><input type="checkbox" id="optMaxSecurity" />
-                <span><strong>Voy a compartirlo fuera</strong>
-                  <small>Máxima seguridad: cada página se guarda como imagen tras tachar. El PDF pesará más.</small></span></label>
-              <button class="btn primary" id="btnPdf" type="button">Verificar y guardar PDF</button>
-              <div class="footer-row">
-                <button class="btn ghost small" id="btnAll" type="button">Guardar todos en una carpeta</button>
-                <details class="log-menu" id="logMenu">
-                  <summary class="btn ghost small">Registro</summary>
-                  <div class="log-popover">
-                    <button class="btn ghost small" id="btnCsv" type="button">Guardar registro CSV</button>
-                    <button class="btn ghost small" id="btnJson" type="button">Guardar registro JSON</button>
-                    <label class="inline-check"><input type="checkbox" id="optLogOriginals" /> Incluir valores originales</label>
-                    <label class="inline-check"><input type="checkbox" id="optLogCoords" /> Incluir coordenadas</label>
-                    <p id="logWarning" class="warning" hidden>El registro con valores originales <strong>es en sí mismo un dato personal</strong>. Guárdalo con la misma protección que el documento original.</p>
-                  </div>
-                </details>
-              </div>
+              <p class="destination-summary" id="destinationSummary"></p>
+              <button class="btn primary" id="btnOpenSave" type="button" aria-haspopup="dialog" aria-keyshortcuts="G">Continuar a guardar<kbd>G</kbd></button>
             </div>
           </div>
         </aside>
       </div>
     </section>
   </main>
+
+  <dialog class="save-dialog" id="saveDialog" aria-labelledby="saveTitle" aria-describedby="saveSummary">
+    <div class="save-head">
+      <h2 id="saveTitle">Guardar</h2>
+      <p id="saveSummary"></p>
+    </div>
+    <div class="save-body">
+      <fieldset class="destination">
+        <legend>¿Dónde va a acabar el documento?</legend>
+        <div class="destination-options">
+          <label class="destination-option"><input type="radio" name="destination" id="optInternal" value="internal" checked />
+            <span><strong>Uso interno</strong>
+              <small>Conserva el texto seleccionable y el tamaño. Los datos se eliminan del contenido del PDF, no solo se tapan.</small></span></label>
+          <label class="destination-option"><input type="radio" name="destination" id="optMaxSecurity" value="external" />
+            <span><strong>Compartir fuera</strong>
+              <small>Máxima seguridad: cada página se guarda como imagen tras tachar, sin capas ocultas. El PDF pesará más.</small></span></label>
+        </div>
+      </fieldset>
+      <div class="save-fields">
+        <label class="field"><span>Cómo se ven los datos ocultos</span>
+          <select id="optMode"><option value="label" selected>Sustituir por [NOMBRE 1]</option><option value="blank">Borrar sin reemplazo visible</option></select></label>
+        <div class="opts">
+          <label class="toggle"><input type="checkbox" id="optUniform" /><span>Ocultar también la longitud de cada dato</span></label>
+          <label class="toggle"><input type="checkbox" id="optKeepName" /><span>Conservar el nombre del archivo</span>
+            <small>Por defecto: documento-1_anonimizado.pdf</small></label>
+          <label class="toggle" id="textLayerOption"><input type="checkbox" id="optTextLayer" checked /><span>Texto buscable en el resultado</span>
+            <small>Se genera por OCR sobre las páginas ya tachadas.</small></label>
+        </div>
+      </div>
+      <details class="settings-disclosure log-menu" id="logMenu">
+        <summary>Registro de cambios (CSV o JSON)</summary>
+        <div class="log-options">
+          <label class="inline-check"><input type="checkbox" id="optLogOriginals" /> Incluir valores originales</label>
+          <label class="inline-check"><input type="checkbox" id="optLogCoords" /> Incluir coordenadas</label>
+          <p id="logWarning" class="warning" hidden>El registro con valores originales <strong>es en sí mismo un dato personal</strong>. Guárdalo con la misma protección que el documento original.</p>
+          <div class="button-row">
+            <button class="btn ghost small" id="btnCsv" type="button">Guardar CSV</button>
+            <button class="btn ghost small" id="btnJson" type="button">Guardar JSON</button>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="save-foot">
+      <button class="btn ghost" id="btnSaveBack" type="button">Volver a revisar</button>
+      <button class="btn ghost" id="btnAll" type="button">Guardar todos en una carpeta</button>
+      <button class="btn" id="btnPdf" type="button">Verificar y guardar PDF</button>
+    </div>
+  </dialog>
   <script src="app.js"></script>
 </body>
 </html>
