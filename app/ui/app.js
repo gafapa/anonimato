@@ -107,7 +107,6 @@
       el('span', { className: 'pill', textContent: s.services.gpu ? 'GPU disponible' : 'Modo CPU',
         title: Object.entries(s.services.backends || {}).map(([key, value]) => `${key}: ${value}`).join(' · ') }),
       advancedStatus,
-      el('span', { className: 'pill ok', textContent: 'Sin conexión · local' }),
     );
     const backends = Object.entries(s.services.backends || {}).filter(([, value]) => value !== 'Sin cargar');
     $('backendStatus').textContent = backends.length ? backends.map(([key, value]) => `${labelsForBackend(key)}: ${value}`).join(' · ') : 'Los motores se cargan cuando hacen falta.';
