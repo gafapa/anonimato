@@ -50,4 +50,5 @@ def test_every_interface_feature(tmp_path):
                      "batch shows individual saved results", "verification announcements are accessible",
                      "compact desktop has no horizontal page overflow"})
     expected.add("keyboard coordinate zone editing")
+    expected.add("finished documents can be reviewed while the batch continues")
     assert expected <= set(results["steps"]), expected - set(results["steps"])

@@ -50,6 +50,7 @@ class State:
     docs: dict[str, Doc] = field(default_factory=dict)
     order: list[str] = field(default_factory=list)
     busy: bool = False
+    analyzing: bool = False          # the busy operation is an analysis: finished documents stay editable
     cancel: bool = False
     progress: dict = field(default_factory=dict)
     install: dict = field(default_factory=dict)
@@ -325,6 +326,7 @@ class Api:
             if self._state.busy or self._state.install.get("running"):
                 return False
             self._state.busy = True
+            self._state.analyzing = True
             self._state.cancel = False
             self._state.progress = {"message": "Preparando…", "percent": 0}
         try:
@@ -360,6 +362,7 @@ class Api:
         finally:
             with self._lock:
                 self._state.busy = False
+                self._state.analyzing = False
                 self._state.progress = {"message": "", "percent": 100}
 
     def _progress(self, doc: Doc, timer, step: float, steps: int, label: str = ""):
@@ -548,8 +551,8 @@ class Api:
 
     def set_enabled(self, doc_id: str, finding_ids: list[str], enabled: bool) -> int:
         with self._lock:
-            self._require_editable()
             doc, analysis = self._analysis(doc_id)
+            self._require_editable(doc)
             wanted = set(finding_ids)
             changed = any(f.id in wanted and f.enabled != bool(enabled) for f in analysis.findings)
             if changed:
@@ -565,8 +568,8 @@ class Api:
 
     def add_manual(self, doc_id: str, page: int, view_rect: list[float]) -> dict:
         with self._lock:
-            self._require_editable()
             doc, analysis = self._analysis(doc_id)
+            self._require_editable(doc)
             self._validate_manual(analysis, page, view_rect)
             doc.history.record(analysis.findings)
             info = analysis.pages[page]
@@ -581,8 +584,8 @@ class Api:
 
     def remove_manual(self, doc_id: str, finding_id: str) -> bool:
         with self._lock:
-            self._require_editable()
             doc, analysis = self._analysis(doc_id)
+            self._require_editable(doc)
             before = len(analysis.findings)
             if any(f.id == finding_id and f.type == "manual" for f in analysis.findings):
                 doc.history.record(analysis.findings)
@@ -608,8 +611,8 @@ class Api:
 
     def update_manual(self, doc_id: str, finding_id: str, page: int, view_rect: list[float]) -> dict:
         with self._lock:
-            self._require_editable()
             doc, analysis = self._analysis(doc_id)
+            self._require_editable(doc)
             self._validate_manual(analysis, page, view_rect)
             finding = next((f for f in analysis.findings if f.id == finding_id and f.type == "manual"), None)
             if finding is None:
@@ -623,16 +626,19 @@ class Api:
 
     def restore_review(self, doc_id: str, redo: bool = False) -> dict:
         with self._lock:
-            self._require_editable()
             doc, analysis = self._analysis(doc_id)
+            self._require_editable(doc)
             restored = doc.history.restore(analysis.findings, redo=redo)
             if restored is not None:
                 analysis.findings = restored
                 self.invalidate_report(doc_id)
         return self.details(doc_id)
 
-    def _require_editable(self) -> None:
-        if self._state.busy or self._state.install.get("running"):
+    def _require_editable(self, doc: Doc) -> None:
+        """A document already analysed can be reviewed while the rest of the batch is analysed; nothing can be
+        edited while saving or installing models, nor a document that is being analysed again."""
+        reviewing_during_analysis = self._state.analyzing and doc.status == "ready"
+        if self._state.install.get("running") or (self._state.busy and not reviewing_during_analysis):
             raise ValueError("Espera a que termine el procesamiento antes de modificar las marcas")
 
     # ------------------------------------------------------------ previews
@@ -723,6 +729,7 @@ class Api:
     def _end(self) -> None:
         with self._lock:
             self._state.busy = False
+            self._state.analyzing = False
             self._state.progress = {"message": "", "percent": 100}
 
     def save_pdf(self, doc_id: str, raw_options: dict) -> dict:

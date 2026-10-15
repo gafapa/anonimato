@@ -6,7 +6,7 @@
     status: null, docs: [], activeId: null, details: null, page: 0, current: -1,
     manual: false, polling: false, previewTimer: null, previewSeq: 0, originalSeq: 0, filter: '',
     analysisSignature: null, view: 'compare', panelCollapsed: false, savedIds: new Set(),
-    manualEditId: null, batch: null,
+    manualEditId: null, batch: null, analyzing: false, autoPicked: false,
   };
   let api = null;
 
@@ -48,8 +48,8 @@
     if (!state.status) return;
     $('advancedSummary').textContent = state.status.advancedInstalled ? '(instalada).' : '(opcional).';
     $('textLayerOption').hidden = !$('optMaxSecurity').checked;
-    $('destinationSummary').textContent = $('optMaxSecurity').checked
-      ? 'Destino: compartir fuera · máxima seguridad' : 'Destino: uso interno · se elige al guardar';
+    $('destinationSummary').textContent = state.analyzing ? 'Podrás guardar cuando termine el análisis del lote.'
+      : $('optMaxSecurity').checked ? 'Destino: compartir fuera · máxima seguridad' : 'Destino: uso interno · se elige al guardar';
     const hasResults = state.docs.some((doc) => doc.status === 'ready');
     // Pending or failed documents are analysed first; with none left the button re-analyses everything.
     const pending = state.docs.filter((doc) => ['pending', 'failed'].includes(doc.status)).length;
@@ -61,6 +61,8 @@
       detectionSignature(analyzedSettings) === detectionSignature();
     $('sidebar').classList.toggle('reviewing', hasResults);
   }
+  // Finished documents stay editable while the rest of a batch is analysed; saving or installing locks everything.
+  function editLocked() { return state.saving || (state.polling && !state.analyzing); }
   function activeDoc() { return state.docs.find((doc) => doc.id === state.activeId) || null; }
   // Findings below this confidence are flagged for a closer look and get their own filter.
   const LOW_CONFIDENCE = 0.8;
@@ -199,7 +201,8 @@
     const caret = focused?.selectionStart;
     queue.replaceChildren();
     for (const doc of state.docs) {
-      const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos${doc.saved ? ' · guardado' : ''}${doc.error ? ' · último análisis fallido' : ''}`
+      const advanced = doc.advanced === 'running' ? ' · IA avanzada en curso' : doc.advanced === 'pending' ? ' · IA avanzada pendiente' : '';
+      const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos${advanced}${doc.saved ? ' · guardado' : ''}${doc.error ? ' · último análisis fallido' : ''}`
         : doc.status === 'processing' ? 'Analizando…'
           : doc.status === 'failed' ? `Error: ${doc.error}`
             : doc.status === 'locked' ? 'Protegido con contraseña' : `${Math.round(doc.size / 1024)} KB · pendiente`;
@@ -280,14 +283,19 @@
       const heading = $('emptyPreview').querySelector('h2');
       const text = $('emptyPreview').querySelector('p');
       if (doc?.status === 'failed') { heading.textContent = 'No se pudo procesar'; text.textContent = doc.error; }
+      else if (state.analyzing && ['processing', 'pending'].includes(doc?.status)) {
+        heading.textContent = 'Analizando documentos…';
+        text.textContent = 'Cada documento se puede revisar en cuanto termina; elígelo en la lista.';
+      }
       else if (state.docs.length) { heading.textContent = 'Documentos preparados'; text.textContent = 'Ajusta las opciones y pulsa «Analizar documentos».'; }
       else { heading.textContent = 'Añade tus documentos'; text.textContent = 'PDF, fotos o escaneos. Nada sale de este equipo.'; }
       return;
     }
     if (!state.details || state.details.id !== doc.id || state.details.revision !== doc.revision) {
+      const sameDocument = state.details?.id === doc.id;   // refreshed (the advanced AI added data): stay on the page
       state.details = await api.details(doc.id);
-      state.page = 0;
-      state.current = -1;
+      if (!sameDocument) { state.page = 0; state.current = -1; }
+      state.page = Math.min(state.page, state.details.pages.length - 1);
     }
     renderDetails();
   }
@@ -311,14 +319,16 @@
     $('resultsCard').hidden = true;
     $('emptyPreview').hidden = false;
     $('emptyPreview').querySelector('h2').textContent = 'Analizando documentos…';
-    $('emptyPreview').querySelector('p').textContent = 'La revisión aparecerá aquí al terminar.';
+    $('emptyPreview').querySelector('p').textContent = 'Cada documento se puede revisar en cuanto termina.';
+    state.analyzing = true;
+    state.autoPicked = false;
     startPolling();
   }
 
   function startPolling() {
     if (state.polling) return;
     state.polling = true;
-    setSaving(true);
+    if (state.analyzing) setAnalysisLock(true); else setSaving(true);
     $('progressCard').hidden = false;
     $('btnCancel').hidden = false;
     $('btnRun').disabled = true;
@@ -335,9 +345,13 @@
         if (info.install.done) { state.status = await api.status(); renderStatus(); }
       }
       const installing = info.install && info.install.running;
-      if (info.busy || installing) { setTimeout(tick, 400); return; }
+      if (info.busy || installing) {
+        if (state.analyzing) await followAnalysis();
+        setTimeout(tick, 400);
+        return;
+      }
       state.polling = false;
-      setSaving(false);
+      if (state.analyzing) { state.analyzing = false; setAnalysisLock(false); } else setSaving(false);
       state.status = await api.status();
       renderStatus();
       $('progressCard').hidden = true;
@@ -350,6 +364,39 @@
       await showActive();
     };
     tick();
+  }
+
+  // While a batch is analysed: open the first finished document, and refresh the open one when its review changes.
+  async function followAnalysis() {
+    const doc = activeDoc();
+    if (!state.autoPicked && !state.details) {
+      const ready = doc?.status === 'ready' ? doc : state.docs.find((item) => item.status === 'ready');
+      if (ready) {
+        state.autoPicked = true;
+        state.activeId = ready.id;
+        renderQueue();
+        await showActive();
+      }
+      return;
+    }
+    if (state.details && (doc?.status !== 'ready' || doc.revision !== state.details.revision)) {
+      if (doc?.status !== 'ready') state.details = null;
+      await showActive();
+    }
+  }
+  function setAnalysisLock(on) {
+    const controls = document.querySelectorAll('#btnOpenSave, #btnRailSave, #btnPdf, #btnAll, #btnCsv, #btnJson, #btnRetryBatch, '
+      + '#btnReset, #btnAddFiles, #btnAddFolder, #detectionDetails input, #detectionDetails select');
+    for (const control of controls) {
+      if (on) {
+        control.dataset.disabledBeforeAnalysis = String(control.disabled);
+        control.disabled = true;
+      } else if ('disabledBeforeAnalysis' in control.dataset) {
+        control.disabled = control.dataset.disabledBeforeAnalysis === 'true';
+        delete control.dataset.disabledBeforeAnalysis;
+      }
+    }
+    renderSettingsSummary();
   }
 
   // ------------------------------------------------------------ review
@@ -375,8 +422,8 @@
     $('detectionNotice').hidden = !lowText && !d.notes.length;
     $('detectionNotice').textContent = lowText ? 'Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.' : '';
     $('notes').textContent = d.notes.join(' · ');
-    $('btnUndo').disabled = !d.history?.undo || state.saving || state.polling;
-    $('btnRedo').disabled = !d.history?.redo || state.saving || state.polling;
+    $('btnUndo').disabled = !d.history?.undo || editLocked();
+    $('btnRedo').disabled = !d.history?.redo || editLocked();
     renderFilterOptions(findings);
     renderReport(d.report);
     renderTable();
@@ -494,7 +541,7 @@
   }
 
   async function restoreReview(redo = false) {
-    if (!state.details || state.saving || state.polling) return;
+    if (!state.details || editLocked()) return;
     try {
       await api.restore_review(state.details.id, redo);
       await reloadReview();
@@ -702,7 +749,7 @@
   }
   // Every output choice lives in the save dialog, next to the button that uses it.
   function openSave() {
-    if (!state.details || state.saving || $('saveDialog').open) return;
+    if (!state.details || state.saving || state.polling || $('saveDialog').open) return;
     const enabled = state.details.findings.filter((f) => f.enabled).length;
     const pages = state.details.pages.length;
     $('saveTitle').textContent = `Guardar ${state.details.name}`;
@@ -840,7 +887,7 @@
     $('btnNewZone').addEventListener('click', () => { state.manualEditId = null; $('btnCoordinates').textContent = 'Crear zona'; });
     $('manualForm').addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!state.details || state.saving || state.polling) return;
+      if (!state.details || editLocked()) return;
       const [x, y, width, height] = ['manualX', 'manualY', 'manualWidth', 'manualHeight'].map((id) => Number($(id).value) / 100);
       if (x + width > 1 || y + height > 1) { setError('La zona debe quedar dentro de la página.'); return; }
       try {

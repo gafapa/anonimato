@@ -116,3 +116,44 @@ def test_an_advanced_phase_failure_is_reported_per_document():
     doc = api._state.docs["d1"]
     assert doc.status == "ready" and doc.advanced == ""
     assert any("IA avanzada no disponible: servidor caído" in note for note in doc.analysis.notes)
+
+
+def test_finished_documents_can_be_reviewed_while_the_batch_continues():
+    api = None
+    seen = {}
+
+    def review_first_document(snapshot):
+        doc = api._state.docs["d1"]
+        finding = doc.analysis.findings[0] if doc.analysis.findings else None
+        seen["manual"] = api.add_manual("d1", 0, [0.1, 0.1, 0.2, 0.2])["type"]
+        if finding:
+            api.set_enabled("d1", [finding.id], False)
+        api._state.docs["d2"].status = "processing"
+        try:
+            api.add_manual("d2", 0, [0.1, 0.1, 0.2, 0.2])
+        except ValueError as error:
+            seen["processing"] = str(error)
+        api._state.docs["d2"].status = "ready"
+
+    api = make_api(Engine(advance=review_first_document))
+    api._state.busy = api._state.analyzing = True           # as process() leaves them for _run
+    api._run(["d1", "d2"], OPTIONS)
+    assert not api._state.busy and not api._state.analyzing
+    assert seen["manual"] == "manual" and "Espera a que termine" in seen["processing"]
+    api._state.busy, api._state.analyzing = True, False      # saving: nothing is editable
+    try:
+        api.add_manual("d1", 0, [0.3, 0.3, 0.4, 0.4])
+        raise AssertionError("editing must be blocked while saving")
+    except ValueError:
+        pass
+
+
+def test_releasing_the_base_models_keeps_the_personal_data_model_when_asked():
+    from app.engine.services import Services
+
+    services = Services(use_gpu=False)
+    services._ocr, services._faces, services._pii = object(), object(), object()
+    services.release_base(keep_pii=True)
+    assert services._ocr is None and services._faces is None and services._pii is not None
+    services.release_base(keep_pii=False)
+    assert services._pii is None

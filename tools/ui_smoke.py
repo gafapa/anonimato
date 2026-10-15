@@ -150,12 +150,17 @@ def scenario(window, api):
         wait_js(window, "document.querySelectorAll('.document-item').length === 5")
         step("queue contains five documents", True)
 
-        # ---- analysis (the cancel button is visible while it runs)
+        # ---- analysis (the cancel button is visible while it runs; finished documents open for review meanwhile)
+        js(window, "window.__reviewDuringAnalysis = false; window.__watch = setInterval(() => {"
+                   " if (!document.getElementById('resultsCard').hidden && !document.getElementById('btnCancel').hidden"
+                   " && !document.getElementById('btnUndo').closest('.review').hidden) window.__reviewDuringAnalysis = true; }, 100)")
         click(window, "btnRun")
         time.sleep(1)
         step("cancel button is visible during analysis", js(window, "!document.getElementById('btnCancel').hidden"))
         shot(window, "1_processing")
         wait_js(window, "document.getElementById('btnCancel').hidden", 900)
+        step("finished documents can be reviewed while the batch continues",
+             js(window, "clearInterval(window.__watch), window.__reviewDuringAnalysis"))
         wait_js(window, "!document.getElementById('resultsCard').hidden && document.querySelectorAll('#rowsBody tr').length > 0")
         wait_js(window, "!!document.getElementById('resultImg').getAttribute('src')", 180)
         shot(window, "2_review")
@@ -181,6 +186,7 @@ def scenario(window, api):
         js(window, "const i = document.querySelector('.unlock-row input'); i.value = '1234';"
                    "document.querySelector('.unlock-row button').click();")
         wait_js(window, "document.querySelectorAll('.unlock-row').length === 0", 60)
+        js(window, "[...document.querySelectorAll('.document-select')].find(b => b.textContent.includes('zz_')).click()")
         click(window, "btnRun")
         step("the previous review is hidden while re-analysing",
              wait_js(window, "document.getElementById('resultsCard').hidden", 10))
