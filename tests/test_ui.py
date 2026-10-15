@@ -22,7 +22,7 @@ def test_mixed_batch_retry_in_real_window(tmp_path):
                                cwd=ROOT, capture_output=True, text=True, timeout=120, check=False)
     assert output.exists(), completed.stderr[-3000:]
     result = json.loads(output.read_text(encoding="utf-8"))
-    assert completed.returncode == 0 and result["ok"], result
+    assert completed.returncode == 0 and result["ok"], (result, completed.stderr[-3000:])  # WebView2 start-up errors
 
 
 @pytest.mark.timeout(2400)
