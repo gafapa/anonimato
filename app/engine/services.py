@@ -142,8 +142,10 @@ class Services:
             self.errors.pop("llm", None)
 
     def release_base(self, keep_pii: bool = True) -> None:
-        """Free the OCR and face models (and their GPU memory) before the advanced phase; the personal-data model
-        stays when the advanced phase still needs it for handwritten text. They load again on the next analysis."""
+        """Drop the OCR and face models before the advanced phase; the personal-data model stays when the advanced
+        phase still needs it for handwritten text. They load again on the next analysis. DirectML keeps most of its
+        video memory reserved until the engine process ends, so this returns little of it (about 250 MiB measured
+        on an 8 GB GPU); the main gain of the advanced phase is loading the large model once per batch."""
         import gc
         with self._lock:
             self._ocr = None
