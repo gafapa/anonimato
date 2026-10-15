@@ -83,8 +83,12 @@
     }
   }
   function activeDoc() { return state.docs.find((doc) => doc.id === state.activeId) || null; }
+  // Findings below this confidence are flagged for a closer look and get their own filter.
+  const LOW_CONFIDENCE = 0.8;
+  const REVIEW_FILTER = '__review';
   function visibleFindings() {
     const all = state.details?.findings || [];
+    if (state.filter === REVIEW_FILTER) return all.filter((f) => f.confidence < LOW_CONFIDENCE);
     return state.filter ? all.filter((f) => f.type === state.filter) : all;
   }
 
@@ -193,6 +197,8 @@
     }
     renderSettingsSummary();
     const filter = $('typeFilter');
+    filter.append(el('option', { value: REVIEW_FILTER, textContent: 'Por revisar' }));
+    filter.options[1].dataset.label = 'Por revisar';
     for (const category of state.status.categories) {
       const option = el('option', { value: category.key, textContent: category.label });
       option.dataset.label = category.label;
@@ -410,6 +416,7 @@
   function renderFilterOptions(findings) {
     const counts = new Map();
     for (const f of findings) counts.set(f.type, (counts.get(f.type) || 0) + 1);
+    counts.set(REVIEW_FILTER, findings.filter((f) => f.confidence < LOW_CONFIDENCE).length);
     const filter = $('typeFilter');
     filter.options[0].textContent = `Todos los tipos (${findings.length})`;
     for (const option of [...filter.options].slice(1)) {
@@ -461,7 +468,7 @@
       checkbox.addEventListener('click', (event) => event.stopPropagation());
       checkbox.addEventListener('change', () => toggle([f.id], checkbox.checked));
       const confidence = Math.round(f.confidence * 100);
-      const conf = el('span', { className: 'confidence' + (confidence < 80 ? ' low' : ''), textContent: confidence < 80 ? `${confidence} % · revisar` : `${confidence} %` });
+      const conf = el('span', { className: 'confidence' + (f.confidence < LOW_CONFIDENCE ? ' low' : ''), textContent: f.confidence < LOW_CONFIDENCE ? `${confidence} % · revisar` : `${confidence} %` });
       conf.title = f.warning === 'checksum' ? 'Formato reconocido; dígito de control no válido' : (f.detail || '');
       const meta = el('div', { className: 'finding-meta' }, [
         el('span', { className: 'type-badge', textContent: f.label }), el('span', { textContent: `pág. ${f.page + 1}` }), conf,
@@ -630,7 +637,7 @@
       if (f.page !== state.page) continue;
       for (const [x0, y0, x1, y1] of f.view) {
         const box = el('div', {
-          className: `box ${f.type}` + (f.enabled ? '' : ' off') + (f.confidence < 0.8 ? ' low' : '') + (current && current.id === f.id ? ' current' : ''),
+          className: `box ${f.type}` + (f.enabled ? '' : ' off') + (f.confidence < LOW_CONFIDENCE ? ' low' : '') + (current && current.id === f.id ? ' current' : ''),
           title: `${f.label} · ${f.token} · ${Math.round(f.confidence * 100)} %`,
         });
         Object.assign(box.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });

@@ -158,6 +158,12 @@ def main() -> None:
                 window.evaluate_js("document.getElementById('btnViewResult').click(); document.getElementById('btnViewCompare').click(); document.getElementById('btnPanelCollapse').click(); document.getElementById('btnPanelExpand').click()")
                 window.evaluate_js("const f=document.getElementById('typeFilter');f.value='manual';f.dispatchEvent(new Event('change'))")
                 wait("document.querySelectorAll('#rowsBody tr').length === 1")
+                # A manual zone is certain, so the «Por revisar» filter is empty and hidden until chosen.
+                assert window.evaluate_js("document.querySelector('#typeFilter option[value=__review]').hidden")
+                window.evaluate_js("const r=document.getElementById('typeFilter');r.value='__review';r.dispatchEvent(new Event('change'))")
+                wait("document.querySelectorAll('#rowsBody tr').length === 0")
+                window.evaluate_js("const a=document.getElementById('typeFilter');a.value='';a.dispatchEvent(new Event('change'))")
+                wait("document.querySelectorAll('#rowsBody tr').length === 1")
                 # G opens the save dialog with every output choice; review shortcuts stay off while it is open.
                 window.evaluate_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'g'}))")
                 wait("document.getElementById('saveDialog').open && document.getElementById('saveSummary').textContent.includes('Se ocultará 1 dato')")
