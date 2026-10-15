@@ -27,16 +27,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .topbar { height: var(--topbar); flex: 0 0 auto; display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 236px; }
 .brand h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.steps { display: flex; align-items: center; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
-.steps li { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 6px; border-radius: 4px; }
-.steps li { position: relative; }
-.steps li + li { margin-left: 26px; }
-.steps li + li::before { content: ""; position: absolute; left: -24px; top: 50%; width: 18px; height: 1px; background: var(--border-strong); }
-.step-mark { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #8c94a3; border-radius: 50%; font-size: 11px; }
-.steps li.done .step-mark { border-color: var(--success); background: var(--success); color: transparent; position: relative; }
-.steps li.done .step-mark::after { content: ""; position: absolute; left: 6px; top: 3px; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
-.steps li.current { background: var(--text); color: #fff; font-weight: 600; }
-.steps li.current .step-mark { border-color: #fff; background: #fff; color: var(--text); }
 .engine-status { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--muted); }
 .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -263,10 +253,6 @@ tr.off td.tok { color: var(--muted); }
   .workspace { grid-template-columns: 248px minmax(0, 1fr); }
   .review { grid-template-columns: minmax(0, 1fr) 344px; }
   .brand { min-width: 0; }
-  .steps li:not(.current) { font-size: 0; gap: 0; }
-  .steps li + li { margin-left: 22px; }
-  .steps li + li::before { left: -20px; width: 14px; }
-  .steps li:not(.current) .step-mark { font-size: 11px; }
   .review-main { padding-inline: 20px; }
   .comparison-grid { gap: 16px; }
 }

@@ -143,7 +143,6 @@ def main() -> None:
                 assert window.evaluate_js("document.querySelectorAll('#batchList li').length === 2 && !document.getElementById('batchList').textContent.includes('Error al escribir')")
                 assert sorted(path.name for path in folder.glob("*.pdf")) == ["documento-1_anonimizado.pdf", "documento-2_anonimizado.pdf"]
                 assert all(doc.saved_revision == doc.revision for doc in api._state.docs.values())
-                assert window.evaluate_js("document.querySelector('[data-step=save]').classList.contains('done')")
                 # Exercise keyboard editing/history, zoom, filtering and option changes in the actual window.
                 window.evaluate_js("document.getElementById('manualForm').requestSubmit()")
                 wait("document.querySelectorAll('#rowsBody tr').length === 1")
@@ -183,7 +182,7 @@ def main() -> None:
                 wait("document.getElementById('saveDialog').open")
                 window.evaluate_js("document.getElementById('btnPdf').click()")
                 wait("!document.getElementById('saveDialog').open")
-                wait("document.querySelector('[data-step=save]').classList.contains('done')")
+                wait("document.querySelector('.document-item.active .document-status').textContent.includes('guardado')")
                 window.evaluate_js("document.getElementById('btnCsv').click(); document.getElementById('btnJson').click()")
                 wait("document.getElementById('btnRun').disabled === false")
                 previous_revision = api._state.docs['d2'].revision

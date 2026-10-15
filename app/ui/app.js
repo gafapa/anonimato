@@ -66,21 +66,6 @@
     $('settingsChangeNotice').hidden = !hasResults || !analyzedSettings || !Object.keys(analyzedSettings).length ||
       detectionSignature(analyzedSettings) === detectionSignature();
     $('sidebar').classList.toggle('reviewing', hasResults);
-    renderSteps();
-  }
-  function renderSteps() {
-    const doc = activeDoc();
-    const ready = state.docs.some((d) => d.status === 'ready');
-    const saved = !!doc?.saved;
-    const current = !state.docs.length ? 'add' : !ready ? 'analyze' : 'review';
-    const done = { add: state.docs.length > 0, analyze: ready, review: saved, save: saved };
-    for (const item of $('steps').children) {
-      const step = item.dataset.step;
-      const isCurrent = step === current && !done[step];
-      item.classList.toggle('done', done[step]);
-      item.classList.toggle('current', isCurrent);
-      if (isCurrent) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current');
-    }
   }
   function activeDoc() { return state.docs.find((doc) => doc.id === state.activeId) || null; }
   // Findings below this confidence are flagged for a closer look and get their own filter.
@@ -769,7 +754,6 @@
         state.savedIds.add(docId);
         state.docs = await api.documents();
         renderQueue();
-        renderSteps();
       }
     } catch (error) {
       setError(`Error al guardar: ${error.message || error}`);
@@ -891,7 +875,6 @@
         if (state.details) {
           state.details.report = null;
           state.savedIds.delete(state.details.id);
-          renderSteps();
           renderReport(null);
           for (const doc of state.docs.filter((item) => item.status === 'ready')) await api.invalidate_report(doc.id);
           state.docs = await api.documents();
