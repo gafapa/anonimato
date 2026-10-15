@@ -221,7 +221,8 @@ def test_llm_review_only_accepts_literal_fragments():
     sent = server.requests[0][0][0]["content"]
     assert "Juan García Pérez" not in sent and "[NOMBRE]" in sent and server.requests[0][1]
     assert llm_review.review(FakeServer(["esto no es JSON"]), text, []) == []
-    assert llm_review.review(FakeServer([RuntimeError("caído")]), text, []) == []
+    with pytest.raises(RuntimeError, match="caído"):  # the pipeline notes why the review is missing
+        llm_review.review(FakeServer([RuntimeError("caído")]), text, [])
 
 
 def test_handwriting_reader_pads_small_crops_and_cleans_output():

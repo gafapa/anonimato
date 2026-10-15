@@ -55,10 +55,11 @@ def review(server: LlamaServer, text: str, known: list[tuple[int, int, str]], ch
         piece = masked[offset:offset + chunk]
         if len(piece.strip()) < 20:
             continue
+        # A model that cannot run raises to the pipeline, which records why the review is missing.
+        answer = server.chat([{"role": "user", "content": PROMPT + piece}], max_tokens=700, json_mode=True)
         try:
-            answer = server.chat([{"role": "user", "content": PROMPT + piece}], max_tokens=700, json_mode=True)
             items = json.loads(answer).get("datos", [])
-        except Exception:  # a failed review never blocks; verification still runs
+        except (ValueError, AttributeError):  # an unusable answer only skips this chunk
             continue
         for item in items if isinstance(items, list) else []:
             fragment = str(item.get("texto", "")).strip() if isinstance(item, dict) else ""

@@ -20,7 +20,8 @@ def services():
 
 
 def _options(**overrides):
-    base = dict(categories=set(rules.SELECTABLE) - rules.DEFAULT_OFF)
+    # The qualification runs the 4B pack on CPU runners, whatever memory they have free.
+    base = dict(categories=set(rules.SELECTABLE) - rules.DEFAULT_OFF, advanced_mode="memory")
     base.update(overrides)
     return Options(**base)
 
@@ -46,6 +47,6 @@ def test_contextual_review_finds_indirect_identifiers(services):
     options = _options()
     analysis = services.call("analyze", doc.tobytes(), "caso.pdf", options)
     llm = [f for f in analysis.findings if f.source == "llm"]
-    assert llm, "the review should flag the indirect identifier / health data"
+    assert llm, f"the review should flag the indirect identifier / health data; notes: {analysis.notes}"
     joined = " ".join(f.value.lower() for f in llm)
     assert "alcalde" in joined or "ansiedad" in joined
