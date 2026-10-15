@@ -108,8 +108,6 @@
         title: Object.entries(s.services.backends || {}).map(([key, value]) => `${key}: ${value}`).join(' · ') }),
       advancedStatus,
     );
-    const backends = Object.entries(s.services.backends || {}).filter(([, value]) => value !== 'Sin cargar');
-    $('backendStatus').textContent = backends.length ? backends.map(([key, value]) => `${labelsForBackend(key)}: ${value}`).join(' · ') : 'Los motores se cargan cuando hacen falta.';
     // Engines cannot load before the first-launch download; the setup banner explains that instead.
     const errors = s.modelsMissing ? [] : Object.entries(s.errors || {});
     const banner = $('engineErrors');
@@ -180,10 +178,6 @@
       await refreshStatus();
     };
     setTimeout(tick, 500);
-  }
-
-  function labelsForBackend(key) {
-    return { ocr: 'OCR', pii: 'Datos personales', faces: 'Rostros', advanced: 'IA avanzada' }[key] || key;
   }
 
   function buildCategories() {
