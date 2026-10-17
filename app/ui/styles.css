@@ -330,3 +330,7 @@ tr.off td.tok { color: var(--muted); }
 .head-actions .icon-button { width: 34px; height: 34px; color: var(--accent); }
 .head-actions #btnReset { margin-left: 6px; color: var(--muted); }
 .head-actions #btnReset:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Interface language selection keeps its native names at every locale. */
+.language-control select { max-width: 138px; min-height: 34px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.topbar .brand { min-width: 130px; }

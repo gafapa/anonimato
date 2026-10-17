@@ -22,7 +22,7 @@ function Read-ProductionRegistration {
 $productionBefore = Read-ProductionRegistration
 function Resolve-QualificationSetup([string]$Path) {
   $resolved = (Resolve-Path -LiteralPath $Path).Path
-  if ([IO.Path]::GetFileName($resolved) -notmatch '^AnonimatoQualificationSetup-.*\.exe$') {
+  if ([IO.Path]::GetFileName($resolved) -notmatch '^(Anonimato|Privelto)QualificationSetup-.*\.exe$') {
     throw 'Only explicitly compiled qualification installers are allowed'
   }
   return $resolved
@@ -32,7 +32,7 @@ if ($PreviousInstaller) { $oldSetup = Resolve-QualificationSetup $PreviousInstal
 else { $oldSetup = $currentSetup; $PreviousVersion = $ExpectedVersion }
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
 function Run-Checked([string]$Executable, [string[]]$Arguments) {
-  $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
+  $process = Start-Process -WindowStyle Hidden -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
   if (-not $process.WaitForExit(1200000)) { $process.Kill(); throw 'Qualification process exceeded 20 minutes' }
   if ($process.ExitCode -ne 0) { throw "Qualification process failed with exit code $($process.ExitCode)" }
 }
@@ -44,7 +44,8 @@ function Install-Checked([string]$Setup, [string]$Stage) {
   if ($registration.InstallLocation.TrimEnd('\') -ne $installRoot) { throw 'Unexpected qualification registration location' }
 }
 function SelfTest-Checked([string]$Version, [string]$Stage) {
-  $binary = Join-Path $installRoot 'Anonimato.exe'
+  $binary = Join-Path $installRoot 'Privelto.exe'
+  if (-not (Test-Path -LiteralPath $binary)) { $binary = Join-Path $installRoot 'Anonimato.exe' }
   if ((Get-Item -LiteralPath $binary).VersionInfo.ProductVersion -ne $Version) { throw 'Installed binary version mismatch' }
   $report = Join-Path $evidenceRoot "$Stage-selftest.json"
   Run-Checked $binary @("--selftest=`"$report`"")
@@ -75,7 +76,7 @@ try {
   $uninstaller = Join-Path $installRoot 'unins000.exe'
   Run-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
                              "/LOG=`"$(Join-Path $evidenceRoot 'uninstall.log')`"")
-  if ((Test-Path -LiteralPath (Join-Path $installRoot 'Anonimato.exe')) -or
+  if ((Test-Path -LiteralPath (Join-Path $installRoot 'Privelto.exe')) -or
       (Test-Path -LiteralPath $dataRoot) -or (Test-Path -LiteralPath $qaKey)) {
     throw 'Qualification uninstall left application, profile data or registration behind'
   }

@@ -60,7 +60,10 @@ def exe(name: str) -> str:
 
 
 def user_data_dir() -> Path:
-    if IS_WINDOWS:
+    portable = portable_data_dir()
+    if portable is not None:
+        path = portable
+    elif IS_WINDOWS:
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home())
         path = base / "Anonimato"
     elif SYSTEM == "macos":
@@ -69,6 +72,26 @@ def user_data_dir() -> Path:
         path = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "anonimato"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def portable_data_dir() -> Path | None:
+    """Use a sibling data directory only for explicitly marked frozen portable builds."""
+    if not getattr(sys, "frozen", False):
+        return None
+    executable = Path(sys.executable).resolve()
+    root = executable.parent
+    if SYSTEM == "macos":
+        root = executable.parents[3]
+    marker = root / "privelto-portable.json"
+    if not marker.is_file():
+        return None
+    import json
+    try:
+        if json.loads(marker.read_text(encoding="utf-8")) != {"schema": 1}:
+            raise ValueError("Invalid portable marker")
+    except (OSError, ValueError) as error:
+        raise RuntimeError("Invalid Privelto portable configuration") from error
+    return root / "PriveltoData"
 
 
 def onnx_gpu_providers(available: list[str]) -> list[str]:

@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import __version__
+from . import __version__, i18n
 from .engine import document, llm_server, logs, models, perf, pipeline, review, rules
 from .engine.types import Options
 from .engine.worker import EngineError, EngineProcess
@@ -123,6 +123,7 @@ class Api:
         self._state = State()
         self._lock = threading.RLock()
         self._window = None
+        self._language = i18n.get_language()
         self._status_cache: dict | None = None
         threading.Thread(target=self._engine.ensure_started, daemon=True).start()
         threading.Thread(target=self._light.ensure_started, daemon=True).start()
@@ -143,7 +144,12 @@ class Api:
         if not pending:
             return True
         return bool(self._window.create_confirmation_dialog(
-            "Cerrar Anonimato", "Hay una operación en curso o una revisión sin guardar. ¿Quieres cerrar y descartarla?"))
+            i18n.translate("Cerrar Privelto", self._language),
+            i18n.translate("Hay una operación en curso o una revisión sin guardar. ¿Quieres cerrar y descartarla?", self._language)))
+
+    def set_language(self, language: str) -> str:
+        self._language = i18n.set_language(language)
+        return self._language
 
     # ------------------------------------------------------------ status
     def _engine_status(self) -> dict:
@@ -170,6 +176,7 @@ class Api:
         missing = bool(services.get("missing"))
         return {
             "version": VERSION,
+            "language": self._language,
             "services": services,
             "errors": services.get("errors", {}),
             "blocked": "integrity" in services.get("errors", {}) or missing,
@@ -234,7 +241,8 @@ class Api:
         import webview
         paths = self._window.create_file_dialog(
             webview.FileDialog.OPEN, allow_multiple=True,
-            file_types=("Documentos (*.pdf;*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.webp)", "Todos los archivos (*.*)"))
+            file_types=(i18n.translate("Documentos", self._language) + " (*.pdf;*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.webp)",
+                        i18n.translate("Todos los archivos", self._language) + " (*.*)"))
         return [s for s in (self._add_path(Path(p)) for p in (paths or [])) if s]
 
     def pick_folder(self, recursive: bool = False) -> list[dict]:
@@ -917,7 +925,8 @@ class Api:
 
     def import_advanced(self) -> dict:
         import webview
-        paths = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=("Paquete de IA (*.zip)",))
+        paths = self._window.create_file_dialog(webview.FileDialog.OPEN,
+                                               file_types=(i18n.translate("Paquete de IA", self._language) + " (*.zip)",))
         if not paths:
             return {"ok": False}
         with self._lock:

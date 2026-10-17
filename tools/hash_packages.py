@@ -8,8 +8,8 @@ from pathlib import Path
 
 def hash_packages(directory: Path) -> list[Path]:
     packages = sorted(path for path in directory.iterdir()
-                      if path.is_file() and path.suffix in {".exe", ".dmg", ".AppImage"}
-                      and not path.name.startswith("AnonimatoQualificationSetup-"))
+                      if path.is_file() and path.suffix in {".exe", ".dmg", ".AppImage", ".zip", ".gz"}
+                      and not path.name.startswith(("AnonimatoQualificationSetup-", "PriveltoQualificationSetup-")))
     if not packages:
         raise ValueError("No production distribution packages found")
     outputs = []

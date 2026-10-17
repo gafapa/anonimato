@@ -13,7 +13,7 @@ uv run python -m pytest tests/test_rules.py tests/test_models.py -q -k "not test
 [ -f packaging/anonimato.icns ] || uv run python packaging/make_icon.py
 
 uv run pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/anonimato.spec
-APP="dist/Anonimato.app"
+APP="dist/Privelto.app"
 
 if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
   codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$APP"
@@ -22,12 +22,12 @@ fi
 # Keep the inventory outside the signed app so its generation cannot invalidate the signature.
 uv run python tools/package_inventory.py "$APP" --output dist/component-inventory-macos.json
 
-DMG="dist/Anonimato-${VERSION}-macos-arm64.dmg"
+DMG="dist/Privelto-${VERSION}-macos-arm64.dmg"
 rm -f "$DMG"
 STAGE=$(mktemp -d)
 cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Aplicaciones"
-hdiutil create -volname "Anonimato" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "Privelto" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 
 if [ -n "${MACOS_SIGN_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ]; then
@@ -37,5 +37,5 @@ if [ -n "${MACOS_SIGN_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ]; then
   xcrun stapler staple "$DMG"
 fi
 
-"$APP/Contents/MacOS/Anonimato" "--selftest=$(pwd)/dist/selftest-macos.json" || { cat dist/selftest-macos.json; exit 1; }
+"$APP/Contents/MacOS/Privelto" "--selftest=$(pwd)/dist/selftest-macos.json" || { cat dist/selftest-macos.json; exit 1; }
 echo "Generado: $DMG"

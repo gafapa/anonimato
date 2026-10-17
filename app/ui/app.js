@@ -1,6 +1,7 @@
 'use strict';
 
 (() => {
+  const { t } = window.PriveltoI18n;
   const $ = (id) => document.getElementById(id);
   const state = {
     status: null, docs: [], activeId: null, details: null, page: 0, current: -1,
@@ -12,7 +13,7 @@
 
   // ------------------------------------------------------------ helpers
   function setError(message) {
-    $('errMsg').textContent = message || '';
+    $('errMsg').textContent = t(message || '');
     $('errMsg').hidden = !message;
   }
   function el(tag, props = {}, children = []) {
@@ -46,16 +47,16 @@
   }
   function renderSettingsSummary() {
     if (!state.status) return;
-    $('advancedSummary').textContent = state.status.advancedInstalled ? '(instalada).' : '(opcional).';
+    $('advancedSummary').textContent = state.status.advancedInstalled ? t("(instalada).") : t("(opcional).");
     $('textLayerOption').hidden = !$('optMaxSecurity').checked;
-    $('destinationSummary').textContent = state.analyzing ? 'Podrás guardar cuando termine el análisis del lote.'
-      : $('optMaxSecurity').checked ? 'Destino: compartir fuera · máxima seguridad' : 'Destino: uso interno · se elige al guardar';
+    $('destinationSummary').textContent = state.analyzing ? t("Podrás guardar cuando termine el análisis del lote.")
+      : $('optMaxSecurity').checked ? t("Destino: compartir fuera · máxima seguridad") : t("Destino: uso interno · se elige al guardar");
     const hasResults = state.docs.some((doc) => doc.status === 'ready');
     // Pending or failed documents are analysed first; with none left the button re-analyses everything.
     const pending = state.docs.filter((doc) => ['pending', 'failed'].includes(doc.status)).length;
     $('btnRun').dataset.scope = pending ? 'pending' : 'all';
-    $('btnRun').textContent = state.polling ? 'Analizando…' : pending ? `Analizar ${pending} ${pending === 1 ? 'documento' : 'documentos'}`
-      : state.docs.length ? 'Volver a analizar todo' : 'Analizar';
+    $('btnRun').textContent = state.polling ? t("Analizando…") : pending ? t("Analizar {0} {1}", pending, pending === 1 ? t("documento") : t("documentos"))
+      : state.docs.length ? t("Volver a analizar todo") : t("Analizar");
     const analyzedSettings = activeDoc()?.analysisSettings;
     $('settingsChangeNotice').hidden = !hasResults || !analyzedSettings || !Object.keys(analyzedSettings).length ||
       detectionSignature(analyzedSettings) === detectionSignature();
@@ -79,13 +80,13 @@
     renderSetup();
     const host = $('engineStatus');
     const advancedStatus = s.advancedInstalled
-      ? el('span', { className: 'pill ok', textContent: 'IA avanzada lista' })
+      ? el('span', { className: 'pill ok', textContent: t("IA avanzada lista") })
       : el('button', {
-        className: 'pill warn status-action', type: 'button', textContent: 'Instalar IA avanzada',
+        className: 'pill warn status-action', type: 'button', textContent: t("Instalar IA avanzada"),
         onclick: () => openSettings('tabAdvanced'),
       });
     host.replaceChildren(
-      el('span', { className: 'pill', textContent: s.services.gpu ? 'GPU disponible' : 'Modo CPU',
+      el('span', { className: 'pill', textContent: s.services.gpu ? t("GPU disponible") : t("Modo CPU"),
         title: Object.entries(s.services.backends || {}).map(([key, value]) => `${key}: ${value}`).join(' · ') }),
       advancedStatus,
     );
@@ -93,12 +94,12 @@
     const errors = s.modelsMissing ? [] : Object.entries(s.errors || {});
     const banner = $('engineErrors');
     banner.hidden = !errors.length;
-    const labels = { integrity: 'Integridad', ocr: 'OCR', pii: 'IA de datos personales', faces: 'Rostros', llm: 'IA avanzada', engine: 'Motor', gpu: 'GPU' };
+    const labels = { integrity: t("Integridad"), ocr: 'OCR', pii: t("IA de datos personales"), faces: t("Rostros"), llm: t("IA avanzada"), engine: t("Motor"), gpu: 'GPU' };
     banner.replaceChildren(
-      el('strong', { textContent: s.blocked ? 'Procesamiento bloqueado por seguridad. ' : 'Atención: ' }),
-      ...errors.map(([key, message]) => el('span', { textContent: `${labels[key] || key}: ${message}. ` })),
+      el('strong', { textContent: s.blocked ? t("Procesamiento bloqueado por seguridad. ") : t("Atención: ") }),
+      ...errors.map(([key, message]) => el('span', { textContent: `${labels[key] || key}: ${t(message)}. ` })),
     );
-    if (s.blocked) banner.append(el('button', { type: 'button', className: 'btn ghost small', textContent: 'Volver a comprobar',
+    if (s.blocked) banner.append(el('button', { type: 'button', className: 'btn ghost small', textContent: t("Volver a comprobar"),
       disabled: state.polling || state.saving, onclick: async () => { if (await api.recheck_integrity()) startPolling(); } }));
     $('btnRun').dataset.blocked = s.blocked ? '1' : '';
     for (const label of document.querySelectorAll('.toggle.advanced')) {
@@ -108,13 +109,13 @@
     renderSettingsSummary();
     const box = $('advancedBox');
     if (s.advancedInstalled) {
-      box.textContent = `IA avanzada instalada (${s.advancedLabel}): lectura de manuscritos y revisión contextual.`;
+      box.textContent = t("IA avanzada instalada ({0}): lectura de manuscritos y revisión contextual.", s.advancedLabel);
       return;
     }
     box.replaceChildren(
-      el('p', { textContent: `La IA avanzada (${s.advancedLabel}) lee letra manuscrita y hace una revisión contextual. Solo se descargan modelos; ningún documento sale del equipo.` }),
-      el('button', { className: 'btn ghost small', id: 'btnInstall', textContent: 'Descargar IA avanzada', onclick: installAdvanced }),
-      el('button', { className: 'btn ghost small', textContent: 'Importar paquete sin conexión (.zip)', onclick: importAdvanced }),
+      el('p', { textContent: t("La IA avanzada ({0}) lee letra manuscrita y hace una revisión contextual. Solo se descargan modelos; ningún documento sale del equipo.", s.advancedLabel) }),
+      el('button', { className: 'btn ghost small', id: 'btnInstall', textContent: t("Descargar IA avanzada"), onclick: installAdvanced }),
+      el('button', { className: 'btn ghost small', textContent: t("Importar paquete sin conexión (.zip)"), onclick: importAdvanced }),
       el('div', { className: 'progress-track', id: 'installTrack', hidden: true }, [el('div', { className: 'progress-fill', id: 'installFill' })]),
       el('p', { id: 'installText' }),
     );
@@ -129,10 +130,10 @@
     if (banner.hidden) return;
     const failed = Boolean(setup.error);
     $('setupText').replaceChildren(
-      el('span', { textContent: setup.message || 'Faltan los modelos de IA necesarios (≈ 700 MB). Solo se descargan modelos; ningún documento sale del equipo.' }),
+      el('span', { textContent: t(setup.message || "Faltan los modelos de IA necesarios (≈ 700 MB). Solo se descargan modelos; ningún documento sale del equipo.") }),
       ...(setup.running ? [] : [
-        el('button', { type: 'button', className: 'btn ghost small', textContent: 'Reintentar la descarga', onclick: retrySetup }),
-        el('button', { type: 'button', className: 'btn ghost small', textContent: 'Importar paquete sin conexión (.zip)', onclick: importSetup }),
+        el('button', { type: 'button', className: 'btn ghost small', textContent: t("Reintentar la descarga"), onclick: retrySetup }),
+        el('button', { type: 'button', className: 'btn ghost small', textContent: t("Importar paquete sin conexión (.zip)"), onclick: importSetup }),
       ]),
     );
     $('setupFill').style.width = `${setup.percent || 0}%`;
@@ -167,14 +168,14 @@
     for (const category of state.status.categories) {
       const input = el('input', { type: 'checkbox', checked: category.default });
       input.dataset.cat = category.key;
-      grid.append(el('label', { className: 'cat' }, [input, el('span', { textContent: category.label })]));
+      grid.append(el('label', { className: 'cat' }, [input, el('span', { textContent: t(category.label) })]));
     }
     renderSettingsSummary();
     const filter = $('typeFilter');
-    filter.append(el('option', { value: REVIEW_FILTER, textContent: 'Por revisar' }));
-    filter.options[1].dataset.label = 'Por revisar';
+    filter.append(el('option', { value: REVIEW_FILTER, textContent: t("Por revisar") }));
+    filter.options[1].dataset.label = t("Por revisar");
     for (const category of state.status.categories) {
-      const option = el('option', { value: category.key, textContent: category.label });
+      const option = el('option', { value: category.key, textContent: t(category.label) });
       option.dataset.label = category.label;
       filter.append(option);
     }
@@ -201,20 +202,20 @@
     const caret = focused?.selectionStart;
     queue.replaceChildren();
     for (const doc of state.docs) {
-      const advanced = doc.advanced === 'running' ? ' · IA avanzada en curso' : doc.advanced === 'pending' ? ' · IA avanzada pendiente' : '';
-      const status = doc.status === 'ready' ? `${doc.pages} pág. · ${doc.findings} hallazgos${advanced}${doc.saved ? ' · guardado' : ''}${doc.error ? ' · último análisis fallido' : ''}`
-        : doc.status === 'processing' ? 'Analizando…'
-          : doc.status === 'failed' ? `Error: ${doc.error}`
-            : doc.status === 'locked' ? 'Protegido con contraseña' : `${Math.round(doc.size / 1024)} KB · pendiente`;
+      const advanced = doc.advanced === 'running' ? t(" · IA avanzada en curso") : doc.advanced === 'pending' ? t(" · IA avanzada pendiente") : '';
+      const status = doc.status === 'ready' ? t("{0} pág. · {1} hallazgos{2}{3}{4}", doc.pages, doc.findings, advanced, doc.saved ? ' · ' + t('guardado') : '', doc.error ? t(" · último análisis fallido") : '')
+        : doc.status === 'processing' ? t("Analizando…")
+          : doc.status === 'failed' ? t("Error: {0}", t(doc.error))
+            : doc.status === 'locked' ? t("Protegido con contraseña") : `${Math.round(doc.size / 1024)} KB · pendiente`;
       const select = el('button', { className: 'document-select', type: 'button', disabled: false }, [
         el('span', { className: 'document-name', textContent: doc.name }),
         el('span', { className: `document-status ${doc.status}`, textContent: status }),
       ]);
       select.addEventListener('click', () => selectDoc(doc.id));
-      const remove = el('button', { className: 'document-remove', type: 'button', textContent: 'Quitar', disabled: state.saving || state.polling });
-      remove.setAttribute('aria-label', `Quitar ${doc.name}`);
+      const remove = el('button', { className: 'document-remove', type: 'button', textContent: t("Quitar"), disabled: state.saving || state.polling });
+      remove.setAttribute('aria-label', t("Quitar {0}", doc.name));
       remove.addEventListener('click', async () => {
-        if (doc.reviewed && !doc.saved && !window.confirm('Este documento tiene una revisión sin guardar. ¿Quieres quitarlo y descartarla?')) return;
+        if (doc.reviewed && !doc.saved && !window.confirm(t("Este documento tiene una revisión sin guardar. ¿Quieres quitarlo y descartarla?"))) return;
         if (await api.remove(doc.id)) {
           if (state.activeId === doc.id) { state.activeId = null; state.details = null; }
           await refreshDocuments();
@@ -222,11 +223,11 @@
       });
       const item = el('div', { className: 'document-item' + (doc.id === state.activeId ? ' active' : '') }, [select, remove]);
       if (doc.status === 'locked') {
-        const input = el('input', { type: 'password', placeholder: 'Contraseña del PDF', className: 'password' });
-        input.setAttribute('aria-label', `Contraseña de ${doc.name}`);
+        const input = el('input', { type: 'password', placeholder: t("Contraseña del PDF"), className: 'password' });
+        input.setAttribute('aria-label', t("Contraseña de {0}", doc.name));
         input.dataset.doc = doc.id;
         input.value = drafts.get(String(doc.id)) || '';
-        const unlock = el('button', { className: 'btn ghost small', type: 'button', textContent: 'Abrir' });
+        const unlock = el('button', { className: 'btn ghost small', type: 'button', textContent: t("Abrir") });
         const submit = async () => {
           const result = await api.unlock(doc.id, input.value);
           input.value = '';
@@ -269,7 +270,7 @@
     state.page = 0;
     state.current = -1;
     state.manualEditId = null;
-    $('btnCoordinates').textContent = 'Crear zona';
+    $('btnCoordinates').textContent = t("Crear zona");
     renderQueue();
     await showActive();
   }
@@ -282,13 +283,13 @@
     if (!ready) {
       const heading = $('emptyPreview').querySelector('h2');
       const text = $('emptyPreview').querySelector('p');
-      if (doc?.status === 'failed') { heading.textContent = 'No se pudo procesar'; text.textContent = doc.error; }
+      if (doc?.status === 'failed') { heading.textContent = t("No se pudo procesar"); text.textContent = t(doc.error); }
       else if (state.analyzing && ['processing', 'pending'].includes(doc?.status)) {
-        heading.textContent = 'Analizando documentos…';
-        text.textContent = 'Cada documento se puede revisar en cuanto termina; elígelo en la lista.';
+        heading.textContent = t("Analizando documentos…");
+        text.textContent = t("Cada documento se puede revisar en cuanto termina; elígelo en la lista.");
       }
-      else if (state.docs.length) { heading.textContent = 'Documentos preparados'; text.textContent = 'Ajusta las opciones y pulsa «Analizar documentos».'; }
-      else { heading.textContent = 'Añade tus documentos'; text.textContent = 'PDF, fotos o escaneos. Nada sale de este equipo.'; }
+      else if (state.docs.length) { heading.textContent = t("Documentos preparados"); text.textContent = t("Ajusta las opciones y pulsa «Analizar documentos»."); }
+      else { heading.textContent = t("Añade tus documentos"); text.textContent = t("PDF, fotos o escaneos. Nada sale de este equipo."); }
       return;
     }
     if (!state.details || state.details.id !== doc.id || state.details.revision !== doc.revision) {
@@ -306,20 +307,20 @@
     const scope = $('btnRun').dataset.scope || 'pending';
     const ids = state.docs.filter((doc) => doc.status !== 'locked' &&
       (scope === 'all' || ['pending', 'failed'].includes(doc.status))).map((doc) => doc.id);
-    if (!ids.length) { setError('No hay documentos que analizar. Añade documentos o desbloquea los protegidos.'); return; }
+    if (!ids.length) { setError(t("No hay documentos que analizar. Añade documentos o desbloquea los protegidos.")); return; }
     if (state.docs.some((doc) => ids.includes(doc.id) && doc.reviewed) &&
-        !window.confirm('Se conservarán las zonas manuales si el archivo y sus páginas no han cambiado. Los hallazgos automáticos y su selección se recalcularán. ¿Continuar?')) return;
+        !window.confirm(t("Se conservarán las zonas manuales si el archivo y sus páginas no han cambiado. Los hallazgos automáticos y su selección se recalcularán. ¿Continuar?"))) return;
     let started;
     try { started = await api.process(options(), ids); }
     catch (error) { setError(error.message || String(error)); return; }
-    if (!started) { setError('Ya hay un proceso en curso.'); return; }
+    if (!started) { setError(t("Ya hay un proceso en curso.")); return; }
     state.analysisSignature = detectionSignature();
     state.details = null;
     setManual(false);
     $('resultsCard').hidden = true;
     $('emptyPreview').hidden = false;
-    $('emptyPreview').querySelector('h2').textContent = 'Analizando documentos…';
-    $('emptyPreview').querySelector('p').textContent = 'Cada documento se puede revisar en cuanto termina.';
+    $('emptyPreview').querySelector('h2').textContent = t("Analizando documentos…");
+    $('emptyPreview').querySelector('p').textContent = t("Cada documento se puede revisar en cuanto termina.");
     state.analyzing = true;
     state.autoPicked = false;
     startPolling();
@@ -332,15 +333,15 @@
     $('progressCard').hidden = false;
     $('btnCancel').hidden = false;
     $('btnRun').disabled = true;
-    $('btnRun').textContent = 'Analizando…';
+    $('btnRun').textContent = t("Analizando…");
     const tick = async () => {
       const info = await api.poll();
       $('progressFill').style.width = `${info.progress.percent || 0}%`;
-      $('progressText').textContent = info.progress.message || '';
+      $('progressText').textContent = t(info.progress.message || '');
       state.docs = info.documents;
       renderQueue();
       if (info.install && Object.keys(info.install).length && $('installText')) {
-        $('installText').textContent = info.install.message || '';
+        $('installText').textContent = t(info.install.message || '');
         $('installFill').style.width = `${info.install.percent || 0}%`;
         if (info.install.done) { state.status = await api.status(); renderStatus(); }
       }
@@ -360,7 +361,7 @@
       const firstReady = state.docs.find((doc) => doc.status === 'ready');
       if (activeDoc()?.status !== 'ready' && firstReady) state.activeId = firstReady.id;
       const failed = state.docs.filter((doc) => doc.error);
-      if (failed.length) setError(failed.map((doc) => `${doc.name}: ${doc.error}`).join(' · '));
+      if (failed.length) setError(failed.map((doc) => `${doc.name}: ${t(doc.error)}`).join(' · '));
       await showActive();
     };
     tick();
@@ -405,23 +406,23 @@
     const findings = d.findings;
     if (state.manualEditId && !findings.some((f) => f.id === state.manualEditId && f.type === 'manual')) {
       state.manualEditId = null;
-      $('btnCoordinates').textContent = 'Crear zona';
+      $('btnCoordinates').textContent = t("Crear zona");
     }
     const enabled = findings.filter((f) => f.enabled);
     $('currentFileName').textContent = d.name;
     const faces = findings.filter((f) => f.type === 'face').length;
     const stats = [
-      [d.pages.length, d.pages.length === 1 ? 'página' : 'páginas'], [findings.length, 'hallazgos'],
-      [enabled.length, 'incluidos'], ...(faces ? [[faces, faces === 1 ? 'rostro' : 'rostros']] : []),
-      [`${d.seconds} s`, 'de análisis'],
+      [d.pages.length, d.pages.length === 1 ? t("página") : t("páginas")], [findings.length, t("hallazgos")],
+      [enabled.length, t("incluidos")], ...(faces ? [[faces, faces === 1 ? t("rostro") : t("rostros")]] : []),
+      [`${d.seconds} s`, t("de análisis")],
     ];
     $('statsHost').replaceChildren(...stats.flatMap(([value, label], index) => [
       ...(index ? [' · '] : []), el('b', { textContent: String(value) }), ` ${label}`,
     ]));
     const lowText = d.nativeChars / Math.max(1, d.pages.length) < 30;
     $('detectionNotice').hidden = !lowText && !d.notes.length;
-    $('detectionNotice').textContent = lowText ? 'Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.' : '';
-    $('notes').textContent = d.notes.join(' · ');
+    $('detectionNotice').textContent = lowText ? t("Documento escaneado o con poco texto: revisa con atención cada página y usa «Ocultar zona» si falta algo.") : '';
+    $('notes').textContent = d.notes.map((note) => t(note)).join(' · ');
     $('btnUndo').disabled = !d.history?.undo || editLocked();
     $('btnRedo').disabled = !d.history?.redo || editLocked();
     renderFilterOptions(findings);
@@ -435,10 +436,10 @@
     for (const f of findings) counts.set(f.type, (counts.get(f.type) || 0) + 1);
     counts.set(REVIEW_FILTER, findings.filter((f) => f.confidence < LOW_CONFIDENCE).length);
     const filter = $('typeFilter');
-    filter.options[0].textContent = `Todos los tipos (${findings.length})`;
+    filter.options[0].textContent = t("Todos los tipos ({0})", findings.length);
     for (const option of [...filter.options].slice(1)) {
       const count = counts.get(option.value) || 0;
-      option.textContent = `${option.dataset.label} (${count})`;
+      option.textContent = `${t(option.dataset.label)} (${count})`;
       option.hidden = count === 0 && option.value !== state.filter;
     }
   }
@@ -450,23 +451,23 @@
     card.className = 'verify-card ' + (report.ok ? 'ok' : 'fail');
     const children = [el('strong', {
       textContent: report.ok
-        ? `Verificación superada: 0 restos en ${report.objects} objetos y ${report.pages} páginas (${report.values} valores comprobados).`
-        : `Verificación fallida: ${report.leaks.length} resto(s). No se ha guardado el archivo.`,
+        ? t("Verificación superada: 0 restos en {0} objetos y {1} páginas ({2} valores comprobados).", report.objects, report.pages, report.values)
+        : t("Verificación fallida: {0} resto(s). No se ha guardado el archivo.", report.leaks.length),
     })];
-    if (report.ok && savedPath) children.push(el('p', { className: 'saved-path', textContent: `Guardado en ${savedPath}` }));
+    if (report.ok && savedPath) children.push(el('p', { className: 'saved-path', textContent: t("Guardado en {0}", savedPath) }));
     if (!report.ok) {
       children.push(el('ul', {}, report.leaks.map((leak) => {
         const located = leak.page !== null && leak.page !== undefined && leak.view && leak.view.length;
         // The engine masks original values ("…") so they never reach logs; only show a value it kept.
         const value = leak.value && leak.value !== '…' ? ` «${leak.value}»` : '';
         const text = `${leak.where}: ${leak.detail} (${leak.check})${value}`
-          + (located ? ' · ver en la página' : leak.page === null ? ' · en la estructura del archivo' : '');
+          + (located ? t(" · ver en la página") : leak.page === null ? t(" · en la estructura del archivo") : '');
         if (!located) return el('li', { textContent: text });
         const link = el('button', { type: 'button', className: 'leak-link', textContent: text });
         link.addEventListener('click', () => { state.page = leak.page; renderPage(); });
         return el('li', {}, [link]);
       })));
-      children.push(el('p', { textContent: 'Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o activa «Voy a compartirlo fuera» y vuelve a guardar.' }));
+      children.push(el('p', { textContent: t("Los restos están marcados en rojo sobre el resultado. Añade una zona manual encima o activa «Voy a compartirlo fuera» y vuelve a guardar.") }));
     }
     if (report.warnings?.length) {
       children.push(el('ul', { className: 'warn-list' }, report.warnings.map((w) => el('li', { textContent: w }))));
@@ -481,14 +482,14 @@
     const list = visibleFindings();
     list.forEach((f, index) => {
       const checkbox = el('input', { type: 'checkbox', checked: f.enabled, disabled: state.saving });
-      checkbox.setAttribute('aria-label', `Incluir ${f.label} de la página ${f.page + 1}`);
+      checkbox.setAttribute('aria-label', t("Incluir {0} de la página {1}", t(f.label), f.page + 1));
       checkbox.addEventListener('click', (event) => event.stopPropagation());
       checkbox.addEventListener('change', () => toggle([f.id], checkbox.checked));
       const confidence = Math.round(f.confidence * 100);
       const conf = el('span', { className: 'confidence' + (f.confidence < LOW_CONFIDENCE ? ' low' : ''), textContent: f.confidence < LOW_CONFIDENCE ? `${confidence} % · revisar` : `${confidence} %` });
-      conf.title = f.warning === 'checksum' ? 'Formato reconocido; dígito de control no válido' : (f.detail || '');
+      conf.title = f.warning === 'checksum' ? t("Formato reconocido; dígito de control no válido") : (f.detail || '');
       const meta = el('div', { className: 'finding-meta' }, [
-        el('span', { className: 'type-badge', textContent: f.label }), el('span', { textContent: `pág. ${f.page + 1}` }), conf,
+        el('span', { className: 'type-badge', textContent: t(f.label) }), el('span', { textContent: t("pág. {0}", f.page + 1) }), conf,
       ]);
       const value = el('td', { className: 'orig' }, [
         meta, el('span', { className: 'orig-value', textContent: f.value ?? `(${f.detail || f.label})` }),
@@ -499,7 +500,7 @@
       ]);
       row.addEventListener('click', () => focusFinding(index));
       if (f.type === 'manual') {
-        const del = el('button', { className: 'btn ghost small', textContent: 'Borrar', disabled: state.saving });
+        const del = el('button', { className: 'btn ghost small', textContent: t("Borrar"), disabled: state.saving });
         del.addEventListener('click', async (event) => {
           event.stopPropagation();
           if (state.saving) return;
@@ -511,14 +512,14 @@
       body.append(row);
     });
     const enabled = state.details.findings.filter((f) => f.enabled).length;
-    $('rowsCount').textContent = `${enabled} de ${state.details.findings.length} se ocultarán`;
+    $('rowsCount').textContent = t("{0} de {1} se ocultarán", enabled, state.details.findings.length);
     $('railCount').textContent = String(enabled);
   }
 
   function sourceLabel(source) {
     return {
-      text: 'texto del PDF', ai: 'IA de datos personales', ocr: 'OCR', handwriting: 'manuscrito', propagation: 'repetición',
-      llm: 'revisión IA', face: 'detector de rostros', signature: 'detector de firmas', manual: 'manual', form: 'formulario',
+      text: t("texto del PDF"), ai: t("IA de datos personales"), ocr: 'OCR', handwriting: t('manuscrito'), propagation: t("repetición"),
+      llm: t("revisión IA"), face: t("detector de rostros"), signature: t("detector de firmas"), manual: t('manual'), form: t('formulario'),
     }[source] || source;
   }
 
@@ -556,7 +557,7 @@
     if (f.page !== state.page) { state.page = f.page; renderPage(); } else { drawBoxes(); }
     renderTable();
     state.manualEditId = f.type === 'manual' ? f.id : null;
-    $('btnCoordinates').textContent = state.manualEditId ? 'Actualizar zona seleccionada' : 'Crear zona';
+    $('btnCoordinates').textContent = state.manualEditId ? t("Actualizar zona seleccionada") : t("Crear zona");
     if (state.manualEditId) {
       const [x0, y0, x1, y1] = f.view[0];
       for (const [id, value] of [['manualX', x0], ['manualY', y0], ['manualWidth', x1 - x0], ['manualHeight', y1 - y0]]) $(id).value = (value * 100).toFixed(2);
@@ -571,9 +572,9 @@
     state.page = Math.max(0, Math.min(state.page, d.pages.length - 1));
     if (state.manualEditId && !d.findings.some((f) => f.id === state.manualEditId && f.page === state.page)) {
       state.manualEditId = null;
-      $('btnCoordinates').textContent = 'Crear zona';
+      $('btnCoordinates').textContent = t("Crear zona");
     }
-    $('pageIndicator').textContent = `Página ${state.page + 1} de ${d.pages.length}`;
+    $('pageIndicator').textContent = t("Página {0} de {1}", state.page + 1, d.pages.length);
     $('btnPrevPage').disabled = state.page === 0;
     $('btnNextPage').disabled = state.page === d.pages.length - 1;
     const zoom = Number($('pageZoom').value);
@@ -622,7 +623,7 @@
           drawLeaks();
         }
       } catch (error) {
-        setError(`No se pudo generar la vista previa: ${error.message || error}`);
+        setError(t("No se pudo generar la vista previa: {0}", error.message || error));
         wrap.classList.remove('loading-preview');
       }
     }, 200);
@@ -710,7 +711,7 @@
     if (on && state.saving) return;
     state.manual = on;
     $('btnManual').setAttribute('aria-pressed', String(on));
-    $('btnManualLabel').textContent = on ? 'Arrastra sobre la página…' : 'Ocultar zona';
+    $('btnManualLabel').textContent = on ? t("Arrastra sobre la página…") : t("Ocultar zona");
     $('originalWrap').classList.toggle('manual-mode', on);
     $('resultWrap').classList.toggle('manual-mode', on);
   }
@@ -752,9 +753,9 @@
     if (!state.details || state.saving || state.polling || $('saveDialog').open) return;
     const enabled = state.details.findings.filter((f) => f.enabled).length;
     const pages = state.details.pages.length;
-    $('saveTitle').textContent = `Guardar ${state.details.name}`;
-    $('saveSummary').textContent = `${enabled === 1 ? 'Se ocultará 1 dato' : `Se ocultarán ${enabled} datos`} en ${pages} ${pages === 1 ? 'página' : 'páginas'}. ` +
-      'Antes de escribir el archivo se comprueba que ninguno siga legible.';
+    $('saveTitle').textContent = t("Guardar {0}", state.details.name);
+    $('saveSummary').textContent = t("{0} en {1} {2}. ", enabled === 1 ? t("Se ocultará 1 dato") : t("Se ocultarán {0} datos", enabled), pages, pages === 1 ? t("página") : t("páginas")) +
+      t("Antes de escribir el archivo se comprueba que ninguno siga legible.");
     $('saveDialog').showModal();
     ($('optMaxSecurity').checked ? $('optMaxSecurity') : $('optInternal')).focus();
   }
@@ -785,12 +786,12 @@
     setError('');
     setSaving(true);
     $('progressCard').hidden = false;
-    $('progressText').textContent = 'Generando y verificando…';
+    $('progressText').textContent = t("Generando y verificando…");
     const ticker = setInterval(async () => {
       const info = await api.poll();
       if (info.busy) {
         $('progressFill').style.width = `${info.progress.percent || 0}%`;
-        $('progressText').textContent = info.progress.message || 'Generando y verificando…';
+        $('progressText').textContent = t(info.progress.message || "Generando y verificando…");
       }
     }, 500);
     try {
@@ -802,13 +803,13 @@
       }
       if (!result.ok) setError(result.message);
       else if (result.saved) {
-        $('progressText').textContent = `Guardado: ${result.path}`;
+        $('progressText').textContent = t("Guardado: {0}", result.path);
         state.savedIds.add(docId);
         state.docs = await api.documents();
         renderQueue();
       }
     } catch (error) {
-      setError(`Error al guardar: ${error.message || error}`);
+      setError(t("Error al guardar: {0}", error.message || error));
     } finally {
       clearInterval(ticker);
       setSaving(false);
@@ -818,7 +819,7 @@
   async function saveAll(retry = false) {
     if (!state.details || state.saving) return;
     const retryIds = state.batch?.results.filter((entry) => !entry.ok && state.docs.some((doc) => doc.id === entry.id && doc.status === 'ready')).map((entry) => entry.id) || [];
-    if (retry && !retryIds.length) { setError('No hay documentos disponibles para reintentar.'); return; }
+    if (retry && !retryIds.length) { setError(t("No hay documentos disponibles para reintentar.")); return; }
     closeSave();
     setError('');
     setSaving(true);
@@ -827,14 +828,14 @@
       const info = await api.poll();
       if (info.busy) {
         $('progressFill').style.width = `${info.progress.percent || 0}%`;
-        $('progressText').textContent = info.progress.message || '';
+        $('progressText').textContent = t(info.progress.message || '');
       }
     }, 500);
     let result;
     try {
       result = retry && state.batch ? await api.export_folder(state.batch.folder, options(), retryIds) : await api.save_all(options());
     } catch (error) {
-      setError(`Error al guardar: ${error.message || error}`);
+      setError(t("Error al guardar: {0}", error.message || error));
       return;
     } finally {
       clearInterval(ticker);
@@ -843,7 +844,7 @@
     if (result.message) setError(result.message);
     else if (result.folder) {
       $('progressCard').hidden = false;
-      $('progressText').textContent = `${result.saved} guardados${result.failed ? `, ${result.failed} pendientes de corregir` : ''} en ${result.folder}`;
+      $('progressText').textContent = t("{0} guardados{1} en {2}", result.saved, result.failed ? t(", {0} pendientes de corregir", result.failed) : '', result.folder);
       // The batch summary in the findings panel keeps the details; the sidebar only flashes the outcome.
       setTimeout(() => { if (!state.polling && !state.saving) $('progressCard').hidden = true; }, 2500);
     }
@@ -853,8 +854,8 @@
       state.batch = result;
       state.batch.results = [...entries.values()];
       $('batchResults').hidden = false;
-      $('batchSummary').textContent = result.reportPath ? `Informe del último intento: ${result.reportPath}` : (result.message || 'Informe no guardado');
-      const labels = { saved: 'Guardado', verification_blocked: 'Bloqueado por verificación', processing_error: 'Error de procesamiento', write_error: 'Error al escribir' };
+      $('batchSummary').textContent = result.reportPath ? t("Informe del último intento: {0}", result.reportPath) : (result.message || t("Informe no guardado"));
+      const labels = { saved: 'Guardado', verification_blocked: t("Bloqueado por verificación"), processing_error: t("Error de procesamiento"), write_error: t("Error al escribir") };
       $('batchList').replaceChildren(...state.batch.results.map((entry) => el('li', { textContent: `${state.docs.find((doc) => doc.id === entry.id)?.name || entry.documento}: ${labels[entry.status] || entry.status}${entry.error ? ` · ${entry.error}` : ''}` })));
       $('btnRetryBatch').hidden = !state.batch.results.some((entry) => !entry.ok);
     }
@@ -866,7 +867,7 @@
   async function saveLog(format) {
     if (!state.details) return;
     try { await api.save_log(state.details.id, format, $('optLogOriginals').checked, $('optLogCoords').checked); }
-    catch (error) { setError(`Error al guardar: ${error.message || error}`); }
+    catch (error) { setError(t("Error al guardar: {0}", error.message || error)); }
   }
 
   // ------------------------------------------------------------ wiring
@@ -884,12 +885,12 @@
     $('btnUndo').addEventListener('click', () => restoreReview());
     $('btnRedo').addEventListener('click', () => restoreReview(true));
     $('pageZoom').addEventListener('change', renderPage);
-    $('btnNewZone').addEventListener('click', () => { state.manualEditId = null; $('btnCoordinates').textContent = 'Crear zona'; });
+    $('btnNewZone').addEventListener('click', () => { state.manualEditId = null; $('btnCoordinates').textContent = t("Crear zona"); });
     $('manualForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!state.details || editLocked()) return;
       const [x, y, width, height] = ['manualX', 'manualY', 'manualWidth', 'manualHeight'].map((id) => Number($(id).value) / 100);
-      if (x + width > 1 || y + height > 1) { setError('La zona debe quedar dentro de la página.'); return; }
+      if (x + width > 1 || y + height > 1) { setError(t("La zona debe quedar dentro de la página.")); return; }
       try {
         const rect = [x, y, x + width, y + height];
         if (state.manualEditId && state.details.findings.some((f) => f.id === state.manualEditId && f.type === 'manual')) await api.update_manual(state.details.id, state.manualEditId, state.page, rect);
@@ -902,7 +903,7 @@
     $('btnJson').addEventListener('click', () => saveLog('json'));
     $('optLogOriginals').addEventListener('change', () => { $('logWarning').hidden = !$('optLogOriginals').checked; });
     $('btnReset').addEventListener('click', async () => {
-      if (state.docs.some((doc) => doc.reviewed && !doc.saved) && !window.confirm('Hay revisiones sin guardar. ¿Quieres vaciar la lista y descartarlas?')) return;
+      if (state.docs.some((doc) => doc.reviewed && !doc.saved) && !window.confirm(t("Hay revisiones sin guardar. ¿Quieres vaciar la lista y descartarlas?"))) return;
       if (await api.clear()) { state.activeId = null; state.details = null; state.analysisSignature = null; await refreshDocuments(); }
     });
     $('btnPrevPage').addEventListener('click', () => { state.page -= 1; renderPage(); });
@@ -985,6 +986,24 @@
   async function init() {
     api = window.pywebview.api;
     state.status = await api.status();
+    window.PriveltoI18n.apply(state.status.language || 'es');
+    $('interfaceLanguage').addEventListener('change', async (event) => {
+      const previous = window.PriveltoI18n.language;
+      try {
+        const language = await api.set_language(event.target.value);
+        window.PriveltoI18n.apply(language);
+        for (const label of document.querySelectorAll('#catGrid label')) {
+          const key = label.querySelector('input').dataset.cat;
+          label.querySelector('span').textContent = t(state.status.categories.find((category) => category.key === key).label);
+        }
+        renderStatus();
+        renderQueue();
+        if (state.details) renderDetails();
+      } catch (error) {
+        $('interfaceLanguage').value = previous;
+        setError(error.message || String(error));
+      }
+    });
     buildCategories();
     renderStatus();
     wire();

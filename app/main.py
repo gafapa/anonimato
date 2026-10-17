@@ -101,7 +101,7 @@ def main() -> None:
 
     api = Api(use_gpu=os.environ.get("ANONIMATO_CPU") != "1", fetch_models=True)
     window = webview.create_window(
-        "Anonimato", url=_ui_path().as_uri(), js_api=api, width=1480, height=940, min_size=(980, 640),
+        "Privelto", url=_ui_path().as_uri(), js_api=api, width=1480, height=940, min_size=(980, 640),
         background_color="#0b111c", text_select=True,
     )
     api.attach(window)

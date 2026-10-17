@@ -1,4 +1,4 @@
-# Build: dependencies -> tests -> PyInstaller -> Inno Setup -> dist\AnonimatoSetup-x.y.z.exe
+# Build: dependencies -> tests -> PyInstaller -> Inno Setup -> dist\PriveltoSetup-x.y.z.exe
 # No model weights are packaged: the application downloads them on first launch.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -26,7 +26,7 @@ if (-not (Test-Path (Join-Path $PSScriptRoot 'anonimato.ico'))) {
 }
 
 Invoke-Checked uv @('run', 'pyinstaller', '--noconfirm', '--clean', '--distpath', 'dist', '--workpath', 'build', 'packaging/anonimato.spec')
-Invoke-Checked uv @('run', 'python', 'tools/package_inventory.py', 'dist/Anonimato')
+Invoke-Checked uv @('run', 'python', 'tools/package_inventory.py', 'dist/Privelto')
 
 $iscc = @(
   "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",

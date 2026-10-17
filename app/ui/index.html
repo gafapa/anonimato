@@ -4,16 +4,17 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Anonimato</title>
+  <title>Privelto</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <svg class="logo" width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect x="3.5" y="1.5" width="19" height="23" rx="2.5" stroke="currentColor" stroke-width="1.6"/><rect x="7" y="7" width="12" height="3.4" rx=".6" fill="currentColor"/><path d="M7 14h12M7 18h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      <h1>Anonimato</h1>
+      <h1>Privelto</h1>
     </div>
     <div class="engine-status" id="engineStatus" aria-live="polite"></div>
+    <label class="language-control"><span class="visually-hidden">Idioma de la interfaz</span><select id="interfaceLanguage" aria-label="Idioma de la interfaz"><option value="en" lang="en">English</option><option value="es" lang="es">Español</option><option value="gl" lang="gl">Galego</option><option value="fr" lang="fr">Français</option><option value="de" lang="de">Deutsch</option><option value="it" lang="it">Italiano</option><option value="pt" lang="pt">Português</option></select></label>
     <button class="icon-button settings-button" id="btnSettings" type="button" aria-haspopup="dialog" aria-label="Ajustes" title="Ajustes">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
     </button>
@@ -265,6 +266,8 @@
       <button class="btn" id="btnSettingsDone" type="button">Hecho</button>
     </div>
   </dialog>
+  <script src="translations.js"></script>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

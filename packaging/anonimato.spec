@@ -1,6 +1,6 @@
 # PyInstaller spec: one-folder build without model weights. Only the pinned manifest is packaged: the
 # application downloads the base models and the llama.cpp runtime on first launch and checks every SHA-256.
-# Windows → dist/Anonimato (then Inno Setup); macOS → dist/Anonimato.app (then .dmg); Linux → dist/Anonimato (then AppImage).
+# Windows → dist/Privelto (then Inno Setup); macOS → dist/Privelto.app (then .dmg); Linux → dist/Privelto (then AppImage).
 import sys
 import tomllib
 from pathlib import Path
@@ -48,16 +48,16 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 exe = EXE(
-    pyz, a.scripts, [], exclude_binaries=True, name="Anonimato", icon=str(icon) if icon else None,
+    pyz, a.scripts, [], exclude_binaries=True, name="Privelto", icon=str(icon) if icon else None,
     console=False, upx=False, version=str(ROOT / "packaging" / "version.txt") if SYSTEM == "windows" else None,
     argv_emulation=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Anonimato")
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Privelto")
 if SYSTEM == "macos":
     app = BUNDLE(
-        coll, name="Anonimato.app", icon=str(icon), bundle_identifier="org.anonimato.desktop",
+        coll, name="Privelto.app", icon=str(icon), bundle_identifier="org.anonimato.desktop",
         info_plist={
-            "CFBundleName": "Anonimato", "CFBundleDisplayName": "Anonimato",
+            "CFBundleName": "Privelto", "CFBundleDisplayName": "Privelto",
             "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "15.0", "NSHighResolutionCapable": True,
             "LSApplicationCategoryType": "public.app-category.productivity",

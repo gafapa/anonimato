@@ -1,9 +1,9 @@
 ; Inno Setup script: per-user installation, no administrator rights.
 #ifndef AppVersion
-#define AppVersion "2.2.2"
+#define AppVersion "2.3.0"
 #endif
 #ifndef PayloadRoot
-#define PayloadRoot "..\dist\Anonimato"
+#define PayloadRoot "..\dist\Privelto"
 #endif
 
 [Setup]
@@ -13,25 +13,25 @@ AppId={{B0C7E153-8E93-41E4-95AC-021EE0D98621}
 AppId={{6B0E7C9E-4E2B-4C0B-9D1A-8E6A2D3F1A47}
 #endif
 #ifdef QualificationBuild
-AppName=Anonimato Qualification
+AppName=Privelto Qualification
 #else
-AppName=Anonimato
+AppName=Privelto
 #endif
 AppVersion={#AppVersion}
-AppPublisher=Anonimato
+AppPublisher=Privelto
 #ifdef QualificationBuild
-DefaultDirName={localappdata}\Programs\AnonimatoQualification
+DefaultDirName={localappdata}\Programs\PriveltoQualification
 #else
-DefaultDirName={localappdata}\Programs\Anonimato
+DefaultDirName={localappdata}\Programs\Privelto
 #endif
-DefaultGroupName=Anonimato
+DefaultGroupName=Privelto
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist
 #ifdef QualificationBuild
-OutputBaseFilename=AnonimatoQualificationSetup-{#AppVersion}
+OutputBaseFilename=PriveltoQualificationSetup-{#AppVersion}
 #else
-OutputBaseFilename=AnonimatoSetup-{#AppVersion}
+OutputBaseFilename=PriveltoSetup-{#AppVersion}
 #endif
 Compression=lzma2/max
 LZMAUseSeparateProcess=yes
@@ -41,15 +41,28 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile=anonimato.ico
-UninstallDisplayIcon={app}\Anonimato.exe
+UninstallDisplayIcon={app}\Privelto.exe
 LicenseFile=..\LICENSE
 MinVersion=10.0.17763
 
 [Languages]
+Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
+Name: "de"; MessagesFile: "compiler:Languages\German.isl"
+Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
+Name: "pt"; MessagesFile: "compiler:Languages\Portuguese.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+[InstallDelete]
+; Remove only legacy launchers; preserve the existing data and model profile.
+Type: files; Name: "{app}\Anonimato.exe"
+#ifndef QualificationBuild
+Type: files; Name: "{autoprograms}\Anonimato.lnk"
+Type: files; Name: "{autodesktop}\Anonimato.lnk"
+#endif
 
 [Files]
 Source: "{#PayloadRoot}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -57,14 +70,14 @@ Source: "MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterin
 
 [Icons]
 #ifndef QualificationBuild
-Name: "{autoprograms}\Anonimato"; Filename: "{app}\Anonimato.exe"
-Name: "{autodesktop}\Anonimato"; Filename: "{app}\Anonimato.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Privelto"; Filename: "{app}\Privelto.exe"
+Name: "{autodesktop}\Privelto"; Filename: "{app}\Privelto.exe"; Tasks: desktopicon
 #endif
 
 [Run]
-Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Instalando WebView2…"; Check: NeedsWebView2
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing WebView2…"; Check: NeedsWebView2
 #ifndef QualificationBuild
-Filename: "{app}\Anonimato.exe"; Description: "Abrir Anonimato"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Privelto.exe"; Description: "Open Privelto"; Flags: nowait postinstall skipifsilent
 #endif
 
 [UninstallDelete]

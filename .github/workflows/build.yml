@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore:
+      - 'website/**'
+      - 'tools/build_website.py'
+      - 'tools/stage_website.py'
   pull_request:
   workflow_dispatch:
   schedule:
@@ -11,6 +15,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  PRIVELTO_LANGUAGE: es
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
@@ -37,6 +44,8 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check app/ui/app.js
+          node --check app/ui/i18n.js
+          node --check app/ui/translations.js
           node --check tools/webview_coverage.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         continue-on-error: true
@@ -201,6 +210,9 @@ jobs:
       - name: Download pinned models and runtime
         run: uv run python tools/fetch_models.py base runtime
 
+      - name: Validate bundled translations
+        run: uv run python tools/build_translations.py
+
       - name: Static analysis
         run: uv run ruff check app tools tests packaging/launcher.py
 
@@ -245,7 +257,7 @@ jobs:
           & $compiler /DQualificationBuild=1 packaging/installer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = uv run python -c "from app import __version__; print(__version__)"
-          powershell -ExecutionPolicy Bypass -File tools/qualify_installer.ps1 -Installer "dist/AnonimatoQualificationSetup-$version.exe" -ExpectedVersion $version
+          powershell -ExecutionPolicy Bypass -File tools/qualify_installer.ps1 -Installer "dist/PriveltoQualificationSetup-$version.exe" -ExpectedVersion $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package (macOS)
@@ -269,6 +281,14 @@ jobs:
         if: runner.os == 'Linux'
         run: uv run python tools/qualify_unix_package.py dist/*.AppImage --output dist/package-qualification-linux.json
 
+      - name: Build and qualify portable archive
+        shell: bash
+        run: |
+          uv run python tools/build_portable.py
+          package=$(find dist -maxdepth 1 -name 'Privelto-*-portable.*' ! -name '*.sha256' -print -quit)
+          test -n "$package"
+          uv run python tools/qualify_portable.py "$package" --output "dist/portable-qualification-${{ runner.os }}.json"
+
       - name: Hash distribution packages
         run: uv run python tools/hash_packages.py dist
 
@@ -285,6 +305,7 @@ jobs:
             dist/**/component-inventory.json
             dist/component-inventory-*.json
             dist/package-qualification-*.json
+            dist/portable-qualification-*.json
             tmp/installer-qualification/**/*.json
             tmp/installer-qualification/**/*.log
             tmp/ci-detection.md
@@ -298,14 +319,17 @@ jobs:
           compression-level: 0
           path: |
             dist/*.exe
-            !dist/AnonimatoQualificationSetup-*.exe
+            !dist/PriveltoQualificationSetup-*.exe
             dist/*.sha256
             dist/*.dmg
             dist/*.AppImage
+            dist/*.zip
+            dist/*.tar.gz
             dist/selftest-*.json
             dist/**/component-inventory.json
             dist/component-inventory-*.json
             dist/package-qualification-*.json
+            dist/portable-qualification-*.json
             tmp/installer-qualification/**/*.json
             tmp/installer-qualification/**/*.log
             integration-tests.xml
@@ -339,7 +363,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mapfile -d '' hashes < <(find release-assets -type f -name '*.sha256' -print0)
-          test "${#hashes[@]}" -eq 3
+          test "${#hashes[@]}" -eq 6
           assets=()
           for hash in "${hashes[@]}"; do
             (cd "$(dirname "$hash")" && sha256sum --check "$(basename "$hash")")

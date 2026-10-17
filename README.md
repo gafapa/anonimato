@@ -1,12 +1,14 @@
-# Anonimato
+# Privelto
 
 The [2.2.2 audit remediation report](docs/improvements-2.2.2.md) describes identity consistency, verified model repair, detection gates, dependency updates, and current qualification limits.
-Anonimato is a desktop application that removes personal data, faces, and signatures from PDFs, photos, and scans. It runs on the local computer: documents are not sent to a server. The application removes marked content from both the visible page and recoverable document structures, then verifies the output before saving it.
+Privelto (formerly Anonimato) is a desktop application that removes personal data, faces, and signatures from PDFs, photos, and scans. It runs on the local computer: documents are not sent to a server. The application removes marked content from both the visible page and recoverable document structures, then verifies the output before saving it.
+
+The [2.3.0 release notes](docs/release-2.3.0.md) describe seven interface languages, the Privelto package names, profile compatibility and portable distributions. Downloads and execution requirements are available at [privelto.com](https://privelto.com).
 
 ## Installation
 
-1. Run `AnonimatoSetup-2.2.1.exe`. Administrator rights, Python, and CUDA are not required. The installer carries no AI models.
-2. Open **Anonimato** from the Start menu. On first launch it downloads the base models and the local AI runtime (about 700 MB) into the user profile and checks each file against its pinned SHA-256 hash; processing stays blocked until they are installed. On an offline computer, build a pack elsewhere with `uv run python tools/make_offline_pack.py base.zip base` and choose **Importar paquete sin conexión (.zip)** in the download banner.
+1. Run `PriveltoSetup-2.3.0.exe`. Administrator rights, Python, and CUDA are not required. The installer carries no AI models.
+2. Open **Privelto** from the Start menu. On first launch it downloads the base models and the local AI runtime (about 700 MB) into the user profile and checks each file against its pinned SHA-256 hash; processing stays blocked until they are installed. On an offline computer, build a pack elsewhere with `uv run python tools/make_offline_pack.py base.zip base` and choose **Importar paquete sin conexión (.zip)** in the download banner.
 3. Optionally, open **IA avanzada** in the sidebar and choose **Descargar IA avanzada** to enable handwriting recognition and contextual review. The application selects Qwen3-VL-8B (about 5.5 GB) when at least 7 GB of GPU memory is free, or Qwen3-VL-4B (about 2.8 GB) otherwise. Model download is the application's only network connection. It retrieves models from their official source and checks their SHA-256 hashes. On an offline computer, use **Importar paquete sin conexión (.zip)**.
 
 The advanced preference in **Ajustar detección** can prioritize accuracy or memory. Selection is reevaluated at execution time among installed variants; a preference does not download a missing variant. Automatic mode refuses a model that cannot meet its memory budget.
@@ -80,12 +82,12 @@ uv run python -m app                                      # Open the application
 
 - Handwriting OCR benchmark: `uv run python tools/benchmark_handwriting.py` → [docs/benchmark.md](docs/benchmark.md).
 - Detection evaluation by category: `uv run python tools/evaluate_detection.py --scanned` → [docs/deteccion.md](docs/deteccion.md). The [2.2.1 expanded synthetic result](docs/detection-evaluation-2.2.1.md) records a held-out seed. Annotated private documents in `eval/docs/*.pdf` with matching `*.json` are excluded by default; opt in with `--private --output tmp/private-evaluation.md`. Private results are aggregate-only and inputs/results are not committed.
-- Real-window UI smoke test: `uv run python tools/ui_smoke.py`. Installed executable self-test: `Anonimato.exe --selftest=report.json`. Own handwriting examples go in `eval/own/*.png` with `eval/own/labels.json`; they are not committed.
+- Real-window UI smoke test: `uv run python tools/ui_smoke.py`. Installed executable self-test: `Privelto.exe --selftest=report.json`. Own handwriting examples go in `eval/own/*.png` with `eval/own/labels.json`; they are not committed.
 - Offline advanced-AI package: `uv run python tools/make_offline_pack.py`.
-- Windows installer: `powershell -File packaging/build.ps1` → `dist/AnonimatoSetup-2.2.1.exe` (requires Inno Setup 6).
+- Windows installer: `powershell -File packaging/build.ps1` → `dist/PriveltoSetup-2.3.0.exe` (requires Inno Setup 6).
 - Critical-module coverage gate: `uv run python tools/check_coverage.py fast-coverage.json`; thresholds are in `packaging/coverage-policy.json`.
 - Real-window JavaScript action coverage: `uv run python tools/ui_batch_smoke.py tmp/batch.json --js-coverage tmp/javascript-coverage.json`.
-- Installer qualification: compile `packaging/installer.iss` with `/DQualificationBuild=1`, then run `tools/qualify_installer.ps1 -Installer dist/AnonimatoQualificationSetup-2.2.1.exe -ExpectedVersion 2.2.1`. This uses a separate application identity and a fictitious profile under ignored `tmp/`; qualification installers are not release artifacts.
+- Installer qualification: compile `packaging/installer.iss` with `/DQualificationBuild=1`, then run `tools/qualify_installer.ps1 -Installer dist/PriveltoQualificationSetup-2.3.0.exe -ExpectedVersion 2.3.0`. This uses a separate application identity and a fictitious profile under ignored `tmp/`; qualification installers are not release artifacts.
 
 The [2.2.1 verification report](docs/improvements-2.2.1.md) records measured coverage and installer qualification limits.
 

@@ -40,10 +40,10 @@ def main():
                                                 capture_output=True).stdout)
                 mount = next(Path(entity['mount-point']) for entity in mounted['system-entities'] if 'mount-point' in entity)
                 try:
-                    checked(['ditto', str(mount / 'Anonimato.app'), str(installed / 'Anonimato.app')])
+                    checked(['ditto', str(mount / 'Privelto.app'), str(installed / 'Privelto.app')])
                 finally:
                     checked(['hdiutil', 'detach', str(mount)])
-                binary = installed / 'Anonimato.app/Contents/MacOS/Anonimato'
+                binary = installed / 'Privelto.app/Contents/MacOS/Privelto'
             else:
                 installed.mkdir()
                 checked([str(package), '--appimage-extract'], cwd=installed, stdout=subprocess.DEVNULL)
