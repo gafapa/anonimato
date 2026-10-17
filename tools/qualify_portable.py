@@ -18,7 +18,7 @@ def qualify(package: Path, output: Path) -> None:
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="privelto-portable-qualification-") as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         if package.name.endswith(".tar.gz"):
             with tarfile.open(package) as archive:
                 archive.extractall(root, filter="data")
