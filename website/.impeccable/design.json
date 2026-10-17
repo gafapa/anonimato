@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T18:46:18.207397+00:00",
+  "title": "Design System: Privelto",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "document-sheet",
+        "value": "0 8px 24px #20396216",
+        "purpose": "Lift the white fictional document from the pale demonstration frame."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-background",
+        "value": "background .18s",
+        "purpose": "Quiet hover feedback; disabled under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1450px"
+      },
+      {
+        "name": "tablet",
+        "value": "1050px"
+      },
+      {
+        "name": "mobile",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main desktop download action.",
+      "html": "<a class=\"ds-button\" href=\"#downloads\">Download for your computer <span aria-hidden=\"true\">↓</span></a>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:24px;min-height:54px;padding:14px 23px;background:var(--blue,#1d3f8f);color:var(--white,#fff);border:0;border-radius:6px;text-decoration:none;font:500 15px Plex,sans-serif;cursor:pointer;transition:background .18s}.ds-button:hover{background:#142e6e}.ds-button:focus-visible{outline:3px solid #416bcd;outline-offset:5px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}"
+    },
+    {
+      "name": "Inverse Button",
+      "kind": "button",
+      "refersTo": "button-inverse",
+      "description": "Closing action on a navy surface.",
+      "html": "<div class=\"ds-closing\"><a class=\"ds-button ds-inverse\" href=\"#downloads\">Get Privelto <span aria-hidden=\"true\">↓</span></a></div>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:24px;min-height:54px;padding:14px 23px;background:var(--blue,#1d3f8f);color:var(--white,#fff);border:0;border-radius:6px;text-decoration:none;font:500 15px Plex,sans-serif;cursor:pointer;transition:background .18s}.ds-button:hover{background:#142e6e}.ds-button:focus-visible{outline:3px solid #416bcd;outline-offset:5px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-closing{background:var(--blue,#1d3f8f);padding:24px}.ds-inverse{background:var(--white,#fff);color:var(--blue,#1d3f8f)}.ds-inverse:hover{background:#dce6fd}"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "description": "Plain section links with a native seven-language selector and localized accessible label.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Privelto\"><a class=\"ds-nav-how\" href=\"#how\">How it works</a><a class=\"ds-nav-requirements\" href=\"#requirements\">Requirements</a><a href=\"#downloads\">Downloads</a><label class=\"ds-language\"><span class=\"ds-hidden\">Language</span><select aria-label=\"Language\"><option>English</option><option lang=\"es\">Español</option><option lang=\"gl\">Galego</option><option lang=\"fr\">Français</option><option lang=\"de\">Deutsch</option><option lang=\"it\">Italiano</option><option lang=\"pt\">Português</option></select></label></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:30px;font:500 14px Plex,sans-serif;color:var(--ink,#172033)}.ds-nav a{color:inherit;text-decoration:none;padding:10px 0}.ds-nav a:hover{color:var(--blue,#1d3f8f);text-decoration:underline;text-underline-offset:4px}.ds-nav a:focus-visible,.ds-language select:focus-visible{outline:3px solid #416bcd;outline-offset:5px}.ds-language select{font:inherit;font-size:12px;color:var(--ink,#172033);background:transparent;border:1px solid var(--line,#d5dbe5);border-radius:5px;min-height:36px;padding:6px 8px;max-width:127px}.ds-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:760px){.ds-nav{gap:12px;font-size:12px}.ds-nav-how,.ds-nav-requirements{display:none}.ds-language select{max-width:112px;font-size:11px}}"
+    },
+    {
+      "name": "Fictional Document",
+      "kind": "card",
+      "refersTo": "document",
+      "description": "The lifted fictional sheet contains four private fields, including the date; translated headings wrap within its width.",
+      "html": "<div class=\"ds-desk\"><article class=\"ds-sheet\" aria-label=\"Fictional document example\"><p class=\"ds-meta\">NORTH / STUDIO · DOC—014</p><h2>Participant record</h2><dl><dt>Full name</dt><dd><span class=\"ds-private\">Alex Morgan</span></dd><dt>Email address</dt><dd><span class=\"ds-private\">alex@example.com</span></dd><dt>Reference</dt><dd><span class=\"ds-private\">DEMO-042-918</span></dd><dt>Date</dt><dd><span class=\"ds-private\">17 / 10 / 2026</span></dd></dl><small>Interactive example · fictional data</small></article></div>",
+      "css": ".ds-desk{padding:24px;background:var(--pale,#e4ebf7);border-radius:12px;font-family:Plex,sans-serif;color:var(--ink,#172033)}.ds-sheet{background:var(--white,#fff);padding:27px 30px 18px;box-shadow:0 8px 24px #20396216}.ds-meta{font:400 9px PlexMono,monospace;border-bottom:1px solid var(--line,#d5dbe5);padding-bottom:14px}.ds-sheet h2{font-size:23px;line-height:1.15;letter-spacing:-.02em;font-weight:500}.ds-sheet p{font-size:12px;line-height:1.65}.ds-private{background:#fff0cc;box-shadow:0 0 0 3px #fff0cc}.ds-sheet small{font-size:10px;color:var(--muted,#505c70)} .ds-sheet h2{overflow-wrap:anywhere;hyphens:auto}.ds-sheet dl{display:grid;grid-template-columns:1fr 1.5fr;gap:14px 9px;margin:25px 0;font-size:10px;align-items:center}.ds-sheet dt{color:#59677a}.ds-sheet dd{margin:0;font-size:11px}.ds-private{display:inline-block;min-width:100px;line-height:1.4}"
+    },
+    {
+      "name": "FAQ Disclosure",
+      "kind": "custom",
+      "description": "Native expandable question with a thin divider.",
+      "html": "<details class=\"ds-faq\"><summary>Do my documents leave my computer?</summary><p>Document analysis and export run locally in the desktop app.</p></details>",
+      "css": ".ds-faq{border-bottom:1px solid var(--line,#d5dbe5);padding:20px 0;font-family:Plex,sans-serif;color:var(--ink,#172033)}.ds-faq summary{display:flex;justify-content:space-between;gap:18px;list-style:none;font-size:17px;font-weight:500;cursor:pointer}.ds-faq summary::-webkit-details-marker{display:none}.ds-faq summary::after{content:\"+\";font-size:23px;line-height:1;color:var(--blue,#1d3f8f)}.ds-faq[open] summary::after{content:\"−\"}.ds-faq summary:hover{color:var(--blue,#1d3f8f)}.ds-faq summary:focus-visible{outline:3px solid #416bcd;outline-offset:5px}.ds-faq p{font-size:14px;line-height:1.65;color:var(--muted,#505c70);margin-top:14px;max-width:65ch}"
+    },
+    {
+      "name": "Paired Package Choices",
+      "kind": "custom",
+      "description": "Equal-width installable and portable actions, each with a separate checksum; release sizes are supplied by artifacts.",
+      "html": "<div class=\"ds-package-row\"><div><h3>Windows</h3><p>Windows 10 / 11 · x64</p></div><div class=\"ds-package-actions\"><div class=\"ds-package-choice\"><a class=\"ds-package-button\" href=\"#installer\" aria-label=\"Download Privelto — Windows x64 — Installable\">Installable <span aria-hidden=\"true\">↓</span></a><p><a href=\"#installer-checksum\" aria-label=\"SHA-256 — Privelto — Windows x64 — Installable\">SHA-256</a></p></div><div class=\"ds-package-choice\"><a class=\"ds-package-button\" href=\"#portable\" aria-label=\"Download Privelto — Windows x64 — Portable\">Portable <span aria-hidden=\"true\">↓</span></a><p><a href=\"#portable-checksum\" aria-label=\"SHA-256 — Privelto — Windows x64 — Portable\">SHA-256</a></p></div></div></div>",
+      "css": ".ds-package-row{display:grid;grid-template-columns:100px 1fr;gap:20px;align-items:center;padding:22px 0;border-top:1px solid #bcc9df;border-bottom:1px solid #bcc9df;font-family:Plex,sans-serif;color:var(--ink,#172033)}.ds-package-row h3{font-size:23px;font-weight:500;letter-spacing:-.02em;margin:0}.ds-package-row p{font-size:12px;color:#4e607b;margin:3px 0 0}.ds-package-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}.ds-package-choice{text-align:center;min-width:0}.ds-package-choice p{margin-top:8px;font-size:10px;white-space:nowrap}.ds-package-choice p a{color:#415577;text-underline-offset:4px}.ds-package-button{display:inline-flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:43px;padding:9px 10px;background:var(--blue,#1d3f8f);color:var(--white,#fff);border-radius:6px;text-decoration:none;font-size:13px;font-weight:500;transition:background .18s}.ds-package-button:hover{background:#142e6e}.ds-package-choice a:focus-visible{outline:3px solid #416bcd;outline-offset:5px}@media(max-width:1050px){.ds-package-row{grid-template-columns:1fr;gap:17px}}@media(prefers-reduced-motion:reduce){.ds-package-button{transition:none}}"
+    },
+    {
+      "name": "Requirement Row",
+      "kind": "custom",
+      "description": "Bordered definition row in the dedicated eight-item requirements section.",
+      "html": "<dl class=\"ds-requirements\"><div class=\"ds-requirement\"><dt>Memory</dt><dd>Start with the base models. Optional advanced AI needs additional memory and disk space.</dd></div><div class=\"ds-requirement\"><dt>Portable use</dt><dd>Extract the archive into a writable folder and keep the application and its portable data together.</dd></div></dl>",
+      "css": ".ds-requirements{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px;margin:42px 0 0;font-family:Plex,sans-serif;color:var(--ink,#172033)}.ds-requirement{padding:24px 0;border-top:1px solid var(--line,#d5dbe5)}.ds-requirement dt{font-size:20px;font-weight:500;margin-bottom:10px;letter-spacing:-.02em}.ds-requirement dd{margin:0;font-size:14px;line-height:1.7;color:var(--muted,#505c70);max-width:65ch}@media(max-width:1050px){.ds-requirements{column-gap:36px}}@media(max-width:760px){.ds-requirements{grid-template-columns:1fr;gap:0;margin-top:30px}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clear Document Desk",
+    "overview": "Privelto inherits the desktop application's IBM Plex typography and navy accent. The website feels composed, legible and practical: cool paper surfaces, restrained borders, direct headings and explicit actions. Its strongest visual object is a white document, rather than an abstract privacy illustration.\n\nThe fictional document demonstration makes a change visible while keeping the surrounding content readable. Technical details use a small amount of monospace type; generous section spacing keeps the download and setup information approachable. English, Spanish, Galician, French, German, Italian and Portuguese share the same visual system.",
+    "keyCharacteristics": [
+      "IBM Plex Sans for reading; IBM Plex Mono for document and release metadata.",
+      "Navy actions against cool, light surfaces.",
+      "Flat section structure with a single lifted document sheet.",
+      "A reversible, clearly labeled fictional example."
+    ],
+    "rules": [
+      {
+        "name": "Meaningful Accent",
+        "body": "Use navy to identify actions or emphasis. Keep long reading passages in ink or slate.",
+        "section": "colors"
+      },
+      {
+        "name": "Sheet",
+        "body": "Reserve the existing ambient shadow for the document object; use spacing and rules for ordinary content.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** retain IBM Plex and the inherited navy identity when adding surfaces.",
+      "**Do** keep text, controls and document examples as real HTML.",
+      "**Do** preserve clear focus states, native disclosure behavior and reduced-motion support.",
+      "**Do** use fictional data in demonstrations and keep its label visible.",
+      "**Do** carry the same hierarchy and localized accessible names across all seven languages."
+    ],
+    "donts": [
+      "**Don't** replace the document-led visual with unrelated stock privacy imagery.",
+      "**Don't** add shadows to every section, download row or FAQ item.",
+      "**Don't** introduce a document upload control into the marketing site.",
+      "**Don't** use the demonstration's visual success state to imply perfect automatic detection."
+    ]
+  }
+}
