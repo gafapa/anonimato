@@ -1,0 +1,139 @@
+{
+  "labels": {
+    "legal": "Rechtliche Hinweise und Bedingungen",
+    "privacy": "Datenschutz",
+    "cookies": "Cookies",
+    "accessibility": "Barrierefreiheit",
+    "updated": "Letzte Überprüfung: 17. Oktober 2026",
+    "owner": "Websitebetreiber und Verantwortlicher",
+    "name": "Name oder offizieller Name",
+    "tax_id": "Steueridentifikationsnummer",
+    "address": "Postanschrift",
+    "email": "Kontakt",
+    "registration": "Öffentliche Registrierung",
+    "regulated_profession": "Reglementierter Beruf",
+    "resources": "Offizielle Informationen und Lizenzen",
+    "back": "Zurück zu Privelto"
+  },
+  "legal": {
+    "intro": "Informationen über privelto.com und die Bedingungen für die Nutzung dieser Website und das Herunterladen von Privelto.",
+    "sections": [
+      {
+        "title": "Zweck und Zugang",
+        "paragraphs": [
+          "Diese Website präsentiert Privelto und vertreibt seine Desktop-Pakete. Es gibt kein Benutzerkonto, keinen Warenkorb und kein Zahlungsformular. Das Herunterladen der veröffentlichten App ist kostenlos. Der Internetzugang und die Ausstattung liegen in der Verantwortung des Nutzers."
+        ]
+      },
+      {
+        "title": "Software und andere Rechte",
+        "paragraphs": [
+          "Privelto wird unter GNU AGPL Version 3 oder höher vertrieben. Der Quellcode und die Lizenz sind unten verlinkt. Schriftarten und Komponenten von Drittanbietern behalten ihre eigenen Lizenzen; Modelllizenzen sind im Modellmanifest des Projekts aufgeführt. Diese Bedingungen schränken die durch diese Lizenzen gewährten Rechte nicht ein."
+        ]
+      },
+      {
+        "title": "Verantwortungsvolle Nutzung und Einschränkungen",
+        "paragraphs": [
+          "Die Demonstration verwendet fiktive Daten. Bei der automatischen Erkennung werden möglicherweise persönliche Informationen übersehen oder harmlose Inhalte markiert. Überprüfen Sie das Dokument und den Verifizierungsbericht, bevor Sie es freigeben. Durch die Verwendung von Privelto wird weder die DSGVO-Konformität hergestellt noch garantiert, dass jede Ausgabe anonym ist. Verwenden Sie die Website nicht zum Versenden echter Dokumente: Sie bietet keinen Upload-Service.",
+          "Nutzen Sie die Website rechtmäßig und beeinträchtigen Sie nicht deren Betrieb. Verfügbarkeit und Kompatibilität können variieren. Die Gewährleistungsbestimmungen für Software gelten nur im gesetzlich zulässigen Umfang. Haftungs- oder Verbraucherrechte, die gesetzlich nicht ausgeschlossen werden können, werden hierdurch nicht ausgeschlossen."
+        ]
+      },
+      {
+        "title": "Links, Kontakt und geltendes Recht",
+        "paragraphs": [
+          "Externe Links führen zu Diensten der jeweiligen Anbieter. Wenn Sie sie besuchen, gelten deren Geschäftsbedingungen und Datenschutzrichtlinien. Senden Sie Fragen zu dieser Website an {email}.",
+          "Es gilt spanisches Recht vorbehaltlich zwingender Schutzmaßnahmen nach geltendem Recht der Europäischen Union. Die zuständigen Gerichte werden durch Gesetz bestimmt; Diese Bedingungen sehen kein Gericht vor, das den Verbrauchern ihre gesetzlichen Rechte entzieht. Wesentliche Änderungen werden im Überprüfungsdatum berücksichtigt."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "intro": "Dieser Hinweis gilt für Website-Besuche und E-Mail-Anfragen. In der Desktop-App geöffnete Dokumente werden auf Ihrem Computer verarbeitet und nicht auf diese Website hochgeladen.",
+    "sections": [
+      {
+        "title": "Website-Anfragen und Sicherheit",
+        "paragraphs": [
+          "Der Server erhält Ihre IP-Adresse, den Zeitpunkt der Anfrage, die URL, den Antwortstatus und technische Browserinformationen; es kann auch eine Weiterleitungsadresse erhalten. Diese Daten liefern die Seite oder den Download, erkennen Missbrauch und erstellen interne Verkehrsstatistiken. Die Rechtsgrundlage ist das berechtigte Interesse am Betrieb und Schutz des Dienstes sowie am Verständnis seiner grundlegenden Verwendung gemäß Artikel 6 Absatz 1 Buchstabe f der DSGVO. Berichte maskieren IP-Adressen und lassen Abfragezeichenfolgen weg, aber die ursprünglichen Zugriffsprotokolle sind nicht anonym. Es erfolgt kein Werbeprofiling oder eine automatisierte Entscheidung mit rechtlicher Wirkung."
+        ]
+      },
+      {
+        "title": "E-Mail-Anfragen",
+        "paragraphs": [
+          "Wenn Sie eine E-Mail an {email} senden, verarbeitet der Verantwortliche Ihre Adresse, Ihren Namen (falls angegeben) und Ihre Nachricht, um die Anfrage zu beantworten und zu verwalten. Dies beruht auf einem berechtigten Interesse an der Beantwortung der Korrespondenz; Sofern es sich bei einer Anfrage um Datenschutzrechte handelt, gelten die gesetzlichen Pflichten. Die Angabe von Kontaktinformationen ist freiwillig, eine Antwort ist ohne diese jedoch möglicherweise nicht möglich. Senden Sie nur notwendige Informationen und verwenden Sie fiktive oder geschwärzte Beispiele, insbesondere für Studenten-, Gesundheits- oder andere sensible Informationen."
+        ]
+      },
+      {
+        "title": "Aufbewahrung",
+        "paragraphs": [
+          "Zugriffsprotokolle wechseln täglich oder wenn sie die konfigurierte Größenbeschränkung erreichen. Der Server behält das aktuelle Protokoll und 30 rotierte Dateien; Dabei handelt es sich um eine Rotationsbeschränkung und nicht um eine Garantie von genau 30 Kalendertagen. Auch die Größe des Webserver-Diagnoseprotokolls ist begrenzt. Relevante Beweise für den Vorfall können für die Zeit isoliert werden, die zur Untersuchung oder Erfüllung rechtlicher Verpflichtungen erforderlich ist.",
+          "Die E-Mail-Korrespondenz wird während der Bearbeitung der Anfrage und danach nur dann gespeichert, wenn dies für geltende rechtliche Verpflichtungen oder die Begründung, Ausübung oder Verteidigung von Ansprüchen erforderlich ist. Das Kriterium ist der Zweck der Korrespondenz und die geltende Verjährungsfrist und nicht die unbegrenzte Wiederverwendung für Marketingzwecke."
+        ]
+      },
+      {
+        "title": "Empfänger, Hosting und Übertragungen",
+        "paragraphs": [
+          "Die Website und die Projekt-E-Mail nutzen selbstverwaltete Dienste auf der Oracle Cloud-Infrastruktur in Frankfurt, Deutschland. Der Zugriff ist auf den Verantwortlichen, die autorisierte technische Verwaltung, Infrastrukturanbieter (sofern erforderlich) und Behörden (sofern gesetzlich erforderlich) beschränkt. Die Daten werden nicht an Werbetreibende verkauft.",
+          "Oracle ist ein globaler Infrastrukturanbieter, daher schließt eine EWR-Hosting-Region den Zugriff aus anderen Ländern nicht aus. Die geltenden Datenverarbeitungsbedingungen und Sicherheitsvorkehrungen für internationale Übermittlungen sind über die nachstehenden Referenzen verfügbar. Fordern Sie eine Kopie oder Informationen über Sicherheitsmaßnahmen von {email} an."
+        ]
+      },
+      {
+        "title": "Ihre Rechte",
+        "paragraphs": [
+          "Wenden Sie sich an {email}, um Auskunft, Berichtigung, Löschung, Einschränkung, ggf. Übertragbarkeit zu beantragen oder der Verarbeitung aufgrund eines berechtigten Interesses zu widersprechen. Sie können Ihre Einwilligung widerrufen, wenn eine künftige optionale Verarbeitungstätigkeit darauf beruht. Anfragen werden in der Regel innerhalb eines Monats beantwortet; eine etwaige zulässige Verlängerung wird erläutert. Identitätsinformationen werden nur dann angefordert, wenn dies vernünftigerweise erforderlich ist. Sie können sich an die spanische Datenschutzbehörde (AEPD) oder Ihre zuständige Aufsichtsbehörde wenden."
+        ]
+      },
+      {
+        "title": "Desktop-App und externe Dienste",
+        "paragraphs": [
+          "Diese Website kann nicht auf in Privelto geöffnete Dokumente zugreifen. Die Person oder Organisation, die die App nutzt, bleibt für den rechtmäßigen Umgang mit diesen Dokumenten und deren Ausgaben verantwortlich. Lokale Protokolle, Modelle und Einstellungen unterliegen weiterhin den Sicherheits- und Aufbewahrungsoptionen auf diesem Computer.",
+          "Durch das Herunterladen von Modellen oder Laufzeitdateien in der App wird eine Verbindung zu den im Manifest aufgeführten Anbietern hergestellt, einschließlich Hugging Face und GitHub. Sie erhalten die für den Download erforderlichen Verbindungsdaten, nicht die verarbeiteten Dokumente. Der Offline-Modellimport ist verfügbar. Wenn Sie Links zu externen Quellen oder Anbietern folgen, wird auch eine separate Verbindung zu diesem Anbieter hergestellt."
+        ]
+      }
+    ]
+  },
+  "cookies": {
+    "intro": "Die aktuelle Website setzt keine Cookies und verwendet keinen Browserspeicher für Analysen, Werbung oder Sprachauswahl.",
+    "sections": [
+      {
+        "title": "Was passiert in Ihrem Browser?",
+        "paragraphs": [
+          "Schriftarten, Stile und Skripte werden von privelto.com bereitgestellt. Es gibt keine eingebetteten Werbepixel, Videos von Drittanbietern oder externe Analyseskripte. Die ausgewählte Sprache ist Teil der Seiten-URL. Die fiktive Demonstration ändert nur die aktuelle Seite und lädt deren Inhalte nicht hoch. Durch normales Browser-Caching können öffentliche Site-Ressourcen erhalten bleiben."
+        ]
+      },
+      {
+        "title": "Serverstatistiken sind unterschiedlich",
+        "paragraphs": [
+          "Die Protokollierung von Anfragen und interne Verkehrsberichte erfolgen auf dem Server, ohne dass eine Besucherkennung auf Ihrem Gerät hinterlegt wird. Dabei kommt es weiterhin zur Verarbeitung von Verbindungsdaten und wird in der Datenschutzerklärung erläutert."
+        ]
+      },
+      {
+        "title": "Einwilligung und zukünftige Änderungen",
+        "paragraphs": [
+          "Ein Cookie-Banner ist für diese Fassung nicht erforderlich, da keine einwilligungspflichtigen Cookies oder vergleichbaren Tracking-Techniken eingesetzt werden. Künftige nicht notwendige Technologien dürfen erst nach wirksamer Einwilligung aktiviert werden. Akzeptieren und Ablehnen müssen gleich leicht zugänglich sein, und die Entscheidung muss geändert werden können. Für verlinkte externe Websites gelten deren eigene Richtlinien."
+        ]
+      }
+    ]
+  },
+  "accessibility": {
+    "intro": "Unser Ziel ist es, die Website mit einer Tastatur, unterstützenden Technologien, kleinen Bildschirmen und vergrößertem Text nutzbar zu machen.",
+    "sections": [
+      {
+        "title": "Maßnahmen in dieser Version",
+        "paragraphs": [
+          "Seiten verwenden semantische Orientierungspunkte, einen Link zum Überspringen, einen sichtbaren Tastaturfokus, beschriftete Steuerelemente, Sprachmetadaten und individuelle Namen für Download-Links. Die Demo-Schaltfläche zeigt ihren Status an und kündigt das Ergebnis an. Layouts passen sich an kleine Bildschirme an und respektieren Präferenzen hinsichtlich reduzierter Bewegung."
+        ]
+      },
+      {
+        "title": "Bewertung und Grenzen",
+        "paragraphs": [
+          "Die Website wurde auf Tastatur, Responsive-Layout und grundlegende Strukturprüfungen überprüft. Es wurde kein vollständiges unabhängiges WCAG- oder EN 301 549-Konformitätsaudit durchgeführt. Bei dieser Seite handelt es sich um eine Verpflichtung zur Barrierefreiheit, nicht um einen Anspruch auf Zertifizierung oder vollständige Konformität. Die Desktop-App, externe Dienste und Dokumente von Drittanbietern verfügen über eigene Barrierefreiheitsmerkmale."
+        ]
+      },
+      {
+        "title": "Ein Hindernis melden",
+        "paragraphs": [
+          "Senden Sie eine E-Mail an {email} mit der Seiten-URL, dem Problem, Ihrem Browser oder Ihrer unterstützenden Technologie (falls relevant) und dem von Ihnen benötigten Format. Wir werden das Problem prüfen und nach Möglichkeit eine zugängliche Alternative anbieten. Fügen Sie dem Bericht keine persönlichen Dokumente oder sensiblen Informationen bei."
+        ]
+      }
+    ]
+  }
+}

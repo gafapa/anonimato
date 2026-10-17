@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "website"
@@ -28,6 +29,46 @@ PACKAGES = [
 
 LANGUAGE_NAMES = {"en": "English", "es": "Español", "gl": "Galego", "fr": "Français", "de": "Deutsch", "it": "Italiano", "pt": "Português"}
 COPY = {path.stem: json.loads(path.read_text(encoding="utf-8")) for path in (SOURCE / "locales").glob("*.json")}
+LEGAL_COPY = {language: json.loads((SOURCE / "legal" / f"{language}.json").read_text(encoding="utf-8")) for language in LANGUAGE_NAMES}
+LEGAL_PAGES = ("legal", "privacy", "cookies", "accessibility")
+LEGAL_OWNER: dict[str, str | bool] = {}
+
+
+def load_legal_owner(path: Path, *, preview: bool = False) -> dict:
+    for language, content in LEGAL_COPY.items():
+        if set(content) != set(LEGAL_COPY["en"]) or set(content["labels"]) != set(LEGAL_COPY["en"]["labels"]):
+            raise RuntimeError(f"Incomplete legal navigation: {language}")
+        for section in LEGAL_PAGES:
+            translated = content[section]["sections"]
+            original = LEGAL_COPY["en"][section]["sections"]
+            if len(translated) != len(original):
+                raise RuntimeError(f"Incomplete legal sections: {language}: {section}")
+            for source, target in zip(original, translated, strict=True):
+                if len(source["paragraphs"]) != len(target["paragraphs"]):
+                    raise RuntimeError(f"Incomplete legal paragraphs: {language}: {section}")
+                for before, after in zip(source["paragraphs"], target["paragraphs"], strict=True):
+                    if not after.strip() or re.findall(r"\{[^}]*\}", before) != re.findall(r"\{[^}]*\}", after):
+                        raise RuntimeError(f"Invalid legal placeholders: {language}: {section}")
+    if preview:
+        return {"name": "Example owner — preview only", "tax_id": "NOT CONFIGURED", "address": "NOT CONFIGURED",
+                "email": "hello@privelto.com", "registration": "", "regulated_profession": "",
+                "commercial_model": "free_downloads", "hosting_dpa_verified": False,
+                "hosting_dpa_url": "https://www.oracle.com/contracts/cloud-services/",
+                "international_transfer_safeguards": "pending_verification"}
+    if not path.is_file():
+        raise RuntimeError("Legal publication requires the owner's confirmed public details and hosting DPA. See website/legal/owner.example.json.")
+    owner = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("name", "tax_id", "address", "email", "hosting_dpa_url"):
+        if not isinstance(owner.get(key), str) or not owner[key].strip():
+            raise RuntimeError(f"Missing confirmed legal-owner field: {key}")
+    if owner["email"] not in ("hello@privelto.com", "pablo@privelto.com") or owner.get("commercial_model") not in ("free_downloads", "free_with_donations"):
+        raise RuntimeError("Legal copy must be reviewed for a changed contact or commercial model")
+    if owner.get("hosting_dpa_verified") is not True:
+        print("Operational item pending: verify the account's actual Oracle DPA and transfer safeguards; public Oracle terms are not proof of the account agreement.")
+    agreement = urlsplit(owner["hosting_dpa_url"])
+    if agreement.scheme != "https" or agreement.netloc != "www.oracle.com":
+        raise RuntimeError("The confirmed hosting DPA must link to the official Oracle contract")
+    return owner
 
 
 def language_path(language: str) -> str:
@@ -35,18 +76,19 @@ def language_path(language: str) -> str:
 
 
 
-def header(language: str, *, privacy: bool = False) -> str:
+def header(language: str, *, section: str = "") -> str:
     copy = COPY[language]
     home = language_path(language)
-    suffix = "privacy/" if privacy else ""
+    suffix = section + "/" if section else ""
+    title = "Privelto — " + LEGAL_COPY[language]["labels"][section] if section else copy["title"]
     options = "".join(f'<option value="{language_path(code)}{suffix}" lang="{code}" {"selected" if code == language else ""}>{name}</option>'
                       for code, name in LANGUAGE_NAMES.items())
     alternatives = "".join(f'<link rel="alternate" hreflang="{code}" href="https://privelto.com{language_path(code)}{suffix}">'
                            for code in LANGUAGE_NAMES)
     return f'''<!doctype html>
 <html lang="{language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{escape(copy['title'] if not privacy else 'Privelto — ' + copy['privacy'])}</title><meta name="description" content="{escape(copy['description'])}">
-<meta name="theme-color" content="#1d3f8f"><link rel="canonical" href="https://privelto.com{home}{'privacy/' if privacy else ''}">
+<title>{escape(title)}</title><meta name="description" content="{escape(copy['description'])}">
+<meta name="theme-color" content="#1d3f8f"><link rel="canonical" href="https://privelto.com{home}{suffix}">
 {alternatives}<link rel="alternate" hreflang="x-default" href="https://privelto.com/{suffix}">
 <meta property="og:title" content="Privelto"><meta property="og:description" content="{escape(copy['description'])}"><meta property="og:type" content="website"><meta property="og:url" content="https://privelto.com{home}{suffix}">
 <link rel="icon" type="image/svg+xml" href="/assets/mark.svg"><link rel="stylesheet" href="/assets/site.css"><script src="/assets/site.js" defer></script>
@@ -65,7 +107,60 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 def footer(language: str) -> str:
     copy = COPY[language]
     home = language_path(language)
-    return f'''<footer class="site-footer"><div><a class="brand" href="{home}">privelto<span class="brand-dot">.</span></a><p>{copy['footer']}</p></div><div class="footer-links"><a href="{home}privacy/">{copy['privacy']}</a><a href="https://github.com/gafapa/anonimato">{copy['source']}</a><a href="mailto:hello@privelto.com">hello@privelto.com</a><span>AGPL-3.0-or-later</span></div></footer></body></html>'''
+    legal_links = "".join(f'<a href="{home}{section}/">{escape(LEGAL_COPY[language]["labels"][section])}</a>' for section in LEGAL_PAGES)
+    return f'''<footer class="site-footer"><div><a class="brand" href="{home}">privelto<span class="brand-dot">.</span></a><p>{copy['footer']}</p></div><div class="footer-links">{legal_links}<a href="https://github.com/gafapa/anonimato">{copy['source']}</a><a href="mailto:hello@privelto.com">hello@privelto.com</a><span>AGPL-3.0-or-later</span></div></footer></body></html>'''
+
+
+def legal_page(language: str, section: str) -> str:
+    copy = LEGAL_COPY[language]
+    labels = copy["labels"]
+    content = copy[section]
+    email = escape(str(LEGAL_OWNER["email"]))
+
+    def paragraph_html(paragraph: str) -> str:
+        text = escape(paragraph.format(email=LEGAL_OWNER["email"]))
+        return text.replace(email, f'<a href="mailto:{email}">{email}</a>')
+    identity = ""
+    if section in ("legal", "privacy"):
+        fields = "".join(f'<div><dt>{escape(labels[key])}</dt><dd>{escape(str(LEGAL_OWNER[key]))}</dd></div>'
+                         for key in ("name", "tax_id", "address", "email", "registration", "regulated_profession") if LEGAL_OWNER.get(key))
+        identity = f'<section class="legal-section"><h2>{escape(labels["owner"])}</h2><dl class="legal-owner">{fields}</dl></section>'
+    sections = "".join('<section class="legal-section"><h2>' + escape(item["title"]) + '</h2>' +
+                       "".join('<p>' + paragraph_html(paragraph) + '</p>' for paragraph in item["paragraphs"]) + '</section>'
+                       for item in content["sections"])
+    sources = {
+        "legal": [("LSSI — Ley 34/2002", "https://www.boe.es/buscar/act.php?id=BOE-A-2002-13758"),
+                  ("GNU AGPL-3.0-or-later", "https://github.com/gafapa/anonimato/blob/" + COMMIT + "/LICENSE"),
+                  ("Third-party licences", "https://github.com/gafapa/anonimato/blob/" + COMMIT + "/THIRD_PARTY.md")],
+        "privacy": [("GDPR / RGPD", "https://eur-lex.europa.eu/legal-content/ES/TXT/?uri=CELEX:32016R0679"),
+                    ("LOPDGDD — Ley Orgánica 3/2018", "https://www.boe.es/buscar/act.php?id=BOE-A-2018-16673"),
+                    ("AEPD", "https://www.aepd.es/"), ("Oracle — Privacy", "https://www.oracle.com/legal/privacy/services-privacy-policy/"),
+                    ("Oracle — Contracts", str(LEGAL_OWNER["hosting_dpa_url"]))],
+        "cookies": [("AEPD — Cookies", "https://www.aepd.es/guias/guia-cookies.pdf"),
+                    ("LSSI — Article 22.2", "https://www.boe.es/buscar/act.php?id=BOE-A-2002-13758#a22")],
+        "accessibility": [("WCAG 2.2", "https://www.w3.org/TR/WCAG22/")],
+    }
+    references = "".join(f'<li><a href="{escape(url)}">{escape(title)}</a></li>' for title, url in sources[section])
+    return header(language, section=section) + f'''<main id="main" class="section privacy-page legal-page"><h1>{escape(labels[section])}</h1><p class="updated">{escape(labels['updated'])}</p><p>{escape(content['intro'])}</p>{identity}{sections}<section class="legal-section"><h2>{escape(labels['resources'])}</h2><ul>{references}</ul></section><a class="text-link" href="{language_path(language)}">{escape(labels['back'])}</a></main>''' + footer(language)
+
+
+def render_pages(manifest: list[dict]) -> None:
+    for language in COPY:
+        target = OUTPUT / language_path(language).strip("/")
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "index.html").write_text(page(language, manifest), encoding="utf-8")
+        for section in LEGAL_PAGES:
+            folder = target / section
+            folder.mkdir(exist_ok=True)
+            (folder / "index.html").write_text(legal_page(language, section), encoding="utf-8")
+    shutil.copytree(SOURCE / "assets", OUTPUT / "assets", dirs_exist_ok=True)
+    font_root = OUTPUT / "assets/fonts"
+    font_root.mkdir(exist_ok=True)
+    for filename in ["plex-sans-400.woff2", "plex-sans-500.woff2", "plex-sans-600.woff2", "plex-mono-400.woff2", "OFL.txt"]:
+        shutil.copy2(ROOT / "app/ui/fonts" / filename, font_root / filename)
+    (OUTPUT / "robots.txt").write_text("User-agent: *\nAllow: /\nSitemap: https://privelto.com/sitemap.xml\n", encoding="utf-8")
+    paths = [language_path(language) + suffix for language in LANGUAGE_NAMES for suffix in ["", *(section + "/" for section in LEGAL_PAGES)]]
+    (OUTPUT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>https://privelto.com{path}</loc></url>' for path in paths) + '</urlset>\n', encoding="utf-8")
 
 
 def page(language: str, manifest: list[dict]) -> str:
@@ -138,20 +233,7 @@ def build() -> None:
         manifest.append({"platform": platform, "architecture": architecture, "kind": kind, "filename": filename, "sha256": digest, "size_bytes": package.stat().st_size, "size_mb": package.stat().st_size / 1_000_000})
     (download_root / "SHA256SUMS.txt").write_text("".join(f"{item['sha256']}  {item['filename']}\n" for item in manifest), encoding="utf-8")
     (download_root / "release.json").write_text(json.dumps({"version": VERSION, "source_commit": COMMIT, "ci_run": RUN, "package_brand": "Privelto", "site_brand": "Privelto", "packages": manifest}, indent=2) + "\n", encoding="utf-8")
-    for language, c in COPY.items():
-        target = OUTPUT / language_path(language).strip("/")
-        target.mkdir(exist_ok=True)
-        (target / "index.html").write_text(page(language, manifest), encoding="utf-8")
-        privacy = target / "privacy"
-        privacy.mkdir(exist_ok=True)
-        (privacy / "index.html").write_text(header(language, privacy=True) + f'<main id="main" class="privacy-page section"><h1>{c["privacyTitle"]}</h1><p class="updated">{c["updated"]}</p><p>{c["privacyBody"]}</p><a class="text-link" href="{language_path(language)}">{c["back"]}</a></main>' + footer(language), encoding="utf-8")
-    shutil.copytree(SOURCE / "assets", OUTPUT / "assets", dirs_exist_ok=True)
-    font_root = OUTPUT / "assets/fonts"
-    font_root.mkdir(exist_ok=True)
-    for filename in ["plex-sans-400.woff2", "plex-sans-500.woff2", "plex-sans-600.woff2", "plex-mono-400.woff2", "OFL.txt"]:
-        shutil.copy2(ROOT / "app/ui/fonts" / filename, font_root / filename)
-    (OUTPUT / "robots.txt").write_text("User-agent: *\nAllow: /\nSitemap: https://privelto.com/sitemap.xml\n", encoding="utf-8")
-    (OUTPUT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(f'<url><loc>https://privelto.com{path}</loc></url>' for path in [language_path(language) + suffix for language in LANGUAGE_NAMES for suffix in ['', 'privacy/']]) + '</urlset>\n', encoding="utf-8")
+    render_pages(manifest)
     print(json.dumps({"output": str(OUTPUT), "packages": manifest}, indent=2))
 
 
@@ -160,8 +242,17 @@ if __name__ == "__main__":
     parser.add_argument("--artifacts", type=Path, default=ARTIFACTS)
     parser.add_argument("--run-id", default=RUN.rsplit("/", 1)[1])
     parser.add_argument("--commit", default=COMMIT)
+    parser.add_argument("--legal-owner", type=Path, default=SOURCE / "legal/owner.json")
+    parser.add_argument("--legal-preview", action="store_true", help="Render into tmp with fictional owner fields; never changes the publishable site")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts.resolve()
     RUN = "https://github.com/gafapa/anonimato/actions/runs/" + args.run_id
     COMMIT = args.commit
-    build()
+    LEGAL_OWNER = load_legal_owner(args.legal_owner, preview=args.legal_preview)
+    if args.legal_preview:
+        manifest = json.loads((OUTPUT / "downloads/release.json").read_text(encoding="utf-8"))["packages"]
+        OUTPUT = ROOT / "tmp/privelto-legal-preview"
+        render_pages(manifest)
+        print(f"Legal preview only: {OUTPUT}")
+    else:
+        build()

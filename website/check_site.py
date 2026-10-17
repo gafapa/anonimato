@@ -41,7 +41,7 @@ class Page(HTMLParser):
 def check() -> None:
     for language in LANGUAGES:
         folder = ROOT / ("" if language == "en" else language)
-        for suffix in ("index.html", "privacy/index.html"):
+        for suffix in ("index.html", "legal/index.html", "privacy/index.html", "cookies/index.html", "accessibility/index.html"):
             page = Page()
             page.feed((folder / suffix).read_text(encoding="utf-8"))
             assert page.language == language, (language, suffix)
@@ -64,7 +64,7 @@ def check() -> None:
         with path.open("rb") as stream:
             assert hashlib.file_digest(stream, "sha256").hexdigest() == package["sha256"]
         assert path.stat().st_size == package["size_bytes"]
-    print("Passed: 14 localized pages, all links, date redaction, requirements and six package hashes.")
+    print("Passed: 35 localized pages, all links, date redaction, requirements and six package hashes.")
 
 
 if __name__ == "__main__":

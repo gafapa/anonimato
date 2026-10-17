@@ -21,7 +21,7 @@ The application processes PDFs and images locally, detects personal information,
 The 2.3.0 release adds English, Spanish, Galician, French, German, Italian and
 Portuguese interfaces, installable packages and portable archives. Windows x64,
 macOS 15+ Apple Silicon and Linux x86_64 are the packaging targets. CI run
-39061449297 must qualify the actual packages before publication. Windows
+39061449297 qualified installation and portable relocation on all three targets. Windows
 executables are unsigned; macOS notarization requires configured credentials.
 Do not imply Intel Mac support, universal Linux compatibility, or identical
 national identifier detection coverage from interface localization.
@@ -37,7 +37,7 @@ The user selected Privelto and owns privelto.com. The existing application uses 
 
 ## Evidence on Hand
 
-README.md, AGPL-3.0-or-later project license, app/ui/styles.css, bundled OFL fonts, and downloaded CI artifacts under tmp/privelto-artifacts.
+README.md, AGPL-3.0-or-later project license, app/ui/styles.css, bundled OFL fonts, and the qualified 2.3.0 CI artifacts under tmp/privelto-2.3-final-artifacts.
 
 ## Open Decisions
 

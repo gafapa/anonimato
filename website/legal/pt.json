@@ -1,0 +1,139 @@
+{
+  "labels": {
+    "legal": "Aviso legal e termos",
+    "privacy": "Privacidade",
+    "cookies": "Cookies",
+    "accessibility": "Acessibilidade",
+    "updated": "Última revisão: 17 de outubro de 2026",
+    "owner": "Titular do site e responsável pelo tratamento",
+    "name": "Nome ou razão social",
+    "tax_id": "Identificação fiscal",
+    "address": "Endereço postal",
+    "email": "Contacto",
+    "registration": "Registro público",
+    "regulated_profession": "Profissão regulamentada",
+    "resources": "Informações oficiais e licenças",
+    "back": "Voltar para Privelto"
+  },
+  "legal": {
+    "intro": "Informações sobre privelto.com e as condições de utilização deste site e download do Privelto.",
+    "sections": [
+      {
+        "title": "Finalidade e acesso",
+        "paragraphs": [
+          "Este site apresenta o Privelto e distribui seus pacotes para desktop. Não possui contas de usuário, carrinho de compras ou forma de pagamento. O download do aplicativo publicado é gratuito. O acesso à Internet e os equipamentos são da responsabilidade do utilizador."
+        ]
+      },
+      {
+        "title": "Software e outros direitos",
+        "paragraphs": [
+          "Privelto é distribuído sob GNU AGPL versão 3 ou posterior. O código-fonte e a licença estão vinculados abaixo. Fontes e componentes de terceiros mantêm suas próprias licenças; as licenças dos modelos constam do manifesto de modelos do projeto. Estes termos não restringem os direitos concedidos por essas licenças."
+        ]
+      },
+      {
+        "title": "Uso responsável e limitações",
+        "paragraphs": [
+          "A demonstração utiliza dados fictícios. A detecção automática pode perder informações pessoais ou sinalizar conteúdo inofensivo. Revise o documento e o relatório de verificação antes de compartilhá-lo. O uso de Privelto por si só não estabelece a conformidade com RGPD nem garante que cada saída seja anônima. Não utilize o site para enviar documentos reais: ele não oferece serviço de upload.",
+          "Utilize o site de forma legal e não interfira no seu funcionamento. A disponibilidade e compatibilidade podem variar. As disposições de garantia de software aplicam-se apenas na medida permitida pela lei obrigatória. Nada aqui exclui responsabilidades ou direitos do consumidor que não possam ser legalmente excluídos."
+        ]
+      },
+      {
+        "title": "Links, contato e legislação aplicável",
+        "paragraphs": [
+          "Links externos levam a serviços operados por seus respectivos provedores. Seus termos e políticas de privacidade se aplicam quando você os visita. Envie perguntas sobre este site para {email}.",
+          "A lei espanhola aplica-se sujeita às proteções obrigatórias ao abrigo da legislação aplicável da União Europeia. Os tribunais competentes são determinados por lei; estes termos não impõem um tribunal que prive os consumidores dos seus direitos legais. Mudanças substanciais serão refletidas na data de revisão."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "intro": "Este aviso abrange visitas ao site e consultas por e-mail. Os documentos abertos no aplicativo para desktop são processados no seu computador, em vez de serem carregados neste site.",
+    "sections": [
+      {
+        "title": "Solicitações e segurança do site",
+        "paragraphs": [
+          "O servidor recebe seu endereço IP, horário da solicitação, URL, status da resposta e informações técnicas do navegador; também pode receber um endereço de referência. Estes dados permitem servir a página ou a descarga, detectam abusos e produzem estatísticas de tráfego interno. A base jurídica é o interesse legítimo em operar e proteger o serviço e compreender a sua utilização básica, nos termos do Artigo 6(1)(f) do RGPD. Os relatórios mascaram endereços IP e omitem strings de consulta, mas os logs de acesso originais não são anônimos. Não há perfil publicitário ou decisão automatizada que produza efeitos jurídicos."
+        ]
+      },
+      {
+        "title": "Perguntas por e-mail",
+        "paragraphs": [
+          "Se você enviar um e-mail para {email}, o responsável pelo tratamento tratará seu endereço, nome, se fornecido, e mensagem para responder e gerenciar a consulta. Isto baseia-se no interesse legítimo em responder à correspondência; aplicam-se deveres legais quando um pedido diz respeito a direitos de proteção de dados. O fornecimento de informações de contato é voluntário, mas uma resposta pode ser impossível sem elas. Envie apenas as informações necessárias e use exemplos fictícios ou com os dados pessoais removidos, especialmente para informações estudantis, de saúde ou outras informações confidenciais."
+        ]
+      },
+      {
+        "title": "Retenção",
+        "paragraphs": [
+          "Os logs de acesso são alternados diariamente ou quando atingem o limite de tamanho configurado. O servidor mantém o log atual e 30 arquivos rotacionados; este é um limite de rotação, não uma garantia de exatamente 30 dias corridos. O log de diagnóstico do servidor web também é limitado por tamanho. Evidências relevantes de incidentes podem ser isoladas pelo tempo necessário para investigar ou cumprir obrigações legais.",
+          "O e-mail é mantido durante o tratamento da consulta e posteriormente apenas quando necessário para obrigações legais aplicáveis ou para estabelecer, exercer ou defender reclamações. O critério é a finalidade da correspondência e o prazo de prescrição aplicável, e não a reutilização indefinida para comercialização."
+        ]
+      },
+      {
+        "title": "Destinatários, hospedagem e transferências",
+        "paragraphs": [
+          "O site e o e-mail do projeto usam serviços autogerenciados na infraestrutura Oracle Cloud em Frankfurt, Alemanha. O acesso é limitado ao responsável pelo tratamento, à administração técnica autorizada, aos fornecedores de infraestrutura quando necessário e às autoridades públicas quando legalmente exigido. Os dados não são vendidos a anunciantes.",
+          "A Oracle é um fornecedor de infraestrutura global, portanto, uma região de hospedagem do EEE não exclui o acesso de outros países. Os seus termos de processamento de dados aplicáveis e salvaguardas de transferência internacional estão disponíveis através das referências abaixo; solicite uma cópia ou informações sobre salvaguardas de {email}."
+        ]
+      },
+      {
+        "title": "Seus direitos",
+        "paragraphs": [
+          "Contacte {email} para solicitar acesso, retificação, apagamento, restrição, portabilidade quando aplicável ou para se opor ao processamento com base em interesse legítimo. Você poderá retirar o consentimento se uma futura atividade de processamento opcional depender dele. As solicitações normalmente são respondidas no prazo de um mês; qualquer extensão permitida será explicada. As informações de identidade serão solicitadas apenas quando razoavelmente necessário. Você pode reclamar junto à Agência Espanhola de Proteção de Dados (AEPD) ou à sua autoridade supervisora competente."
+        ]
+      },
+      {
+        "title": "Aplicativo de desktop e serviços externos",
+        "paragraphs": [
+          "Este site não pode acessar documentos abertos em Privelto. A pessoa ou organização que utiliza o aplicativo permanece responsável pelo manuseio legal desses documentos e dos resultados. Os logs, modelos e preferências locais permanecem sujeitos às opções de segurança e retenção nesse computador.",
+          "O download de modelos ou arquivos de tempo de execução no aplicativo conecta-se aos provedores listados em seu manifesto, incluindo Hugging Face e GitHub. Eles recebem os dados de conexão necessários para esse download, e não os documentos que estão sendo processados. A importação de modelo offline está disponível. Seguir links de fontes externas ou provedores também estabelece uma conexão separada com esse provedor."
+        ]
+      }
+    ]
+  },
+  "cookies": {
+    "intro": "O site atual não define cookies nem usa armazenamento do navegador para análises, publicidade ou seleção de idioma.",
+    "sections": [
+      {
+        "title": "O que acontece no seu navegador",
+        "paragraphs": [
+          "Fontes, estilos e scripts são fornecidos em privelto.com. Não há pixels de publicidade incorporados, vídeos de terceiros ou scripts analíticos externos. O idioma selecionado faz parte do URL da página. A demonstração fictícia altera apenas a página atual e não envia o seu conteúdo ao servidor. O cache comum do navegador pode reter recursos de sites públicos."
+        ]
+      },
+      {
+        "title": "As estatísticas do servidor são diferentes",
+        "paragraphs": [
+          "O registro de solicitações e os relatórios de tráfego interno ocorrem no servidor sem colocar um identificador de visitante em seu dispositivo. Eles ainda envolvem o processamento de dados de conexão e são explicados no aviso de privacidade."
+        ]
+      },
+      {
+        "title": "Consentimento e alterações futuras",
+        "paragraphs": [
+          "Um banner de consentimento não é necessário simplesmente porque existe um site. Esta versão não introduz cookies não essenciais ou rastreamento de dispositivo equivalente. Se estes forem adicionados, devem permanecer bloqueados até que seja obtido um consentimento válido, com opções de aceitação e rejeição igualmente acessíveis e uma forma de alterar a escolha. Sites externos acessados por meio de links aplicam suas próprias políticas."
+        ]
+      }
+    ]
+  },
+  "accessibility": {
+    "intro": "Nosso objetivo é tornar o site utilizável com teclado, tecnologia assistiva, telas pequenas e texto ampliado.",
+    "sections": [
+      {
+        "title": "Medidas nesta versão",
+        "paragraphs": [
+          "As páginas usam pontos de referência semânticos, um link para pular, foco visível do teclado, controles rotulados, metadados de idioma e nomes individuais para links de download. O botão de demonstração expõe seu estado e anuncia o resultado. Os layouts se adaptam a telas pequenas e respeitam as preferências de movimento reduzido."
+        ]
+      },
+      {
+        "title": "Avaliação e limites",
+        "paragraphs": [
+          "O site recebeu teclado, layout responsivo e verificações estruturais básicas. Uma auditoria de conformidade WCAG ou EN 301 549 independente e completa não foi realizada. Esta página é um compromisso de acessibilidade e não uma reivindicação de certificação ou conformidade total. O aplicativo de desktop, serviços externos e documentos de terceiros possuem características próprias de acessibilidade."
+        ]
+      },
+      {
+        "title": "Reportar uma barreira",
+        "paragraphs": [
+          "Envie um e-mail para {email} com o URL da página, o problema, seu navegador ou tecnologia assistiva, se relevante, e o formato que você precisa. Avaliaremos o problema e ofereceremos uma alternativa acessível sempre que possível. Não inclua documentos pessoais ou informações confidenciais no relatório."
+        ]
+      }
+    ]
+  }
+}

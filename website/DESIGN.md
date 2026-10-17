@@ -29,6 +29,15 @@ typography:
   body:
     fontFamily: "Plex, sans-serif"
     lineHeight: 1.65
+  legal-title:
+    fontFamily: "Plex, sans-serif"
+    fontSize: "clamp(36px, 5vw, 52px)"
+    lineHeight: 1.1
+    letterSpacing: "-.035em"
+  legal-body:
+    fontFamily: "Plex, sans-serif"
+    fontSize: "17px"
+    lineHeight: 1.75
   label:
     fontFamily: "PlexMono, monospace"
     fontSize: "12px"
@@ -117,6 +126,7 @@ The sans-serif is clear and slightly technical without overwhelming the document
 - **Title:** method and setup headings are medium weight (20px); platform names are larger (23px).
 - **Body:** paragraph leading follows the body token. Hero supporting copy is larger (18px) with a compact measure (48ch); method and FAQ copy is smaller (14px).
 - **Label:** release metadata uses the monospace label token. Navigation and action labels use Plex Sans at medium weight.
+- **Legal reading:** legal titles use the dedicated responsive title token; section headings are medium-weight (26px desktop; 24px mobile) with comfortable leading (1.3). Paragraphs use the legal body token, reducing to 16px on mobile; update metadata is smaller (14px).
 - **Document detail:** the miniature sheet deliberately uses smaller type to look like a complete record. Preserve the adjacent readable explanation and control.
 
 ## Layout
@@ -126,6 +136,8 @@ The shared page container has a maximum width (1320px). Desktop gutters follow t
 Method headings use two columns and the three steps form a horizontal row. Downloads combine a platform table with a separate setup column. Each platform pairs an installable package with a portable package in two equal action columns. A dedicated requirements section follows, with eight definition rows in a two-column grid. FAQ headings sit beside a stack of disclosures. Borders and background changes identify sections without enclosing each item in a card.
 
 At the tablet breakpoint (1050px), gutters and gaps shrink, and each platform heading moves above its paired download choices. At the mobile breakpoint (760px), gutters use the mobile token and the hero, headings, steps, download/setup area, requirements and FAQ become single columns. The demonstration stays centered with a bounded width (510px). The two package choices remain side by side, each with its own size and checksum beneath. Platform and architecture share a compact heading row. The closing call to action and footer stack vertically. How-it-works and requirements navigation links are hidden; downloads and the native language selector remain visible. Document headings allow word wrapping and automatic hyphenation so longer translations fit the sheet. At 380px and below, header section anchors are hidden to retain the brand and language selector without overflow; the prominent hero download action remains visible.
+
+Legal, privacy, cookies and accessibility pages use a single reading column rather than the landing page hero grid. Their container is bounded (1100px), with sections and paragraphs limited to a readable measure (72ch) and titles to a shorter measure (22ch). The reading page inherits the existing vertical padding (75px above, 90px below; 48px on mobile). Sections start with generous separation (42px; 34px mobile). Long translated titles and owner values wrap within the available width. These pages retain the shared header, language selector and permanent footer.
 
 ## Elevation & Depth
 
@@ -165,6 +177,18 @@ A dedicated section uses a definition list with eight rows: Windows, macOS, Linu
 
 Native disclosures use medium-weight questions, a navy plus/minus indicator and a single lower divider. Expanded text uses the standard muted body style. Keep full question text and keyboard behavior intact.
 
+### Legal reading pages
+
+Legal content uses plain headings, paragraphs and source lists on the cool paper background, without decorative cards or certification marks. Paragraphs have a clear lower margin (20px). Source lists use readable text (16px, line-height 1.8). A navy text link returns to the landing page after the reading content.
+
+The owner definition list appears on legal and privacy pages. Thin top rules divide entries; medium-weight terms occupy a fixed desktop column (180px) beside flexible values, separated by a gap (20px). Mobile stacks terms and values with a smaller gap (5px). Terms wrap long words with language-aware hyphenation; values preserve intentional line breaks and wrap long content. Component previews use illustrative identity values rather than claiming confirmed operator details.
+
+### Permanent footer
+
+Every page links to the four legal routes—legal, privacy, cookies and accessibility—in its current language, alongside source code and contact links. Seven language editions provide 28 legal reading routes. The expanded link group remains a wrapping row, bounded to a practical width (600px), with readable links (14px). Desktop aligns the group to the right of the brand; mobile places it below the brand and aligns it left. The license line remains smaller and muted. Preserve ordinary underlined link affordances and the global keyboard focus outline.
+
+These visual patterns indicate access to information, not legal or accessibility certification. Contractual verification, including the account-specific hosting DPA, is tracked separately in COMPLIANCE.md.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -174,6 +198,7 @@ Native disclosures use medium-weight questions, a navy plus/minus indicator and 
 - **Do** preserve clear focus states, native disclosure behavior and reduced-motion support.
 - **Do** use fictional data in demonstrations and keep its label visible.
 - **Do** carry the same hierarchy and localized accessible names across all seven languages.
+- **Do** keep all four legal links permanently reachable and allow long translated labels to wrap.
 
 ### Don't:
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T18:46:18.207397+00:00",
+  "generatedAt": "2026-10-17T20:58:22.054337+00:00",
   "title": "Design System: Privelto",
   "extensions": {
     "shadows": [
@@ -34,7 +34,17 @@
         "name": "compact-mobile",
         "value": "380px"
       }
-    ]
+    ],
+    "typographyMeta": {
+      "legal-title": {
+        "displayName": "Legal Page Title",
+        "purpose": "Responsive title for legal, privacy, cookies and accessibility reading pages."
+      },
+      "legal-body": {
+        "displayName": "Legal Reading Body",
+        "purpose": "Long-form paragraphs with comfortable leading; 16px on mobile."
+      }
+    }
   },
   "components": [
     {
@@ -88,6 +98,20 @@
       "description": "Bordered definition row in the dedicated eight-item requirements section.",
       "html": "<dl class=\"ds-requirements\"><div class=\"ds-requirement\"><dt>Memory</dt><dd>Start with the base models. Optional advanced AI needs additional memory and disk space.</dd></div><div class=\"ds-requirement\"><dt>Portable use</dt><dd>Extract the archive into a writable folder and keep the application and its portable data together.</dd></div></dl>",
       "css": ".ds-requirements{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px;margin:42px 0 0;font-family:Plex,sans-serif;color:var(--ink,#172033)}.ds-requirement{padding:24px 0;border-top:1px solid var(--line,#d5dbe5)}.ds-requirement dt{font-size:20px;font-weight:500;margin-bottom:10px;letter-spacing:-.02em}.ds-requirement dd{margin:0;font-size:14px;line-height:1.7;color:var(--muted,#505c70);max-width:65ch}@media(max-width:1050px){.ds-requirements{column-gap:36px}}@media(max-width:760px){.ds-requirements{grid-template-columns:1fr;gap:0;margin-top:30px}}"
+    },
+    {
+      "name": "Legal Reading Section",
+      "kind": "custom",
+      "description": "Plain reading content and a responsive owner definition list, using illustrative values only.",
+      "html": "<article class=\"ds-legal\"><h1>Legal information</h1><p class=\"ds-updated\">Last reviewed: 17 October 2026</p><section class=\"ds-legal-section\"><h2>Website operator</h2><dl class=\"ds-legal-owner\"><div><dt>Contact</dt><dd>Example contact — preview only</dd></div></dl></section><section class=\"ds-legal-section\"><h2>Information and contact</h2><p>Read the published notices and contact the project with questions about this website.</p></section></article>",
+      "css": ".ds-legal{max-width:1100px;padding:75px 64px 90px;font-family:Plex,sans-serif;color:var(--ink,#172033);background:var(--paper,#f5f6f8)}.ds-legal h1{font-size:clamp(36px,5vw,52px);line-height:1.1;letter-spacing:-.035em;max-width:22ch;overflow-wrap:anywhere;hyphens:auto;margin:0}.ds-updated{font-size:14px;color:var(--muted,#505c70);margin:24px 0}.ds-legal-section{margin-top:42px;max-width:72ch}.ds-legal h2{font-size:26px;font-weight:500;line-height:1.3;letter-spacing:-.02em;margin:0 0 16px}.ds-legal-section p{font-size:17px;line-height:1.75;margin:0 0 20px}.ds-legal-owner{margin:0}.ds-legal-owner>div{display:grid;grid-template-columns:180px minmax(0,1fr);gap:20px;padding:12px 0;border-top:1px solid var(--line,#d5dbe5)}.ds-legal-owner dt{font-weight:500;overflow-wrap:anywhere;hyphens:auto}.ds-legal-owner dd{margin:0;overflow-wrap:anywhere;white-space:pre-line}.ds-legal a:focus-visible{outline:3px solid #416bcd;outline-offset:5px}@media(max-width:760px){.ds-legal{padding:48px 24px}.ds-legal h2{font-size:24px}.ds-legal-section{margin-top:34px}.ds-legal-section p{font-size:16px}.ds-legal-owner>div{grid-template-columns:1fr;gap:5px}}"
+    },
+    {
+      "name": "Permanent Legal Footer",
+      "kind": "nav",
+      "description": "Four localized legal routes remain reachable from every page in all seven languages.",
+      "html": "<footer class=\"ds-footer\"><div class=\"ds-footer-brand\">privelto<span>.</span></div><nav class=\"ds-footer-links\" aria-label=\"Legal and project links\"><a href=\"/legal/\">Legal information and terms</a><a href=\"/privacy/\">Privacy</a><a href=\"/cookies/\">Cookies</a><a href=\"/accessibility/\">Accessibility</a><a href=\"https://github.com/gafapa/anonimato\">Source code</a><a href=\"mailto:hello@privelto.com\">hello@privelto.com</a><span>AGPL-3.0-or-later</span></nav></footer>",
+      "css": ".ds-footer{display:flex;justify-content:space-between;gap:32px;padding:45px 64px;font-family:Plex,sans-serif;color:var(--ink,#172033);background:var(--paper,#f5f6f8)}.ds-footer-brand{font-size:26px;font-weight:600;letter-spacing:-.04em}.ds-footer-brand span{color:var(--blue,#1d3f8f)}.ds-footer-links{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:15px 24px;font-size:14px;max-width:600px}.ds-footer-links a{color:inherit;text-underline-offset:4px}.ds-footer-links a:focus-visible{outline:3px solid #416bcd;outline-offset:5px}.ds-footer-links span{width:100%;text-align:right;color:var(--muted,#505c70);font-size:11px}@media(max-width:760px){.ds-footer{flex-direction:column;padding:34px 24px}.ds-footer-links{justify-content:flex-start;gap:16px 22px}.ds-footer-links span{text-align:left}}"
     }
   ],
   "narrative": {
@@ -116,7 +140,8 @@
       "**Do** keep text, controls and document examples as real HTML.",
       "**Do** preserve clear focus states, native disclosure behavior and reduced-motion support.",
       "**Do** use fictional data in demonstrations and keep its label visible.",
-      "**Do** carry the same hierarchy and localized accessible names across all seven languages."
+      "**Do** carry the same hierarchy and localized accessible names across all seven languages.",
+      "**Do** keep all four legal links permanently reachable and allow long translated labels to wrap."
     ],
     "donts": [
       "**Don't** replace the document-led visual with unrelated stock privacy imagery.",

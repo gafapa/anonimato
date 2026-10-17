@@ -1,0 +1,139 @@
+{
+  "labels": {
+    "legal": "Note legali e termini",
+    "privacy": "Privacy",
+    "cookies": "Cookie",
+    "accessibility": "Accessibilità",
+    "updated": "Ultima revisione: 17 ottobre 2026",
+    "owner": "Titolare del sito e del trattamento dei dati",
+    "name": "Nome o ragione sociale",
+    "tax_id": "Identificativo fiscale",
+    "address": "Indirizzo postale",
+    "email": "Contatto",
+    "registration": "Registrazione pubblica",
+    "regulated_profession": "Professione regolamentata",
+    "resources": "Informazioni e licenze ufficiali",
+    "back": "Torna a Privelto"
+  },
+  "legal": {
+    "intro": "Informazioni su privelto.com e le condizioni per l'utilizzo di questo sito e per il download di Privelto.",
+    "sections": [
+      {
+        "title": "Scopo e accesso",
+        "paragraphs": [
+          "Questo sito Web presenta Privelto e distribuisce i suoi pacchetti desktop. Non ha account utente, carrello o modulo di pagamento. Il download dell'app pubblicata è gratuito. L'accesso e l'attrezzatura a Internet sono a carico dell'utente."
+        ]
+      },
+      {
+        "title": "Software e altri diritti",
+        "paragraphs": [
+          "Privelto è distribuito con GNU AGPL versione 3 o successiva. Il codice sorgente e la licenza sono collegati di seguito. I caratteri e i componenti di terze parti mantengono le proprie licenze; le licenze del modello sono elencate nel manifesto del modello del progetto. Questi termini non limitano i diritti concessi da tali licenze."
+        ]
+      },
+      {
+        "title": "Uso responsabile e limitazioni",
+        "paragraphs": [
+          "La dimostrazione utilizza dati fittizi. Il rilevamento automatico potrebbe perdere informazioni personali o segnalare contenuti innocui. Esamina il documento e il rapporto di verifica prima di condividerlo. L'utilizzo di Privelto non stabilisce di per sé la conformità GDPR né garantisce che ogni output sia anonimo. Non utilizzare il sito per inviare documenti reali: non fornisce alcun servizio di upload.",
+          "Utilizzare il sito in modo lecito e non interferire con il suo funzionamento. La disponibilità e la compatibilità possono variare. Le disposizioni sulla garanzia del software si applicano solo nella misura consentita dalla legge imperativa. Niente qui esclude la responsabilità o i diritti dei consumatori che non possono essere legalmente esclusi."
+        ]
+      },
+      {
+        "title": "Link, contatti e normativa applicabile",
+        "paragraphs": [
+          "I collegamenti esterni portano ai servizi gestiti dai rispettivi fornitori. I loro termini e le politiche sulla privacy si applicano quando li visiti. Invia domande su questo sito Web a {email}.",
+          "Si applica la legge spagnola, soggetta alle tutele obbligatorie previste dalla legge applicabile dell'Unione Europea. I tribunali competenti sono determinati dalla legge; questi termini non impongono un tribunale che priva i consumatori dei loro diritti legali. Le modifiche sostanziali si rifletteranno nella data di revisione."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "intro": "Il presente avviso riguarda le visite al sito Web e le richieste tramite posta elettronica. I documenti aperti nell'app desktop vengono elaborati sul tuo computer anziché caricati su questo sito Web.",
+    "sections": [
+      {
+        "title": "Richieste e sicurezza del sito web",
+        "paragraphs": [
+          "Il server riceve il tuo indirizzo IP, l'ora della richiesta, l'URL, lo stato della risposta e le informazioni tecniche del browser; potrebbe anche ricevere un indirizzo di riferimento. Questi dati forniscono la pagina o il download, rilevano abusi e producono statistiche sul traffico interno. La base giuridica è l'interesse legittimo a gestire e proteggere il servizio e a comprenderne l'utilizzo di base, ai sensi dell'articolo 6(1)(f) GDPR. I report mascherano gli indirizzi IP e omettono le stringhe di query, ma i log di accesso originali non sono anonimi. Non esiste alcuna profilazione pubblicitaria o decisione automatizzata che produca effetti giuridici."
+        ]
+      },
+      {
+        "title": "Richieste via e-mail",
+        "paragraphs": [
+          "Se invii un'e-mail a {email}, il titolare del trattamento elabora il tuo indirizzo, il nome se fornito e il messaggio per rispondere e gestire la richiesta. Ciò si basa sul legittimo interesse a rispondere alla corrispondenza; gli obblighi legali si applicano quando una richiesta riguarda i diritti di protezione dei dati. Fornire le informazioni di contatto è volontario, ma senza di esse una risposta potrebbe essere impossibile. Invia solo le informazioni necessarie e utilizza esempi fittizi o con i dati personali oscurati, in particolare per informazioni su studenti, salute o altre informazioni sensibili."
+        ]
+      },
+      {
+        "title": "Conservazione",
+        "paragraphs": [
+          "I registri di accesso ruotano quotidianamente o quando raggiungono il limite di dimensione configurato. Il server conserva il registro corrente e 30 file ruotati; questo è un limite di rotazione, non una garanzia di esattamente 30 giorni di calendario. Anche il registro diagnostico del server Web è limitato dalle dimensioni. Le prove rilevanti dell'incidente possono essere isolate per il tempo necessario per indagare o adempiere agli obblighi legali.",
+          "L'e-mail viene conservata durante la gestione della richiesta e successivamente solo ove necessario per obblighi legali applicabili o per stabilire, esercitare o difendere reclami. Il criterio è lo scopo della corrispondenza e il periodo di prescrizione applicabile, piuttosto che il riutilizzo indefinito per la commercializzazione."
+        ]
+      },
+      {
+        "title": "Destinatari, hosting e trasferimenti",
+        "paragraphs": [
+          "Il sito web e l'e-mail del progetto utilizzano servizi autogestiti sull'infrastruttura Oracle Cloud a Frankfurt, Germania. L'accesso è limitato al titolare del trattamento, all'amministrazione tecnica autorizzata, ai fornitori di infrastrutture ove necessario e alle autorità pubbliche quando richiesto dalla legge. I dati non vengono venduti agli inserzionisti.",
+          "Oracle è un fornitore di infrastrutture globale, pertanto una regione di hosting SEE non esclude l'accesso da altri paesi. I termini applicabili al trattamento dei dati e le garanzie per il trasferimento internazionale sono disponibili tramite i riferimenti riportati di seguito; richiedere una copia o informazioni sulle garanzie a {email}."
+        ]
+      },
+      {
+        "title": "I tuoi diritti",
+        "paragraphs": [
+          "Contattare {email} per richiedere l'accesso, la rettifica, la cancellazione, la limitazione, la portabilità ove applicabile o per opporsi al trattamento basato sul legittimo interesse. Potrai revocare il consenso qualora su di esso si basi una futura attività facoltativa di trattamento. Le richieste ricevono normalmente risposta entro un mese; eventuali estensioni consentite verranno spiegate. Le informazioni sull'identità saranno richieste solo quando ragionevolmente necessario. Puoi presentare un reclamo all'Agenzia spagnola per la protezione dei dati (AEPD) o alla tua autorità di controllo competente."
+        ]
+      },
+      {
+        "title": "App desktop e servizi esterni",
+        "paragraphs": [
+          "Questo sito Web non può accedere ai documenti aperti in Privelto. La persona o l'organizzazione che utilizza l'app rimane responsabile del trattamento legittimo di tali documenti e dei relativi risultati. I registri, i modelli e le preferenze locali rimangono soggetti alle scelte di sicurezza e conservazione su quel computer.",
+          "Il download di modelli o file runtime nell'app si connette ai provider elencati nel manifest, inclusi Hugging Face e GitHub. Ricevono i dati di connessione necessari per tale download, non i documenti in elaborazione. È disponibile l'importazione del modello offline. Anche seguendo i collegamenti a fonti o fornitori esterni si stabilisce una connessione separata a quel fornitore."
+        ]
+      }
+    ]
+  },
+  "cookies": {
+    "intro": "Il sito web attuale non imposta cookie né utilizza la memoria del browser per analisi, pubblicità o selezione della lingua.",
+    "sections": [
+      {
+        "title": "Cosa succede nel tuo browser",
+        "paragraphs": [
+          "I caratteri, gli stili e gli script sono forniti da privelto.com. Non sono presenti pixel pubblicitari incorporati, video di terze parti o script di analisi esterni. La lingua selezionata fa parte dell'URL della pagina. La dimostrazione fittizia modifica solo la pagina corrente e non ne invia i contenuti al server. La normale memorizzazione nella cache del browser può conservare le risorse del sito pubblico."
+        ]
+      },
+      {
+        "title": "Le statistiche del server sono diverse",
+        "paragraphs": [
+          "La registrazione delle richieste e i rapporti sul traffico interno avvengono sul server senza inserire un identificatore del visitatore sul tuo dispositivo. Essi comportano comunque il trattamento dei dati di connessione e sono illustrati nell'informativa privacy."
+        ]
+      },
+      {
+        "title": "Consenso e modifiche future",
+        "paragraphs": [
+          "Un banner di consenso non è necessario semplicemente perché esiste un sito web. Questa versione non introduce cookie non essenziali o tracciamento equivalente del dispositivo. Se questi vengono aggiunti, devono rimanere bloccati finché non viene ottenuto un consenso valido, con scelte di accettazione e rifiuto ugualmente accessibili e un modo per modificare la scelta. I siti web esterni raggiunti tramite link applicano le proprie politiche."
+        ]
+      }
+    ]
+  },
+  "accessibility": {
+    "intro": "Puntiamo a rendere il sito web utilizzabile con tastiera, tecnologia assistiva, schermi piccoli e testo ingrandito.",
+    "sections": [
+      {
+        "title": "Misure in questa versione",
+        "paragraphs": [
+          "Le pagine utilizzano punti di riferimento semantici, un collegamento di salto, focus visibile da tastiera, controlli etichettati, metadati della lingua e nomi individuali per i collegamenti di download. Il pulsante demo espone il suo stato e annuncia il risultato. I layout si adattano agli schermi di piccole dimensioni e rispettano le preferenze di movimento ridotto."
+        ]
+      },
+      {
+        "title": "Valutazione e limiti",
+        "paragraphs": [
+          "Il sito web è stato sottoposto a controlli strutturali di base, tastiera e layout responsive. Non è stato eseguito un controllo di conformità completo e indipendente per WCAG o EN 301 549. Questa pagina rappresenta un impegno di accessibilità, non una richiesta di certificazione o piena conformità. L'app desktop, i servizi esterni e i documenti di terze parti hanno le proprie caratteristiche di accessibilità."
+        ]
+      },
+      {
+        "title": "Segnala una barriera",
+        "paragraphs": [
+          "Invia un'e-mail a {email} con l'URL della pagina, il problema, il browser o la tecnologia assistiva, se pertinente, e il formato necessario. Valuteremo il problema e offriremo un'alternativa accessibile ove possibile. Non includere documenti personali o informazioni sensibili nel rapporto."
+        ]
+      }
+    ]
+  }
+}

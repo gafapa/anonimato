@@ -3,7 +3,7 @@
 for (const select of document.querySelectorAll("[data-language]")) {
   select.addEventListener("change", () => {
     const destination = select.value;
-    if (/^\/(?:en\/|es\/|gl\/|fr\/|de\/|it\/|pt\/)?(?:privacy\/)?$/.test(destination)) {
+    if (/^\/(?:en\/|es\/|gl\/|fr\/|de\/|it\/|pt\/)?(?:(?:legal|privacy|cookies|accessibility)\/)?$/.test(destination)) {
       window.location.assign(destination);
     }
   });

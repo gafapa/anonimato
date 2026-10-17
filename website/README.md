@@ -10,6 +10,12 @@ system. The reversible document demonstration uses fictional data only.
 
 From the application repository root:
 
+Prepare `website/legal/owner.json` from `owner.example.json` with the owner's
+confirmed public identity, tax identification, postal address and legal contact.
+The actual owner file is ignored by Git; it is rendered into the public legal
+pages rather than copied as JSON. Keep provider-account evidence flags truthful.
+The current Oracle account DPA review remains pending; see [COMPLIANCE.md](COMPLIANCE.md).
+
 ```powershell
 gh run download 39061449297 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-final-artifacts
 python tools/build_website.py
@@ -25,6 +31,13 @@ replace an expired build with a different build under the same versioned URL.
 Localized copy lives in `website/locales/`; the build and verified package metadata live in `tools/build_website.py`; styles, the geometric brand mark and
 the demonstration behavior live in `website/assets/`. No generated bitmap
 assets are used. Font provenance and license: `app/ui/fonts/OFL.txt`.
+
+The four legal routes (`legal/`, `privacy/`, `cookies/`, `accessibility/`) exist
+in each language. Their structured copy lives in `website/legal/`. English and
+Spanish were authored directly; the other five use corrected translation
+drafts. No legal-linguistic certification is claimed. `--legal-preview` renders
+only into `tmp/privelto-legal-preview` with fictional owner details and does not
+change the publishable site. See COMPLIANCE.md for operational responsibilities.
 
 ## Release identity and limits
 
@@ -84,7 +97,9 @@ webmail backups are recorded in the hub's deployment evidence.
 The publication checks included complete public downloads and SHA-256
 comparison for all six packages; HTTPS and www redirection; desktop and
 mobile browser checks; four-field demonstration round trips including the date; FAQ controls; accessible
-download names; and local link validation for all fourteen pages.
+download names; and local link validation for all thirty-five pages. Legal-page
+checks covered 84 layouts, keyboard skip navigation, section-preserving language
+switches, empty browser storage, no cookies and no third-party runtime requests.
 
 Mail checks covered public MX/TXT records, matching DKIM, valid SMTP/IMAP
 TLS, accepted alias recipients, rejection of unknown local recipients and

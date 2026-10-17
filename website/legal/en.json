@@ -1,0 +1,139 @@
+{
+  "labels": {
+    "legal": "Legal notice and terms",
+    "privacy": "Privacy",
+    "cookies": "Cookies",
+    "accessibility": "Accessibility",
+    "updated": "Last reviewed: 17 October 2026",
+    "owner": "Website owner and data controller",
+    "name": "Name or legal name",
+    "tax_id": "Tax identification",
+    "address": "Postal address",
+    "email": "Contact",
+    "registration": "Public registration",
+    "regulated_profession": "Regulated profession",
+    "resources": "Official information and licences",
+    "back": "Back to Privelto"
+  },
+  "legal": {
+    "intro": "Information about privelto.com and the conditions for using this website and downloading Privelto.",
+    "sections": [
+      {
+        "title": "Purpose and access",
+        "paragraphs": [
+          "This website presents Privelto and distributes its desktop packages. It has no user accounts, shopping cart or payment form. Downloading the published app is free. Internet access and equipment are the user's responsibility."
+        ]
+      },
+      {
+        "title": "Software and other rights",
+        "paragraphs": [
+          "Privelto is distributed under GNU AGPL version 3 or later. The source code and licence are linked below. Fonts and third-party components retain their own licences; model licences are listed in the project's model manifest. These terms do not restrict rights granted by those licences."
+        ]
+      },
+      {
+        "title": "Responsible use and limitations",
+        "paragraphs": [
+          "The demonstration uses fictional data. Automatic detection may miss personal information or flag harmless content. Review the document and the verification report before sharing it. Using Privelto does not by itself establish GDPR compliance or guarantee that every output is anonymous. Do not use the website to send real documents: it provides no upload service.",
+          "Use the website lawfully and do not interfere with its operation. Availability and compatibility may vary. Software warranty provisions apply only to the extent allowed by mandatory law. Nothing here excludes liability or consumer rights that cannot legally be excluded."
+        ]
+      },
+      {
+        "title": "Links, contact and applicable law",
+        "paragraphs": [
+          "External links lead to services operated by their respective providers. Their terms and privacy policies apply when you visit them. Send questions about this website to {email}.",
+          "Spanish law applies subject to mandatory protections under applicable European Union law. Competent courts are determined by law; these terms do not impose a court that deprives consumers of their statutory rights. Substantive changes will be reflected in the review date."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "intro": "This notice covers website visits and email enquiries. Documents opened in the desktop app are processed on your computer, rather than uploaded to this website.",
+    "sections": [
+      {
+        "title": "Website requests and security",
+        "paragraphs": [
+          "The server receives your IP address, request time, URL, response status and technical browser information; it may also receive a referring address. These data deliver the page or download, detect abuse and produce internal traffic statistics. The legal basis is legitimate interest in operating and protecting the service and understanding its basic use, under GDPR Article 6(1)(f). Reports mask IP addresses and omit query strings, but the original access logs are not anonymous. There is no advertising profiling or automated decision producing legal effects."
+        ]
+      },
+      {
+        "title": "Email enquiries",
+        "paragraphs": [
+          "If you email {email}, the controller processes your address, name if supplied and message to respond and manage the enquiry. This relies on legitimate interest in answering correspondence; legal duties apply when a request concerns data-protection rights. Providing contact information is voluntary, but a reply may be impossible without it. Send only necessary information and use fictional or redacted examples, especially for student, health or other sensitive information."
+        ]
+      },
+      {
+        "title": "Retention",
+        "paragraphs": [
+          "Access logs rotate daily or when they reach the configured size limit. The server keeps the current log and 30 rotated files; this is a rotation limit, not a guarantee of exactly 30 calendar days. The web-server diagnostic log is also limited by size. Relevant incident evidence may be isolated for the time necessary to investigate or meet legal obligations.",
+          "Email is kept while handling the enquiry and afterwards only where needed for applicable legal obligations or establishing, exercising or defending claims. The criterion is the purpose of the correspondence and the applicable limitation period, rather than indefinite reuse for marketing."
+        ]
+      },
+      {
+        "title": "Recipients, hosting and transfers",
+        "paragraphs": [
+          "The website and project email use self-managed services on Oracle Cloud infrastructure in Frankfurt, Germany. Access is limited to the controller, authorised technical administration, infrastructure providers where necessary and public authorities when legally required. Data are not sold to advertisers.",
+          "Oracle is a global infrastructure provider, so an EEA hosting region does not rule out access from other countries. Its applicable data-processing terms and international-transfer safeguards are available through the references below; request a copy or information about safeguards from {email}."
+        ]
+      },
+      {
+        "title": "Your rights",
+        "paragraphs": [
+          "Contact {email} to request access, rectification, erasure, restriction, portability where applicable or to object to processing based on legitimate interest. You may withdraw consent if a future optional processing activity relies on it. Requests are normally answered within one month; any permitted extension will be explained. Identity information will be requested only when reasonably necessary. You may complain to the Spanish Data Protection Agency (AEPD) or your competent supervisory authority."
+        ]
+      },
+      {
+        "title": "Desktop app and outside services",
+        "paragraphs": [
+          "This website cannot access documents opened in Privelto. The person or organisation using the app remains responsible for the lawful handling of those documents and the outputs. Local logs, models and preferences remain subject to the security and retention choices on that computer.",
+          "Downloading models or runtime files in the app connects to the providers listed in its manifest, including Hugging Face and GitHub. They receive the connection data needed for that download, not the documents being processed. Offline model import is available. Following external source or provider links also establishes a separate connection to that provider."
+        ]
+      }
+    ]
+  },
+  "cookies": {
+    "intro": "The current website does not set cookies or use browser storage for analytics, advertising or language selection.",
+    "sections": [
+      {
+        "title": "What happens in your browser",
+        "paragraphs": [
+          "Fonts, styles and scripts are served from privelto.com. There are no embedded advertising pixels, third-party videos or external analytics scripts. The selected language is part of the page URL. The fictional demonstration changes only the current page and does not upload its contents. Ordinary browser caching may retain public site resources."
+        ]
+      },
+      {
+        "title": "Server statistics are different",
+        "paragraphs": [
+          "Request logging and internal traffic reports take place on the server without placing a visitor identifier on your device. They still involve processing connection data and are explained in the privacy notice."
+        ]
+      },
+      {
+        "title": "Consent and future changes",
+        "paragraphs": [
+          "A consent banner is not required simply because a website exists. This version does not introduce non-essential cookies or equivalent device tracking. If these are added, they must remain blocked until valid consent is obtained, with equally accessible accept and reject choices and a way to change the choice. External websites reached through links apply their own policies."
+        ]
+      }
+    ]
+  },
+  "accessibility": {
+    "intro": "We aim to make the website usable with a keyboard, assistive technology, small screens and enlarged text.",
+    "sections": [
+      {
+        "title": "Measures in this version",
+        "paragraphs": [
+          "Pages use semantic landmarks, a skip link, visible keyboard focus, labelled controls, language metadata and individual names for download links. The demo button exposes its state and announces the result. Layouts adapt to small screens and respect reduced-motion preferences."
+        ]
+      },
+      {
+        "title": "Assessment and limits",
+        "paragraphs": [
+          "The website has received keyboard, responsive-layout and basic structural checks. A complete independent WCAG or EN 301 549 conformance audit has not been performed. This page is an accessibility commitment, not a claim of certification or full conformance. The desktop app, external services and third-party documents have their own accessibility characteristics."
+        ]
+      },
+      {
+        "title": "Report a barrier",
+        "paragraphs": [
+          "Email {email} with the page URL, the problem, your browser or assistive technology if relevant and the format you need. We will assess the issue and offer an accessible alternative where possible. Do not include personal documents or sensitive information in the report."
+        ]
+      }
+    ]
+  }
+}
