@@ -32,7 +32,7 @@ if ($PreviousInstaller) { $oldSetup = Resolve-QualificationSetup $PreviousInstal
 else { $oldSetup = $currentSetup; $PreviousVersion = $ExpectedVersion }
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
 function Run-Checked([string]$Executable, [string[]]$Arguments) {
-  $process = Start-Process -WindowStyle Hidden -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
+  $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru
   if (-not $process.WaitForExit(1200000)) { $process.Kill(); throw 'Qualification process exceeded 20 minutes' }
   if ($process.ExitCode -ne 0) { throw "Qualification process failed with exit code $($process.ExitCode)" }
 }
