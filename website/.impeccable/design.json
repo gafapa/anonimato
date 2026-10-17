@@ -29,6 +29,10 @@
       {
         "name": "mobile",
         "value": "760px"
+      },
+      {
+        "name": "compact-mobile",
+        "value": "380px"
       }
     ]
   },
