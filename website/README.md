@@ -11,7 +11,7 @@ system. The reversible document demonstration uses fictional data only.
 From the application repository root:
 
 ```powershell
-gh run download 39059938202 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-artifacts
+gh run download 39061449297 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-final-artifacts
 python tools/build_website.py
 python -m http.server 8766 --bind 127.0.0.1 --directory website/dist
 ```
@@ -30,8 +30,8 @@ assets are used. Font provenance and license: `app/ui/fonts/OFL.txt`.
 
 Privelto 2.3.0 provides seven interface languages and uses the Privelto name in
 its application and distributions. Package source commit:
-`223ce8707bc5e07b2087d619b7f0e4e4a3598c56`. Qualification workflow:
-https://github.com/gafapa/anonimato/actions/runs/39059938202.
+`cecd1f9e0b22b9fbf7c1103b270da0879e681b5f`. Qualification workflow:
+https://github.com/gafapa/anonimato/actions/runs/39061449297.
 
 - Windows x64: per-user EXE installer and portable ZIP; unsigned.
 - macOS Apple Silicon arm64: DMG and portable ZIP; not notarized without configured credentials.
@@ -62,7 +62,7 @@ entry. Keep the local shared routing configuration synchronized with the
 live server before invoking it. Do not mark a previously verified site as
 pending or overwrite unrelated routers from a stale local copy.
 
-The apex serves both languages; `www` redirects to the apex. Downloads use
+The apex serves all seven languages; `www` redirects to the apex. Downloads use
 attachment headers and immutable versioned URLs. Page assets are revalidated.
 
 ## Mail

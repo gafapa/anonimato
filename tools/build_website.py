@@ -13,10 +13,10 @@ import shutil
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "website"
 OUTPUT = SOURCE / "dist"
-ARTIFACTS = ROOT / "tmp/privelto-2.3-artifacts"
+ARTIFACTS = ROOT / "tmp/privelto-2.3-final-artifacts"
 VERSION = "2.3.0"
-COMMIT = "223ce8707bc5e07b2087d619b7f0e4e4a3598c56"
-RUN = "https://github.com/gafapa/anonimato/actions/runs/39059938202"
+COMMIT = "cecd1f9e0b22b9fbf7c1103b270da0879e681b5f"
+RUN = "https://github.com/gafapa/anonimato/actions/runs/39061449297"
 PACKAGES = [
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"PriveltoSetup-{VERSION}.exe", "installer"),
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"Privelto-{VERSION}-windows-x64-portable.zip", "portable"),
