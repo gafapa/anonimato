@@ -21,7 +21,7 @@ The application processes PDFs and images locally, detects personal information,
 The 2.3.0 release adds English, Spanish, Galician, French, German, Italian and
 Portuguese interfaces, installable packages and portable archives. Windows x64,
 macOS 15+ Apple Silicon and Linux x86_64 are the packaging targets. CI run
-39058857003 must qualify the actual packages before publication. Windows
+39059938202 must qualify the actual packages before publication. Windows
 executables are unsigned; macOS notarization requires configured credentials.
 Do not imply Intel Mac support, universal Linux compatibility, or identical
 national identifier detection coverage from interface localization.

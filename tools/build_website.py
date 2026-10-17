@@ -15,8 +15,8 @@ SOURCE = ROOT / "website"
 OUTPUT = SOURCE / "dist"
 ARTIFACTS = ROOT / "tmp/privelto-2.3-artifacts"
 VERSION = "2.3.0"
-COMMIT = "2ddc9e87f7383d53e6947c06186ef4f299fe51f5"
-RUN = "https://github.com/gafapa/anonimato/actions/runs/39058857003"
+COMMIT = "223ce8707bc5e07b2087d619b7f0e4e4a3598c56"
+RUN = "https://github.com/gafapa/anonimato/actions/runs/39059938202"
 PACKAGES = [
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"PriveltoSetup-{VERSION}.exe", "installer"),
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"Privelto-{VERSION}-windows-x64-portable.zip", "portable"),

@@ -11,7 +11,7 @@ system. The reversible document demonstration uses fictional data only.
 From the application repository root:
 
 ```powershell
-gh run download 39058857003 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-artifacts
+gh run download 39059938202 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-artifacts
 python tools/build_website.py
 python -m http.server 8766 --bind 127.0.0.1 --directory website/dist
 ```
@@ -30,8 +30,8 @@ assets are used. Font provenance and license: `app/ui/fonts/OFL.txt`.
 
 Privelto 2.3.0 provides seven interface languages and uses the Privelto name in
 its application and distributions. Package source commit:
-`2ddc9e87f7383d53e6947c06186ef4f299fe51f5`. Qualification workflow:
-https://github.com/gafapa/anonimato/actions/runs/39058857003.
+`223ce8707bc5e07b2087d619b7f0e4e4a3598c56`. Qualification workflow:
+https://github.com/gafapa/anonimato/actions/runs/39059938202.
 
 - Windows x64: per-user EXE installer and portable ZIP; unsigned.
 - macOS Apple Silicon arm64: DMG and portable ZIP; not notarized without configured credentials.
