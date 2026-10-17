@@ -17,7 +17,8 @@ OUTPUT = SOURCE / "dist"
 ARTIFACTS = ROOT / "tmp/privelto-2.3-final-artifacts"
 VERSION = "2.3.0"
 COMMIT = "cecd1f9e0b22b9fbf7c1103b270da0879e681b5f"
-RUN = "https://github.com/gafapa/anonimato/actions/runs/39061449297"
+RUN = "https://github.com/gafapa/privelto/actions/runs/39061449297"
+HOSTING_CSA = "https://www.oracle.com/contracts/docs/cloud_csa_offline_v062223_es_esp.pdf#page=3"
 PACKAGES = [
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"PriveltoSetup-{VERSION}.exe", "installer"),
     ("Windows", "Windows 10 / 11 · x64", "anonimato-Windows", f"Privelto-{VERSION}-windows-x64-portable.zip", "portable"),
@@ -108,7 +109,7 @@ def footer(language: str) -> str:
     copy = COPY[language]
     home = language_path(language)
     legal_links = "".join(f'<a href="{home}{section}/">{escape(LEGAL_COPY[language]["labels"][section])}</a>' for section in LEGAL_PAGES)
-    return f'''<footer class="site-footer"><div><a class="brand" href="{home}">privelto<span class="brand-dot">.</span></a><p>{copy['footer']}</p></div><div class="footer-links">{legal_links}<a href="https://github.com/gafapa/anonimato">{copy['source']}</a><a href="mailto:hello@privelto.com">hello@privelto.com</a><span>AGPL-3.0-or-later</span></div></footer></body></html>'''
+    return f'''<footer class="site-footer"><div><a class="brand" href="{home}">privelto<span class="brand-dot">.</span></a><p>{copy['footer']}</p></div><div class="footer-links">{legal_links}<a href="https://github.com/gafapa/privelto">{copy['source']}</a><a href="mailto:hello@privelto.com">hello@privelto.com</a><span>AGPL-3.0-or-later</span></div></footer></body></html>'''
 
 
 def legal_page(language: str, section: str) -> str:
@@ -130,12 +131,13 @@ def legal_page(language: str, section: str) -> str:
                        for item in content["sections"])
     sources = {
         "legal": [("LSSI — Ley 34/2002", "https://www.boe.es/buscar/act.php?id=BOE-A-2002-13758"),
-                  ("GNU AGPL-3.0-or-later", "https://github.com/gafapa/anonimato/blob/" + COMMIT + "/LICENSE"),
-                  ("Third-party licences", "https://github.com/gafapa/anonimato/blob/" + COMMIT + "/THIRD_PARTY.md")],
+                  ("GNU AGPL-3.0-or-later", "https://github.com/gafapa/privelto/blob/" + COMMIT + "/LICENSE"),
+                  ("Third-party licences", "https://github.com/gafapa/privelto/blob/" + COMMIT + "/THIRD_PARTY.md")],
         "privacy": [("GDPR / RGPD", "https://eur-lex.europa.eu/legal-content/ES/TXT/?uri=CELEX:32016R0679"),
                     ("LOPDGDD — Ley Orgánica 3/2018", "https://www.boe.es/buscar/act.php?id=BOE-A-2018-16673"),
                     ("AEPD", "https://www.aepd.es/"), ("Oracle — Privacy", "https://www.oracle.com/legal/privacy/services-privacy-policy/"),
-                    ("Oracle — Contracts", str(LEGAL_OWNER["hosting_dpa_url"]))],
+                    ("Oracle — Contracts", str(LEGAL_OWNER["hosting_dpa_url"])),
+                    ("Oracle — Cloud Services Agreement (5.2)", HOSTING_CSA)],
         "cookies": [("AEPD — Cookies", "https://www.aepd.es/guias/guia-cookies.pdf"),
                     ("LSSI — Article 22.2", "https://www.boe.es/buscar/act.php?id=BOE-A-2002-13758#a22")],
         "accessibility": [("WCAG 2.2", "https://www.w3.org/TR/WCAG22/")],
@@ -184,7 +186,7 @@ def page(language: str, manifest: list[dict]) -> str:
 <main id="main"><section class="hero section"><div class="hero-copy"><h1>{c['headline']}</h1><p class="intro">{c['intro']}</p><div class="hero-actions"><a class="button primary" href="#downloads">{c['primary']} <span aria-hidden="true">↓</span></a><a class="text-link" href="#how">{c['secondary']} <span aria-hidden="true">↗</span></a></div><ul class="trust-list"><li>{c['license']}</li><li>{c['local']}</li></ul></div>
 <div class="demo" data-demo data-redacted="false"><div class="demo-heading"><span>{c['demoTitle']}</span><span class="status-dot" aria-hidden="true"></span></div><div class="document-stage"><article class="document" aria-label="{escape(c['demoNote'])}"><div class="document-top"><span class="document-brand">NORTH / STUDIO</span><span class="document-ref">DOC—014</span></div><p class="document-kind">{c['docHeading']}</p><h2>{c['docSub']}</h2><dl><dt>{c['nameLabel']}</dt><dd><span class="private-value" data-private="Alex Morgan" data-label="[NAME 1]">Alex Morgan</span></dd><dt>{c['emailLabel']}</dt><dd><span class="private-value" data-private="alex@example.com" data-label="[EMAIL 1]">alex@example.com</span></dd><dt>{c['refLabel']}</dt><dd><span class="private-value" data-private="DEMO-042-918" data-label="[REFERENCE 1]">DEMO-042-918</span></dd><dt>{c['dateLabel']}</dt><dd><span class="private-value" data-private="17 / 10 / 2026" data-label="[DATE 1]">17 / 10 / 2026</span></dd></dl><p class="document-body">{c['docBody']}</p><div class="document-lines" aria-hidden="true"><span></span><span></span><span></span></div><div class="document-bottom"><span>PROJECT / 2026</span><span>1 / 1</span></div></article></div><div class="demo-controls"><p class="demo-note">{c['demoNote']}</p><button class="button demo-button" type="button" data-toggle aria-pressed="false" data-before="{escape(c['toggle'])}" data-after="{escape(c['restore'])}" data-status-before="{escape(c['demoStatus'])}" data-status-after="{escape(c['demoDone'])}">{c['toggle']}</button><p class="demo-status" data-status role="status">{c['demoStatus']}</p></div></div></section>
 <section class="method section" id="how"><div class="section-heading"><h2>{c['mechanism']}</h2><p>{c['mechanismBody']}</p></div><div class="steps">{''.join(f'<article><span class="step-mark" aria-hidden="true">{mark}</span><h3>{c[f"step{i}"]}</h3><p>{c[f"step{i}Body"]}</p></article>' for i, mark in [(1, '⌕'), (2, '↔'), (3, '✓')])}</div></section>
-<section class="downloads section" id="downloads"><div class="section-heading"><h2>{c['downloadTitle']}</h2><p>{c['downloadIntro']}</p></div><div class="download-layout"><div><div class="release-label">{c['release'].format(version=VERSION)}</div><div class="download-table">{download_rows}</div><div class="release-links"><a href="/downloads/SHA256SUMS.txt">{c['checksums']}</a><a href="{RUN}">{c['evidence']}</a><a href="https://github.com/gafapa/anonimato/tree/{COMMIT}">{c['source']}</a></div><p class="rename-note">{c['rename']}</p></div><aside class="setup"><h3>{c['setupTitle']}</h3>{''.join(f'<p>{c[f"setup{i}"]}</p>' for i in range(1,5))}</aside></div></section>
+<section class="downloads section" id="downloads"><div class="section-heading"><h2>{c['downloadTitle']}</h2><p>{c['downloadIntro']}</p></div><div class="download-layout"><div><div class="release-label">{c['release'].format(version=VERSION)}</div><div class="download-table">{download_rows}</div><div class="release-links"><a href="/downloads/SHA256SUMS.txt">{c['checksums']}</a><a href="{RUN}">{c['evidence']}</a><a href="https://github.com/gafapa/privelto/tree/{COMMIT}">{c['source']}</a></div><p class="rename-note">{c['rename']}</p></div><aside class="setup"><h3>{c['setupTitle']}</h3>{''.join(f'<p>{c[f"setup{i}"]}</p>' for i in range(1,5))}</aside></div></section>
 <section class="requirements section" id="requirements"><div class="section-heading"><h2>{c['requirementsTitle']}</h2><p>{c['requirementsIntro']}</p></div><dl class="requirements-grid">{requirements}</dl></section>
 <section class="faq section"><h2>{c['faqTitle']}</h2><div>{faq}</div></section>
 <section class="closing section"><h2>{c['closing']}</h2><div><a class="button primary" href="#downloads">{c['download']} <span aria-hidden="true">↓</span></a><p>{c['contact']} <a href="mailto:hello@privelto.com">hello@privelto.com</a></p></div></section></main>''' + footer(language)
@@ -246,7 +248,7 @@ if __name__ == "__main__":
     parser.add_argument("--legal-preview", action="store_true", help="Render into tmp with fictional owner fields; never changes the publishable site")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts.resolve()
-    RUN = "https://github.com/gafapa/anonimato/actions/runs/" + args.run_id
+    RUN = "https://github.com/gafapa/privelto/actions/runs/" + args.run_id
     COMMIT = args.commit
     LEGAL_OWNER = load_legal_owner(args.legal_owner, preview=args.legal_preview)
     if args.legal_preview:

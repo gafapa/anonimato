@@ -14,7 +14,8 @@ Prepare `website/legal/owner.json` from `owner.example.json` with the owner's
 confirmed public identity, tax identification, postal address and legal contact.
 The actual owner file is ignored by Git; it is rendered into the public legal
 pages rather than copied as JSON. Keep provider-account evidence flags truthful.
-The current Oracle account DPA review remains pending; see [COMPLIANCE.md](COMPLIANCE.md).
+Oracle's owner-supplied CSA section 5.2 was reviewed; the account-specific DPA
+version remains pending. See [COMPLIANCE.md](COMPLIANCE.md).
 
 ```powershell
 gh run download 39061449297 -n anonimato-Windows -n anonimato-macOS -n anonimato-Linux -D tmp/privelto-2.3-final-artifacts
@@ -44,7 +45,7 @@ change the publishable site. See COMPLIANCE.md for operational responsibilities.
 Privelto 2.3.0 provides seven interface languages and uses the Privelto name in
 its application and distributions. Package source commit:
 `cecd1f9e0b22b9fbf7c1103b270da0879e681b5f`. Qualification workflow:
-https://github.com/gafapa/anonimato/actions/runs/39061449297.
+https://github.com/gafapa/privelto/actions/runs/39061449297.
 
 - Windows x64: per-user EXE installer and portable ZIP; unsigned.
 - macOS Apple Silicon arm64: DMG and portable ZIP; not notarized without configured credentials.

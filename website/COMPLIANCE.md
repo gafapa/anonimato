@@ -63,12 +63,14 @@ if traffic, purpose or risk changes.
 
 ## Operational items that text cannot complete
 
-1. **Provider agreement remains unverified.** Public Oracle policies describe
-   cross-border processing, but the actual account order, applicable Article 28
-   DPA and transfer mechanism have not been inspected. The owner confirmed the
-   European region, which does not establish these contractual safeguards.
-   Keep `hosting_dpa_verified` false until actual evidence is available. Do not
-   sign a new agreement or assert acceptance on the owner's behalf.
+1. **Provider documents reviewed; account-specific DPA version remains pending.**
+   The owner supplied Oracle's Spanish CSA v062223. Section 5.2 incorporates the
+   applicable DPA by reference unless the order provides otherwise. This
+   establishes the contractual incorporation mechanism. The order and its
+   particular DPA version and transfer terms have not yet been inspected. Keep
+   `hosting_dpa_verified` false for that outstanding account-specific check.
+   The European hosting region alone does not establish it. Do not sign a new
+   agreement or assert acceptance on the owner's behalf.
 2. Review project correspondence for continued necessity. No automatic deletion
    of the user's existing shared mailbox was performed. Keep any legally
    necessary evidence restricted and remove data without an ongoing purpose.
@@ -97,6 +99,7 @@ if traffic, purpose or risk changes.
 - [WCAG 2.2](https://www.w3.org/TR/WCAG22/)
 - [Oracle Services Privacy Policy](https://www.oracle.com/legal/privacy/services-privacy-policy/)
 - [Oracle contracts](https://www.oracle.com/contracts/cloud-services/)
+- [Owner-supplied Oracle Spanish CSA, section 5.2](https://www.oracle.com/contracts/docs/cloud_csa_offline_v062223_es_esp.pdf#page=3)
 
 English and Spanish notices were authored directly. The other five languages
 use machine-assisted drafts of public authored copy, with corrections to
